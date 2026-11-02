@@ -138,6 +138,9 @@ reste son choix, pas une synchro de l'app.
   ouvertes. Chaque élément porte ses horodatages sources et, si possible, la phrase exacte.
 - **Une validation après coup** : un élément dont les horodatages n'existent pas ou dont la phrase
   est introuvable dans la transcription est écarté (règle 1).
+- **Le résumé n'est pas écrit par un modèle** (décidé par Steven le 2 novembre 2026) : il est construit
+  à partir des seuls éléments validés, chacun avec son horodatage. Plus sec, mais rien n'échappe à la
+  règle 1.
 - Seule la transcription et les notes partent chez un fournisseur. Jamais l'audio.
 - L'analyse affiche le fournisseur qui l'a produite.
 
