@@ -35,6 +35,8 @@ public final class ModeleApp {
     public var erreur: String?
     /// Les réunions en cours de relecture, avec leur avancée.
     public private(set) var relectures: [String: Double] = [:]
+    /// Les réunions en cours d'analyse, avec leur avancée.
+    public private(set) var analyses: [String: Double] = [:]
     @ObservationIgnored private var compteRendus: [String: CompteRendu] = [:]
     @ObservationIgnored private var faites: [String: Set<UUID>] = [:]
     @ObservationIgnored private var echecsSignales: Set<String> = []
@@ -156,7 +158,7 @@ public final class ModeleApp {
     }
 
     /// La réunion en cours d'enregistrement ou de relecture ne se range pas : ses fichiers sont utilisés.
-    func estEnCours(_ reunion: Reunion) -> Bool { session?.reunion.id == reunion.id || relectures[reunion.id] != nil }
+    func estEnCours(_ reunion: Reunion) -> Bool { session?.reunion.id == reunion.id || relectures[reunion.id] != nil || analyses[reunion.id] != nil }
 
     /// Les noms que le transcripteur doit reconnaître : le titre, le dossier, et tous les noms déjà
     /// donnés à des voix. Plus on nomme de voix, mieux les noms s'écrivent.
@@ -188,6 +190,35 @@ public final class ModeleApp {
                 erreur = "L'enregistrement de « \(reunion.meta.titre) » n'a pas pu être relu : \(error.localizedDescription) La transcription du direct reste là."
             }
             relectures[reunion.id] = nil
+            actualiser(reunion)
+            // Le compte rendu est prêt sans clic, mais seulement sur ce Mac : rien ne part jamais tout seul.
+            if let relue = reunions.first(where: { $0.id == reunion.id }), compteRendu(de: relue) == nil {
+                analyser(relue, avec: .local, signaler: false)
+            }
+        }
+    }
+
+    /// Analyse une réunion. `signaler` : une analyse lancée sans clic n'interrompt pas pour dire
+    /// qu'Apple Intelligence n'est pas disponible, le bouton reste là.
+    public func analyser(_ reunion: Reunion, avec analyste: AnalysteApple, signaler: Bool = true) {
+        guard analyses[reunion.id] == nil, relectures[reunion.id] == nil else { return }
+        // Le modèle lit les noms donnés aux voix. Les temps et les mots ne changent pas.
+        var segments = reunion.segments()
+        guard !segments.isEmpty else { return }
+        for i in segments.indices { segments[i].voix = segments[i].voix.map { reunion.nom(de: $0) } }
+        analyses[reunion.id] = 0
+        let notes = reunion.notes()
+        let type = reunion.meta.type
+        Task {
+            do {
+                let resultat = try await analyste.analyser(segments: segments, notes: notes, type: type) { [weak self] avancee in
+                    Task { @MainActor in if self?.analyses[reunion.id] != nil { self?.analyses[reunion.id] = avancee } }
+                }
+                try enregistrer(resultat, pour: reunion)
+            } catch {
+                if signaler { erreur = error.localizedDescription }
+            }
+            analyses[reunion.id] = nil
             actualiser(reunion)
         }
     }

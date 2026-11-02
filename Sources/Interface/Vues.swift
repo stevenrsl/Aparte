@@ -725,7 +725,7 @@ struct EcranCompteRendu: View {
     @State private var segments: [Segment] = []
     @State private var notes: [LigneDeNote] = []
     @State private var selection: ElementSource?
-    @State private var progression: Double?
+    @State private var confirmerPCC = false
     @State private var lecteur = Lecteur()
     @State private var copie = false
 
@@ -785,8 +785,8 @@ struct EcranCompteRendu: View {
             lecteur.charger(reunion)
         }
         .onDisappear { lecteur.arreter() }
-        .onChange(of: modele.relectures[reunion.id] == nil) { _, finie in
-            guard finie else { return }
+        .onChange(of: occupee) { _, encore in
+            guard !encore else { return }
             compteRendu = modele.compteRendu(de: reunion)
             segments = reunion.segments()
             lecteur.charger(reunion)
@@ -806,36 +806,33 @@ struct EcranCompteRendu: View {
             relecture
             boutonAnalyser("Analyser sur ce Mac", style: BoutonPrincipal())
             Libelle("rien ne quitte ce mac pour cette analyse")
+            boutonPCC
             incidentsAudio
         }
     }
 
+    private var occupee: Bool { modele.analyses[reunion.id] != nil || modele.relectures[reunion.id] != nil }
+
     private func boutonAnalyser<Style: ButtonStyle>(_ titre: String, style: Style) -> some View {
-        Button(progression.map { "Analyse en cours · \(Int($0 * 100)) %" } ?? titre) { analyser() }
-            .buttonStyle(style)
-            .disabled(progression != nil || segments.isEmpty || modele.relectures[reunion.id] != nil)
+        Button(modele.analyses[reunion.id].map { "Analyse en cours · \(Int($0 * 100)) %" } ?? titre) {
+            modele.analyser(reunion, avec: .local)
+        }
+        .buttonStyle(style)
+        .disabled(occupee || segments.isEmpty)
     }
 
-    private func analyser() {
-        progression = 0
-        // Le modèle lit les noms donnés aux voix. Les temps et les mots ne changent pas.
-        var segments = self.segments
-        for i in segments.indices { segments[i].voix = segments[i].voix.map { reunion.nom(de: $0) } }
-        let notes = self.notes
-        let type = reunion.meta.type
-        let avancer: @Sendable (Double) -> Void = { valeur in
-            Task { @MainActor in if progression != nil { progression = valeur } }
-        }
-        Task {
-            do {
-                let resultat = try await AnalysteLocal().analyser(segments: segments, notes: notes, type: type, progression: avancer)
-                try modele.enregistrer(resultat, pour: reunion)
-                compteRendu = resultat
-            } catch {
-                modele.erreur = error.localizedDescription
+    /// PCC : un envoi hors du Mac, donc une confirmation à chaque fois, pour cette réunion seule (règle 2).
+    private var boutonPCC: some View {
+        Button("Analyser avec Private Cloud Compute…") { confirmerPCC = true }
+            .buttonStyle(BoutonSecondaire())
+            .disabled(occupee || segments.isEmpty || !AnalysteApple.pccAutorise)
+            .help(AnalysteApple.pccAutorise ? "" : "Apple doit d'abord autoriser Aparté à utiliser Private Cloud Compute.")
+            .alert("Envoyer cette réunion à Private Cloud Compute ?", isPresented: $confirmerPCC) {
+                Button("Envoyer cette réunion") { modele.analyser(reunion, avec: .pcc) }
+                Button("Annuler", role: .cancel) {}
+            } message: {
+                Text("La transcription et tes notes partent chez Apple pour cette analyse. L'audio reste sur ce Mac.")
             }
-            progression = nil
-        }
     }
 
     /// La relecture en cours, puis les voix à nommer.
@@ -884,6 +881,7 @@ struct EcranCompteRendu: View {
             }
             .buttonStyle(BoutonPrincipal())
             boutonAnalyser("Relancer l'analyse", style: BoutonSecondaire())
+            boutonPCC
         }
         if compteRendu.passagesNonAnalyses > 0 || compteRendu.elementsEcartes > 0 {
             Libelle("\(accord(compteRendu.passagesNonAnalyses, "passage non analysé", "passages non analysés")) · \(accord(compteRendu.elementsEcartes, "élément écarté", "éléments écartés")) faute de source")
