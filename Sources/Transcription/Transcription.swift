@@ -16,13 +16,16 @@ public struct Segment: Codable, Sendable, Identifiable, Hashable {
     public var fin: Double
     public var piste: Piste
     public var texte: String
+    /// « Voix 1 », « Voix 2 » : la personne, si la relecture a pu la distinguer sur sa piste.
+    public var voix: String?
 
-    public init(id: UUID = UUID(), debut: Double, fin: Double, piste: Piste, texte: String) {
+    public init(id: UUID = UUID(), debut: Double, fin: Double, piste: Piste, texte: String, voix: String? = nil) {
         self.id = id
         self.debut = debut
         self.fin = fin
         self.piste = piste
         self.texte = texte
+        self.voix = voix
     }
 }
 
@@ -73,6 +76,7 @@ public final class TranscripteurDirect: @unchecked Sendable {
     public static func demarrer(
         locale: Locale,
         piste: Piste,
+        vocabulaire: [String] = [],
         surFinal: @escaping @MainActor (Segment) -> Void,
         surProvisoire: @escaping @MainActor (Piste, String) -> Void
     ) async throws -> TranscripteurDirect {
@@ -85,6 +89,7 @@ public final class TranscripteurDirect: @unchecked Sendable {
             throw ErreurTranscription.indisponible
         }
         try await analyseur.prepareToAnalyze(in: format)
+        await donner(vocabulaire, a: analyseur)
 
         let direct = TranscripteurDirect(piste: piste, analyseur: analyseur, format: format)
         direct.tacheResultats = Task {
@@ -96,9 +101,9 @@ public final class TranscripteurDirect: @unchecked Sendable {
                         guard !texte.isEmpty else { continue }
                         await surFinal(Segment(debut: resultat.range.start.seconds,
                                                fin: resultat.range.end.seconds,
-                                               piste: piste, texte: texte))
+                                               piste: piste, texte: Nettoyage.corrigerNoms(texte, noms: vocabulaire)))
                     } else {
-                        await surProvisoire(piste, texte)
+                        await surProvisoire(piste, Nettoyage.corrigerNoms(texte, noms: vocabulaire))
                     }
                 }
             } catch {
@@ -125,23 +130,55 @@ public final class TranscripteurDirect: @unchecked Sendable {
     }
 }
 
+private func donner(_ vocabulaire: [String], a analyseur: SpeechAnalyzer) async {
+    guard !vocabulaire.isEmpty else { return }
+    let contexte = AnalysisContext()
+    contexte.contextualStrings[.general] = vocabulaire
+    try? await analyseur.setContext(contexte)
+}
+
 /// Transcrit un enregistrement après coup.
 public enum TranscripteurFichier {
-    public static func transcrire(url: URL, piste: Piste) async throws -> [Segment] {
+    public static func transcrire(url: URL, piste: Piste, vocabulaire: [String] = [],
+                                  progression: @escaping @Sendable (Double) -> Void = { _ in }) async throws -> [Segment] {
+        try await phrases(url: url, vocabulaire: vocabulaire, progression: progression).compactMap { mots in
+            guard let premier = mots.first, let dernier = mots.last else { return nil }
+            let texte = mots.map(\.texte).joined().trimmingCharacters(in: .whitespacesAndNewlines)
+            return Segment(debut: premier.debut, fin: dernier.fin, piste: piste,
+                           texte: Nettoyage.corrigerNoms(texte, noms: vocabulaire))
+        }
+    }
+
+    /// Les phrases entendues, mot par mot avec leurs temps : ce qu'il faut pour les couper où la voix change.
+    public static func phrases(url: URL, vocabulaire: [String] = [],
+                               progression: @escaping @Sendable (Double) -> Void = { _ in }) async throws -> [[Mot]] {
         let locale = try await Parole.preparer()
         let fichier = try AVAudioFile(forReading: url)
+        let duree = Double(fichier.length) / fichier.processingFormat.sampleRate
         let transcripteur = SpeechTranscriber(locale: locale, transcriptionOptions: [], reportingOptions: [],
                                               attributeOptions: [.audioTimeRange])
         let analyseur = SpeechAnalyzer(modules: [transcripteur])
-        let collecte = Task { () -> [Segment] in
-            var segments: [Segment] = []
+        await donner(vocabulaire, a: analyseur)
+        let collecte = Task { () -> [[Mot]] in
+            var phrases: [[Mot]] = []
             for try await resultat in transcripteur.results where resultat.isFinal {
-                let texte = String(resultat.text.characters).trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !texte.isEmpty else { continue }
-                segments.append(Segment(debut: resultat.range.start.seconds, fin: resultat.range.end.seconds,
-                                        piste: piste, texte: texte))
+                var mots: [Mot] = []
+                for morceau in resultat.text.runs {
+                    let texte = String(resultat.text[morceau.range].characters)
+                    if let temps = morceau.audioTimeRange {
+                        mots.append(Mot(texte: texte, debut: temps.start.seconds, fin: temps.end.seconds))
+                    } else if !mots.isEmpty {
+                        // Une ponctuation ou une espace sans temps va avec le mot d'avant.
+                        mots[mots.count - 1].texte += texte
+                    } else {
+                        mots.append(Mot(texte: texte, debut: resultat.range.start.seconds, fin: resultat.range.start.seconds))
+                    }
+                }
+                guard mots.contains(where: { !$0.texte.trimmingCharacters(in: .whitespaces).isEmpty }) else { continue }
+                phrases.append(mots)
+                if duree > 0 { progression(min(1, resultat.range.end.seconds / duree)) }
             }
-            return segments
+            return phrases
         }
         if let dernier = try await analyseur.analyzeSequence(from: fichier) {
             try await analyseur.finalizeAndFinish(through: dernier)
