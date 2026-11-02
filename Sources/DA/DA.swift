@@ -125,6 +125,7 @@ public struct LogoApparte: View {
 }
 
 /// Le grain : une texture générée une fois, en mosaïque, jamais recalculée.
+/// Le bruit reste clair, sinon la multiplication ternit la crème au lieu de la texturer.
 public struct GrainOverlay: View {
     @Environment(\.colorScheme) private var theme
     @Environment(\.colorSchemeContrast) private var contraste
@@ -134,7 +135,7 @@ public struct GrainOverlay: View {
         let cote = 256
         var generateur = SystemRandomNumberGenerator()
         var pixels = [UInt8](repeating: 0, count: cote * cote)
-        for i in pixels.indices { pixels[i] = UInt8.random(in: 0...255, using: &generateur) }
+        for i in pixels.indices { pixels[i] = UInt8.random(in: 170...255, using: &generateur) }
         let contexte = CGContext(data: &pixels, width: cote, height: cote, bitsPerComponent: 8, bytesPerRow: cote,
                                  space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGImageAlphaInfo.none.rawValue)
         guard let image = contexte?.makeImage() else { return Image(systemName: "circle") }
