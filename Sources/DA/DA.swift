@@ -137,16 +137,18 @@ public struct LogoApparte: View {
     public init() {}
     public var body: some View {
         HStack(spacing: 9) {
-            Grid(horizontalSpacing: 1, verticalSpacing: 1) {
-                GridRow {
-                    Rectangle().fill(Color.encre).frame(width: 7, height: 7)
-                    Rectangle().fill(Color.terracotta).frame(width: 7, height: 7)
-                }
-                GridRow {
-                    Rectangle().fill(Color.argile).frame(width: 7, height: 7)
-                    Rectangle().fill(Color.encre).frame(width: 7, height: 7)
+            // Les niveaux sonores de l'icône : cinq colonnes de points, la centrale en crème.
+            HStack(alignment: .bottom, spacing: 2) {
+                ForEach(Array([2, 4, 6, 4, 2].enumerated()), id: \.offset) { colonne, hauteur in
+                    VStack(spacing: 1) {
+                        ForEach(0..<hauteur, id: \.self) { _ in
+                            Rectangle().fill(colonne == 2 ? Color.creme : Color.argile).frame(width: 3, height: 3)
+                        }
+                    }
                 }
             }
+            .padding(5)
+            .background(Color.encre)
             .accessibilityHidden(true)
             Text("Aparté").font(.system(size: 21, design: .serif))
         }

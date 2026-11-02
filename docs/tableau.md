@@ -6,3 +6,4 @@ dans le [plan des agents](plan-agents.md).
 
 | Tâche | Agent | Branche | État | Fichiers touchés |
 |---|---|---|---|---|
+| Logo et icône de l'app | Claude Code | `logo` | en relecture | `Support/`, `build.sh`, `Sources/DA/DA.swift`, `docs/brief-da-reunions.md`, `docs/proposition-logo.md` |
