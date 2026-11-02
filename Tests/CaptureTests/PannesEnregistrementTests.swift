@@ -202,8 +202,6 @@ private final class SuiviPanne: @unchecked Sendable {
     try FileManager.default.removeItem(at: dossier)
     source.onBuffer?(tampon)
     try #require(suivi.ecrit.wait(timeout: .now() + 5) == .success)
-    withKnownIssue("Défaut connu : le fichier ouvert mais supprimé reste inscriptible sans alerte.") {
-        #expect(suivi.total == 1)
-    }
+    #expect(suivi.total == 1)
     #expect(!FileManager.default.fileExists(atPath: aac.path))
 }

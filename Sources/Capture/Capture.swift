@@ -16,6 +16,8 @@ public enum ErreurCapture: LocalizedError {
     case sonDuMac(String, OSStatus)
     case enregistrementIllisible(String)
     case enregistrementEnDouble(String, String)
+    case entreeIndisponible
+    case fichierDisparu(String)
 
     public var errorDescription: String? {
         switch self {
@@ -27,6 +29,10 @@ public enum ErreurCapture: LocalizedError {
             return "Le son du Mac n'a pas pu être capté (\(etape), code \(code))."
         case let .enregistrementIllisible(fichier):
             return "L'enregistrement \(fichier) n'a pas pu être terminé. Le fichier reste dans son dossier."
+        case .entreeIndisponible:
+            return "Le micro choisi n'est plus disponible. Choisis-en un autre."
+        case let .fichierDisparu(fichier):
+            return "Le fichier \(fichier) a disparu pendant l'enregistrement."
         case let .enregistrementEnDouble(enCours, termine):
             return "\(enCours) et \(termine) existent tous les deux, avec des durées différentes. Aparté garde les deux dans le dossier de la réunion."
         }
@@ -74,9 +80,11 @@ public struct EntreeAudio: Identifiable, Hashable, Sendable {
 /// Le micro, par AVAudioEngine, sur l'entrée choisie ou celle par défaut.
 public final class MicrophoneSource: AudioSource {
     public var onBuffer: ((AVAudioPCMBuffer) -> Void)?
-    private let engine = AVAudioEngine()
+    private var engine = AVAudioEngine()
     private let entree: AudioDeviceID?
     private var running = false
+    private var observateur: NSObjectProtocol?
+    private let verrou = NSLock()
 
     public init(entree: AudioDeviceID? = nil) {
         self.entree = entree
@@ -95,10 +103,26 @@ public final class MicrophoneSource: AudioSource {
     }
 
     public func start() throws {
+        try verrou.withLock {
+            try lancer(sur: entree)
+            running = true
+        }
+    }
+
+    public func stop() {
+        verrou.withLock {
+            guard running else { return }
+            running = false
+            arreterMoteur()
+        }
+    }
+
+    private func lancer(sur entree: AudioDeviceID?) throws {
         let input = engine.inputNode
         if var entree, let unite = input.audioUnit {
-            AudioUnitSetProperty(unite, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, 0,
-                                 &entree, UInt32(MemoryLayout<AudioDeviceID>.size))
+            let statut = AudioUnitSetProperty(unite, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, 0,
+                                              &entree, UInt32(MemoryLayout<AudioDeviceID>.size))
+            guard statut == noErr else { throw ErreurCapture.entreeIndisponible }
         }
         let format = input.outputFormat(forBus: 0)
         guard format.sampleRate > 0, format.channelCount > 0 else { throw ErreurCapture.aucunMicro }
@@ -106,15 +130,41 @@ public final class MicrophoneSource: AudioSource {
             self?.onBuffer?(buffer)
         }
         engine.prepare()
-        try engine.start()
-        running = true
+        do {
+            try engine.start()
+        } catch {
+            input.removeTap(onBus: 0)
+            throw error
+        }
+        observateur = NotificationCenter.default.addObserver(forName: .AVAudioEngineConfigurationChange, object: engine, queue: nil) { [weak self] _ in
+            self?.relancer()
+        }
     }
 
-    public func stop() {
-        guard running else { return }
+    private func arreterMoteur() {
+        if let observateur { NotificationCenter.default.removeObserver(observateur) }
+        observateur = nil
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
-        running = false
+    }
+
+    /// L'entrée a changé (micro débranché, casque connecté) : le moteur s'est arrêté. On repart sur
+    /// l'entrée choisie si elle est encore là, sinon sur celle du système, et on réessaie tant qu'il n'y
+    /// a rien. `PisteAudio` signale le blanc et le comble.
+    private func relancer() {
+        let finie = verrou.withLock { () -> Bool in
+            guard running else { return true }
+            guard !engine.isRunning else { return true }
+            arreterMoteur()
+            for essai in [entree, nil] {
+                engine = AVAudioEngine()
+                if (try? lancer(sur: essai)) != nil { return true }
+            }
+            return false
+        }
+        if !finie {
+            DispatchQueue.global().asyncAfter(deadline: .now() + 2) { [weak self] in self?.relancer() }
+        }
     }
 }
 
@@ -127,7 +177,14 @@ public final class PisteAudio: @unchecked Sendable {
     private let surNiveau: @Sendable (Float) -> Void
     private let surPremierSon: @Sendable (Date) -> Void
     private let surErreur: @Sendable (Error) -> Void
+    private let surCoupure: @Sendable (Bool, Date) -> Void
+    private let delaiCoupure: TimeInterval
     private var premierSonVu = false
+    private var dernierTampon: Date?
+    private var dernierSigne = Date()
+    private var coupee = false
+    private var surveillance: DispatchSourceTimer?
+    private var convertisseurFichier: StreamConverter?
     private var erreurSignalee = false
     private let file = DispatchQueue(label: "eu.stevenrsl.aparte.piste", qos: .userInitiated)
     private var fichier: AVAudioFile?
@@ -137,7 +194,9 @@ public final class PisteAudio: @unchecked Sendable {
                 surConverti: @escaping @Sendable (AVAudioPCMBuffer) -> Void,
                 surNiveau: @escaping @Sendable (Float) -> Void,
                 surPremierSon: @escaping @Sendable (Date) -> Void,
-                surErreur: @escaping @Sendable (Error) -> Void) {
+                surErreur: @escaping @Sendable (Error) -> Void,
+                surCoupure: @escaping @Sendable (Bool, Date) -> Void = { _, _ in },
+                delaiCoupure: TimeInterval = 5) {
         self.source = source
         self.fichierURL = fichier
         self.formatCible = formatCible
@@ -145,6 +204,8 @@ public final class PisteAudio: @unchecked Sendable {
         self.surNiveau = surNiveau
         self.surPremierSon = surPremierSon
         self.surErreur = surErreur
+        self.surCoupure = surCoupure
+        self.delaiCoupure = delaiCoupure
     }
 
     public func demarrer() throws {
@@ -155,31 +216,91 @@ public final class PisteAudio: @unchecked Sendable {
                 self.premierSonVu = true
                 self.surPremierSon(Date())
             }
-            self.file.async { self.traiter(mono) }
+            let arrivee = Date()
+            self.file.async { self.traiter(mono, arrivee: arrivee) }
         }
         try source.start()
+        surveiller()
     }
 
-    private func traiter(_ mono: AVAudioPCMBuffer) {
+    /// Plus aucun tampon pendant le délai : le son est coupé, et il faut le dire, car rien d'autre ne
+    /// le signale. Rien ne dépend de la cause (débranchement, veille, panne du système).
+    private func surveiller() {
+        let minuteur = DispatchSource.makeTimerSource(queue: file)
+        minuteur.schedule(deadline: .now() + delaiCoupure / 5, repeating: delaiCoupure / 5)
+        minuteur.setEventHandler { [weak self] in
+            guard let self, !self.coupee, Date().timeIntervalSince(self.dernierSigne) > self.delaiCoupure else { return }
+            self.coupee = true
+            self.surCoupure(true, self.dernierSigne)
+        }
+        minuteur.resume()
+        file.sync { dernierSigne = Date(); surveillance = minuteur }
+    }
+
+    private func traiter(_ mono: AVAudioPCMBuffer, arrivee: Date) {
         surNiveau(AudioBuffers.level(mono))
+        // Un blanc se comble par du silence : le fichier et la transcription restent à l'heure de la réunion.
+        if let dernierTampon {
+            let duree = Double(mono.frameLength) / mono.format.sampleRate
+            let blanc = arrivee.timeIntervalSince(dernierTampon) - duree
+            if blanc > 1 { combler(blanc, format: mono.format) }
+        }
+        dernierTampon = arrivee
+        dernierSigne = arrivee
+        if coupee {
+            coupee = false
+            surCoupure(false, arrivee)
+        }
+        ecrireEtTranscrire(mono)
+    }
+
+    private func combler(_ secondes: Double, format: AVAudioFormat) {
+        var reste = Int(secondes * format.sampleRate)
+        while reste > 0 {
+            let frames = min(reste, Int(format.sampleRate))
+            guard let silence = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(frames)),
+                  let canal = silence.floatChannelData?[0] else { return }
+            silence.frameLength = AVAudioFrameCount(frames)
+            canal.initialize(repeating: 0, count: frames)
+            ecrireEtTranscrire(silence)
+            reste -= frames
+        }
+    }
+
+    private func ecrireEtTranscrire(_ mono: AVAudioPCMBuffer) {
         do {
             if fichier == nil { fichier = try Recording.open(fichierURL, sampleRate: mono.format.sampleRate) }
-            try fichier?.write(from: mono)
+            // Un fichier supprimé mais ouvert accepte encore les écritures : seul son chemin le dit.
+            guard FileManager.default.fileExists(atPath: fichierURL.path) else {
+                throw ErreurCapture.fichierDisparu(fichierURL.lastPathComponent)
+            }
+            try fichier?.write(from: pourFichier(mono))
         } catch {
             if !erreurSignalee {
                 erreurSignalee = true
                 surErreur(error)
             }
         }
-        if convertisseur == nil { convertisseur = StreamConverter(from: mono.format, to: formatCible) }
+        // Une nouvelle entrée peut avoir une autre fréquence : le convertisseur suit.
+        if convertisseur?.source != mono.format { convertisseur = StreamConverter(from: mono.format, to: formatCible) }
         if let converti = convertisseur?.convert(mono) { surConverti(converti) }
+    }
+
+    private func pourFichier(_ mono: AVAudioPCMBuffer) -> AVAudioPCMBuffer {
+        guard let cible = fichier?.processingFormat, cible != mono.format else { return mono }
+        if convertisseurFichier?.source != mono.format { convertisseurFichier = StreamConverter(from: mono.format, to: cible) }
+        return convertisseurFichier?.convert(mono) ?? mono
     }
 
     /// Arrête la source, puis ferme le fichier une fois tout écrit.
     public func arreter() {
         source.stop()
         source.onBuffer = nil
-        file.sync { fichier = nil }
+        file.sync {
+            surveillance?.cancel()
+            surveillance = nil
+            fichier = nil
+        }
     }
 }
 

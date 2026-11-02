@@ -16,6 +16,8 @@ public struct MetaReunion: Codable, Sendable, Hashable {
     /// Le temps, depuis le début de la réunion, où chaque piste a commencé à écrire son son.
     /// Absent des réunions enregistrées avant que ce décalage soit mesuré.
     public var decalages: [String: Double]?
+    /// Les moments où l'audio s'est coupé. Absent des réunions sans incident.
+    public var incidentsAudio: [IncidentAudio]?
 
     public init(titre: String, date: Date, type: TypeReunion) {
         self.titre = titre
@@ -24,6 +26,26 @@ public struct MetaReunion: Codable, Sendable, Hashable {
         self.type = type
         self.participants = []
         self.fournisseurs = []
+    }
+}
+
+/// Un moment où une piste n'a plus enregistré, compté depuis le début de la réunion.
+public struct IncidentAudio: Codable, Sendable, Hashable {
+    public var piste: String
+    public var debut: Double
+    /// Absent quand le son n'est jamais revenu.
+    public var fin: Double?
+
+    public init(piste: String, debut: Double, fin: Double? = nil) {
+        self.piste = piste
+        self.debut = debut
+        self.fin = fin
+    }
+
+    /// « micro coupé de 12:03 à 12:40 »
+    public var description: String {
+        if let fin { return "\(piste) coupé de \(horodatage(debut)) à \(horodatage(fin))" }
+        return "\(piste) coupé à \(horodatage(debut))"
     }
 }
 

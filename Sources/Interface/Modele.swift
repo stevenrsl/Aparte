@@ -179,7 +179,7 @@ public final class SessionReunion {
     public private(set) var debut: Date?
     public private(set) var etat = "Préparation de la transcription…"
     private var alerteSysteme: String?
-    private var alerteAudio: String?
+    private var alertesAudio: [String: String] = [:]
     private var alerteSauvegarde: String?
     private enum Ecriture { case meta, transcription, notes }
     @ObservationIgnored private var enAttente: Set<Ecriture> = []
@@ -193,7 +193,7 @@ public final class SessionReunion {
     }
 
     public var alerte: String? {
-        let alertes = [alerteAudio, alerteSauvegarde, alerteSysteme].compactMap { $0 }
+        let alertes = alertesAudio.keys.sorted().compactMap { alertesAudio[$0] } + [alerteSauvegarde, alerteSysteme].compactMap { $0 }
         return alertes.isEmpty ? nil : alertes.joined(separator: " ")
     }
 
@@ -228,7 +228,8 @@ public final class SessionReunion {
                                     surConverti: { micro.alimenter($0) },
                                     surNiveau: { [weak self] niveau in Task { @MainActor in self?.pousser(niveau, moi: true) } },
                                     surPremierSon: { [weak self] date in Task { @MainActor in self?.noter(.micro, date.timeIntervalSince(origine)) } },
-                                    surErreur: { [weak self] _ in Task { @MainActor in self?.signalerAudio("micro") } })
+                                    surErreur: { [weak self] _ in Task { @MainActor in self?.signalerAudio("micro") } },
+                                    surCoupure: { [weak self] coupee, date in Task { @MainActor in self?.noterCoupure("micro", coupee: coupee, a: date) } })
         try pisteMicro.demarrer()
         pistes.append(pisteMicro)
 
@@ -239,7 +240,8 @@ public final class SessionReunion {
                                           surConverti: { transcripteurSysteme.alimenter($0) },
                                           surNiveau: { [weak self] niveau in Task { @MainActor in self?.pousser(niveau, moi: false) } },
                                           surPremierSon: { [weak self] date in Task { @MainActor in self?.noter(.systeme, date.timeIntervalSince(origine)) } },
-                                          surErreur: { [weak self] _ in Task { @MainActor in self?.signalerAudio("son du Mac") } })
+                                          surErreur: { [weak self] _ in Task { @MainActor in self?.signalerAudio("son du Mac") } },
+                                          surCoupure: { [weak self] coupee, date in Task { @MainActor in self?.noterCoupure("son du Mac", coupee: coupee, a: date) } })
             try pisteSysteme.demarrer()
             pistes.append(pisteSysteme)
         } catch {
@@ -248,8 +250,30 @@ public final class SessionReunion {
         }
     }
 
-    private func signalerAudio(_ piste: String) {
-        alerteAudio = "Attention : l'audio (\(piste)) n'est plus enregistré. Vérifie l'espace disque et le dossier des réunions."
+    func signalerAudio(_ piste: String) {
+        alertesAudio[piste] = "Attention : l'audio (\(piste)) n'est plus enregistré. Vérifie l'espace disque et le dossier des réunions."
+        ajouterIncident(IncidentAudio(piste: piste, debut: temps))
+    }
+
+    /// Le son d'une piste s'arrête ou revient. L'incident reste dans la réunion, pour que le compte
+    /// rendu dise qu'il manque un moment.
+    func noterCoupure(_ piste: String, coupee: Bool, a date: Date) {
+        let moment = debut.map { date.timeIntervalSince($0) } ?? 0
+        if coupee {
+            alertesAudio[piste] = "Attention : plus de son (\(piste)) depuis \(horodatage(moment)). Vérifie ton entrée audio."
+            ajouterIncident(IncidentAudio(piste: piste, debut: moment))
+        } else {
+            alertesAudio[piste] = "Le son (\(piste)) est revenu à \(horodatage(moment)). Il reste un blanc dans l'enregistrement."
+            if let rang = reunion.meta.incidentsAudio?.lastIndex(where: { $0.piste == piste && $0.fin == nil }) {
+                reunion.meta.incidentsAudio?[rang].fin = moment
+            }
+            sauvegarder(.meta)
+        }
+    }
+
+    private func ajouterIncident(_ incident: IncidentAudio) {
+        reunion.meta.incidentsAudio = (reunion.meta.incidentsAudio ?? []) + [incident]
+        sauvegarder(.meta)
     }
 
     /// Une écriture ratée reste en attente et se réessaie à chaque sauvegarde. L'alerte ne part que

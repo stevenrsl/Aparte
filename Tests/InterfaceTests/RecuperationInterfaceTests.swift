@@ -52,3 +52,24 @@ import Transcription
     #expect(session.alerte == nil)
     #expect(reunion.notes().first?.texte == "Une note précieuse")
 }
+
+@MainActor
+@Test func uneCoupureResteDansLaReunion() throws {
+    let racine = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: racine, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: racine) }
+    let reunion = try Bibliotheque(racine: racine).creerReunion(titre: "R", type: .presentiel, dossier: nil)
+    let session = SessionReunion(reunion: reunion)
+
+    session.noterCoupure("micro", coupee: true, a: Date())
+    #expect(session.alerte?.contains("plus de son") == true)
+    session.noterCoupure("micro", coupee: false, a: Date())
+    #expect(session.alerte?.contains("revenu") == true)
+    session.signalerAudio("son du Mac")
+
+    let relue = try #require(Bibliotheque(racine: racine).reunions().first)
+    let incidents = try #require(relue.meta.incidentsAudio)
+    #expect(incidents.count == 2)
+    #expect(incidents[0].piste == "micro" && incidents[0].fin != nil)
+    #expect(incidents[1].piste == "son du Mac" && incidents[1].fin == nil)
+}
