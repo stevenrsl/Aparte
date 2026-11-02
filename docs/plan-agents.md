@@ -110,9 +110,10 @@ Steven réattribue dans le tableau.
 - **Leur donner des consignes différentes.** Toute nouvelle règle va dans `AGENTS.md`, nulle part
   ailleurs.
 
-## À Steven
+## Décidé par Steven
 
-- **La plateforme de relecture** : les propositions sur GitHub (Codex peut relire une pull request
-  qu'on lui confie), ou en local, en passant les branches d'un agent à l'autre. Recommandation :
-  GitHub, pour garder une trace de chaque décision.
+Le 2 novembre 2026 :
+
+- **La plateforme de relecture** : les propositions sur GitHub, dans le repo privé
+  `stevenrsl/Aparte`, pour garder une trace de chaque décision.
 - **Le rythme** : un chantier à la fois côté Claude Code, avec au plus une tâche Codex en parallèle.
