@@ -61,7 +61,7 @@ disque suit. Une réunion en cours d'enregistrement ne peut pas être modifiée.
 - Le résumé est construit depuis les éléments validés. Il est sec, c'est voulu.
 - Chaque élément est la phrase exacte de la transcription, sans reformulation : elle garde ses hésitations et ses erreurs de transcription.
 - Une analyse avec Mistral envoie la transcription et les notes de cette réunion, après confirmation. Ta clé se saisit
-  dans les réglages et va dans le trousseau.
+  dans les réglages et va dans le trousseau, ou se reprend de Cairn d'un clic.
 - Si le son s'arrête, Aparté le signale en réunion, repart sur l'entrée disponible et note le blanc dans le compte
   rendu. Ce chemin n'a jamais été essayé en débranchant vraiment un micro.
 - Pas encore testé : le rendu du mode sombre, un micro externe, un changement de micro en pleine réunion,

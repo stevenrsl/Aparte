@@ -236,6 +236,19 @@ public final class ModeleApp {
         cleMistralPresente = Trousseau.mistral.lire() != nil
     }
 
+    /// Copie la clé que Cairn a rangée, sur le clic de Steven. macOS peut demander son autorisation, et
+    /// la clé de Cairn reste en place. Vrai si une clé a été reprise.
+    @discardableResult
+    public func reprendreCleDeCairn(depuis source: Trousseau = .mistralDeCairn, vers cible: Trousseau = .mistral) -> Bool {
+        guard let cle = source.lire() else { return false }
+        guard cible.ecrire(cle) else {
+            erreur = "La clé n'a pas pu être rangée dans le trousseau."
+            return false
+        }
+        cleMistralPresente = Trousseau.mistral.lire() != nil
+        return true
+    }
+
     /// Le nombre de réunions déjà envoyées à un service hors du Mac.
     public var reunionsEnvoyees: Int {
         reunions.filter { $0.meta.fournisseurs.contains { !$0.hasPrefix("Local") } }.count

@@ -7,9 +7,16 @@ import Transcription
 /// réunions, qui peut être synchronisé.
 public struct Trousseau: Sendable {
     public static let mistral = Trousseau(service: "eu.stevenrsl.aparte", compte: "mistral-api-key")
+    /// La clé déjà rangée par Cairn. Lue seulement quand Steven le demande, et jamais modifiée.
+    public static let mistralDeCairn = Trousseau(service: "eu.stevenrsl.cairn", compte: "mistral-api-key")
 
-    let service: String
-    let compte: String
+    public let service: String
+    public let compte: String
+
+    public init(service: String, compte: String) {
+        self.service = service
+        self.compte = compte
+    }
 
     private var requete: [String: Any] {
         [kSecClass as String: kSecClassGenericPassword,

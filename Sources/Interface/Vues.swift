@@ -1192,6 +1192,13 @@ struct EcranReglages: View {
                         .background(Color.surface)
                         .accessibilityLabel("Clé d'API Mistral")
                     HStack(spacing: 10) {
+                        if !modele.cleMistralPresente {
+                            Button("Reprendre la clé de Cairn") {
+                                let reprise = modele.reprendreCleDeCairn()
+                                resultatTest = reprise ? "La clé de Cairn est reprise. Tu peux la tester." : "Aucune clé de Cairn n'a pu être lue."
+                            }
+                            .buttonStyle(BoutonSecondaire())
+                        }
                         Button("Enregistrer la clé") {
                             modele.enregistrerCleMistral(cle)
                             cle = ""

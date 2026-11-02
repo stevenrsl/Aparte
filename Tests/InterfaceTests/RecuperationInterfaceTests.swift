@@ -180,3 +180,24 @@ import Transcription
     #expect(try Data(contentsOf: reunion.url.appendingPathComponent("transcription.json")) == segmentsAvant)
     #expect(try Data(contentsOf: reunion.url.appendingPathComponent("notes.md")) == notesAvant)
 }
+
+@MainActor
+@Test func reprendreUneCleLaCopieSansToucherLOriginal() throws {
+    let racine = FileManager.default.temporaryDirectory.resolvingSymlinksInPath().appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: racine, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: racine) }
+    setenv("APARTE_RACINE", racine.path, 1)
+    defer { unsetenv("APARTE_RACINE") }
+    let modele = ModeleApp()
+    let source = Trousseau(service: "eu.stevenrsl.aparte.tests", compte: UUID().uuidString)
+    let cible = Trousseau(service: "eu.stevenrsl.aparte.tests", compte: UUID().uuidString)
+    defer {
+        source.ecrire(nil)
+        cible.ecrire(nil)
+    }
+    #expect(!modele.reprendreCleDeCairn(depuis: source, vers: cible))
+    source.ecrire("cle-inventee")
+    #expect(modele.reprendreCleDeCairn(depuis: source, vers: cible))
+    #expect(cible.lire() == "cle-inventee")
+    #expect(source.lire() == "cle-inventee")
+}
