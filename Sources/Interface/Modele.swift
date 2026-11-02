@@ -195,7 +195,7 @@ public final class ModeleApp {
             actualiser(reunion)
             // Le compte rendu est prêt sans clic, mais seulement sur ce Mac : rien ne part jamais tout seul.
             if let relue = reunions.first(where: { $0.id == reunion.id }), compteRendu(de: relue) == nil {
-                analyser(relue, avec: AnalysteApple.local, signaler: false)
+                analyser(relue, avec: AnalysteLocal(), signaler: false)
             }
         }
     }

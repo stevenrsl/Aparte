@@ -40,7 +40,7 @@ private func enveloppe(_ json: String) -> String {
 @Suite(.serialized) struct TestsMistral {
 @Test func mistralNeRendQueLesLignesDeLaTranscription() async throws {
     UserDefaults.standard.removeObject(forKey: "modeleMistral")
-    let json = #"{"decisions":[2,99],"actions":[{"ligne":3,"responsable":"Marie","echeance":"lundi"}],"questions":[],"sujets":[{"titre":"version longue","premiere":1,"derniere":3}]}"#
+    let json = #"{"decisions":[2,99],"actions":[{"ligne":3,"responsable":"Marie","echeance":"lundi"}],"questions":[],"sujets":[{"titre":"version longue","premiere":1,"derniere":3}],"en_bref":[{"texte":"La version longue est retenue.","lignes":[2]},{"texte":"Paul finira lundi.","lignes":[3]}]}"#
     let serveur = Serveur([(200, nil, enveloppe(json))])
     let c = try await analyste(serveur).analyser(segments: reunion, notes: [], type: .presentiel, progression: { _ in })
     #expect(c.decisions.map(\.texte) == ["On décide de garder la version longue."])
@@ -49,6 +49,7 @@ private func enveloppe(_ json: String) -> String {
     #expect(c.actions.first?.echeance == nil)
     #expect(c.sujets?.first?.titre == "version longue")
     #expect(c.fournisseur == "Mistral · Medium")
+    #expect(c.enBref?.map(\.texte) == ["La version longue est retenue."])
 
     let requete = try #require(serveur.recues.first)
     #expect(requete.url?.host == "api.mistral.ai")

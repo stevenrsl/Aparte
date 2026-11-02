@@ -1,7 +1,6 @@
 import Foundation
 import FoundationModels
 import NaturalLanguage
-import Security
 import Stockage
 import Transcription
 
@@ -39,6 +38,17 @@ public struct Sujet: Codable, Sendable, Identifiable, Hashable {
     public func contient(_ temps: Double) -> Bool { temps >= debut && temps <= fin }
 }
 
+/// Une phrase rédigée par le modèle pour « En bref », et les moments qu'elle résume.
+public struct PhraseSourcee: Codable, Sendable, Hashable {
+    public var texte: String
+    public var sources: [Double]
+
+    public init(texte: String, sources: [Double]) {
+        self.texte = texte
+        self.sources = sources
+    }
+}
+
 /// La sortie commune, quel que soit le fournisseur.
 public struct CompteRendu: Codable, Sendable, Hashable {
     public var fournisseur: String
@@ -48,11 +58,13 @@ public struct CompteRendu: Codable, Sendable, Hashable {
     public var questions: [ElementSource]
     /// Absent des analyses écrites avant les sujets.
     public var sujets: [Sujet]?
+    /// Deux ou trois phrases rédigées, chacune avec ses sources. Absent : le résumé construit prend la place.
+    public var enBref: [PhraseSourcee]?
     public var passagesNonAnalyses: Int
     public var elementsEcartes: Int
 
     public init(fournisseur: String, date: Date = Date(), decisions: [ElementSource], actions: [ElementSource],
-                questions: [ElementSource], sujets: [Sujet]? = nil, passagesNonAnalyses: Int = 0, elementsEcartes: Int = 0) {
+                questions: [ElementSource], sujets: [Sujet]? = nil, enBref: [PhraseSourcee]? = nil, passagesNonAnalyses: Int = 0, elementsEcartes: Int = 0) {
         self.fournisseur = fournisseur
         self.date = date
         self.decisions = decisions
@@ -60,6 +72,7 @@ public struct CompteRendu: Codable, Sendable, Hashable {
         self.questions = questions
         self.passagesNonAnalyses = passagesNonAnalyses
         self.sujets = sujets
+        self.enBref = enBref
         self.elementsEcartes = elementsEcartes
     }
 
@@ -111,12 +124,21 @@ public struct CompteRendu: Codable, Sendable, Hashable {
         copie.decisions = garder(decisions)
         copie.actions = garder(actions)
         copie.questions = garder(questions)
+        copie.enBref = enBref?.filter { phrase in
+            !phrase.sources.isEmpty && phrase.sources.allSatisfy { !ValidationSources.segmentsSources(de: $0, dans: segments).isEmpty }
+        }
         return copie
+    }
+
+    /// Ce qu'on lit d'abord : « En bref » s'il existe, sinon le résumé construit.
+    public var apercu: String {
+        let phrases = (enBref ?? []).map(\.texte)
+        return phrases.isEmpty ? resume : phrases.joined(separator: " ")
     }
 
     /// Résumé, décisions et actions, sans la transcription : prêt à coller.
     public func texteACopier(incidents: [IncidentAudio] = []) -> String {
-        var parties = [resume]
+        var parties = [apercu]
         if let audio = Self.audioIncomplet(incidents) { parties.append(audio) }
         if !decisions.isEmpty { parties.append("Décisions\n" + decisions.map { "- \($0.texte)" }.joined(separator: "\n")) }
         if !actions.isEmpty { parties.append("Actions\n" + actions.map { "- \($0.texte)" }.joined(separator: "\n")) }
@@ -136,7 +158,7 @@ public struct CompteRendu: Codable, Sendable, Hashable {
             }
             return "\n## \(titre)\n\n" + lignes.joined(separator: "\n") + "\n"
         }
-        return "# Compte rendu\n\nProduit par : \(fournisseur)\n\n\(resume)\n"
+        return "# Compte rendu\n\nProduit par : \(fournisseur)\n\n\(apercu)\n"
             + (Self.audioIncomplet(incidents).map { "\n\($0)\n" } ?? "")
             + ((sujets ?? []).isEmpty ? "" : "\n## Sujets\n\n" + (sujets ?? []).map { "- \($0.titre) (\(horodatage($0.debut)))" }.joined(separator: "\n") + "\n")
             + bloc("Décisions", decisions) + bloc("Actions", actions) + bloc("Questions ouvertes", questions)
@@ -215,6 +237,65 @@ public enum ValidationSources {
     }
 }
 
+/// « En bref » est écrit par le modèle, à la demande de Steven : une reformulation peut donc se tromper, et
+/// l'écran dit qui l'a rédigée. Chaque phrase doit au moins citer des lignes qui existent, et ne nommer
+/// ni personne, ni chiffre, ni moment absent de ces lignes. Une phrase qui échoue n'est pas affichée.
+public enum EnBref {
+    public struct Propose: Sendable {
+        public var texte: String
+        public var lignes: [Int]
+
+        public init(texte: String, lignes: [Int]) {
+            self.texte = texte
+            self.lignes = lignes
+        }
+    }
+
+    static let maximum = 3
+
+    private static let motsDeTemps: Set<String> = [
+        "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche",
+        "janvier", "fevrier", "mars", "avril", "mai", "juin", "juillet", "aout", "septembre", "octobre", "novembre", "decembre",
+        "demain", "hier", "matin", "soir", "midi", "semaine", "mois", "annee",
+    ]
+
+    /// Les noms, chiffres et mots de temps du texte qui ne sont pas dans ce qui a été dit.
+    static func motsNonDits(_ texte: String, lu: Set<String>) -> [String] {
+        var suspects = ValidationSources.normaliser(texte).split(separator: " ").map(String.init).filter { mot in
+            motsDeTemps.contains(mot) || mot.contains(where: \.isNumber)
+        }
+        let etiquettes = NLTagger(tagSchemes: [.nameType])
+        etiquettes.string = texte
+        etiquettes.setLanguage(.french, range: texte.startIndex..<texte.endIndex)
+        etiquettes.enumerateTags(in: texte.startIndex..<texte.endIndex, unit: .word, scheme: .nameType,
+                                 options: [.omitWhitespace, .omitPunctuation, .joinNames]) { etiquette, plage in
+            if let etiquette, [.personalName, .placeName, .organizationName].contains(etiquette) {
+                suspects += ValidationSources.normaliser(String(texte[plage])).split(separator: " ").map(String.init)
+            }
+            return true
+        }
+        // Une majuscule au milieu d'une phrase annonce un nom propre.
+        let bruts = texte.split(whereSeparator: \.isWhitespace)
+        for (precedent, mot) in zip(bruts, bruts.dropFirst()) where mot.first?.isUppercase == true {
+            if let dernier = precedent.last, ".!?:".contains(dernier) { continue }
+            suspects += ValidationSources.normaliser(String(mot)).split(separator: " ").map(String.init)
+        }
+        return suspects.filter { !lu.contains($0) }
+    }
+
+    public static func valider(_ proposes: [Propose], phrases: [String], debuts: [Double]) -> [PhraseSourcee] {
+        guard phrases.count == debuts.count else { return [] }
+        return proposes.compactMap { propose -> PhraseSourcee? in
+            let texte = propose.texte.trimmingCharacters(in: .whitespacesAndNewlines)
+            let lignes = propose.lignes.filter { phrases.indices.contains($0 - 1) }
+            guard !texte.isEmpty, !lignes.isEmpty, lignes.count == propose.lignes.count else { return nil }
+            let lu = Set(lignes.flatMap { ValidationSources.normaliser(phrases[$0 - 1]).split(separator: " ").map(String.init) })
+            guard motsNonDits(texte, lu: lu).isEmpty else { return nil }
+            return PhraseSourcee(texte: texte, sources: lignes.map { debuts[$0 - 1] })
+        }.prefix(maximum).map { $0 }
+    }
+}
+
 /// Le découpage en sujets proposé par le modèle. Ses bornes doivent exister, et son titre ne doit
 /// contenir que des mots dits dans ce moment : sinon, le titre devient le début de sa première phrase.
 public enum DecoupageSujets {
@@ -265,18 +346,11 @@ public enum ErreurAnalyse: LocalizedError {
     case indisponible(String)
     case rienAAnalyser
     case aucunPassage
-    case pcc(PrivateCloudComputeLanguageModel.Error)
 
     public var errorDescription: String? {
         switch self {
-        case let .indisponible(raison): return "Cette analyse n'est pas disponible : \(raison)"
+        case let .indisponible(raison): return "L'analyse locale n'est pas disponible : \(raison)"
         case .rienAAnalyser: return "Il n'y a pas de transcription à analyser."
-        case let .pcc(erreur):
-            switch erreur {
-            case .quotaLimitReached: return "La limite du jour de Private Cloud Compute est atteinte. Analyse sur ce Mac, ou réessaie demain."
-            case .networkFailure: return "Private Cloud Compute n'a pas pu être joint. Vérifie ta connexion."
-            default: return "Private Cloud Compute n'a pas pu analyser cette réunion."
-            }
         case .aucunPassage: return "Aucun passage n'a pu être analysé. Rien n'a été inventé : réessaie plus tard."
         }
     }
@@ -292,6 +366,20 @@ struct LignesChoisies {
 struct Confirmation {
     @Guide(description: "Vrai seulement si la ligne marquée correspond clairement, d'après son contexte.")
     var correspond: Bool
+}
+
+@Generable
+struct PhraseGeneree {
+    @Guide(description: "Une phrase simple, qui ne dit que ce que disent ses lignes.")
+    var texte: String
+    @Guide(description: "Les numéros des lignes que cette phrase résume.")
+    var lignes: [Int]
+}
+
+@Generable
+struct EnBrefGenere {
+    @Guide(description: "Deux ou trois phrases, pas plus.")
+    var phrases: [PhraseGeneree]
 }
 
 @Generable
@@ -328,44 +416,19 @@ struct ActionsChoisies {
 
 /// Foundation Models sur l'appareil. La fenêtre de 4 096 tokens étant partagée entre
 /// l'entrée et la sortie, la transcription est découpée en passages d'environ cinq minutes.
-///
-/// PCC est le même lecteur avec une fenêtre bien plus grande : une réunion d'une heure tient d'un coup.
-public struct AnalysteApple: Analyste {
-    public let nom: String
-    let dureePassage: Double
-    let session: @Sendable (String) -> LanguageModelSession
-    let indisponible: @Sendable () -> String?
+public struct AnalysteLocal: Analyste {
+    public let nom = "Local · Apple Intelligence"
+    static let dureePassage = 300.0
+    static let motsMinimum = 4
 
-    /// Sur ce Mac. Rien ne part. Résumer les mots de quelqu'un, c'est les transformer, d'où ces garde-fous :
-    /// ceux par défaut refusent parfois un passage pour un mot sorti de son contexte.
-    public static let local = AnalysteApple(
-        nom: "Local · Apple Intelligence", dureePassage: 300,
-        session: { LanguageModelSession(model: SystemLanguageModel(guardrails: .permissiveContentTransformations), instructions: $0) },
-        indisponible: {
-            if case let .unavailable(raison) = SystemLanguageModel.default.availability { return String(describing: raison) }
-            return nil
-        })
+    public init() {}
 
-    /// Dans Private Cloud Compute : la transcription et les notes partent chez Apple. Seul Steven peut le
-    /// lancer, pour une réunion précise.
-    public static let pcc = AnalysteApple(
-        nom: "PCC · Apple", dureePassage: 3600,
-        session: { LanguageModelSession(model: PrivateCloudComputeLanguageModel(), instructions: $0) },
-        indisponible: {
-            guard pccAutorise else { return "Apple doit d'abord autoriser Aparté à utiliser Private Cloud Compute." }
-            if case let .unavailable(raison) = PrivateCloudComputeLanguageModel().availability { return String(describing: raison) }
-            return nil
-        })
-
-    /// PCC demande une autorisation qu'Apple accorde sur demande. Sans elle, le premier appel fait planter
-    /// l'app, même si le modèle se dit disponible : on regarde donc avant de le toucher.
-    public static var pccAutorise: Bool {
-        guard let tache = SecTaskCreateFromSelf(nil) else { return false }
-        let droit = SecTaskCopyValueForEntitlement(tache, "com.apple.developer.private-cloud-compute" as CFString, nil)
-        return (droit as? Bool) == true
+    /// Résumer les mots de quelqu'un, c'est les transformer, d'où ces garde-fous : ceux par défaut
+    /// refusent parfois un passage pour un mot sorti de son contexte.
+    private func session(_ consigne: String) -> LanguageModelSession {
+        LanguageModelSession(model: SystemLanguageModel(guardrails: .permissiveContentTransformations), instructions: consigne)
     }
 
-    static let motsMinimum = 4
     /// Le modèle ne recopie ni n'écrit rien : il choisit des numéros de lignes, une catégorie à la fois.
     /// Le texte rendu est donc toujours celui de la transcription.
     private static let consigneCommune = """
@@ -381,6 +444,11 @@ public struct AnalysteApple: Analyste {
      Retiens les lignes qui disent qu'une tâche précise est à faire : quelqu'un fait, envoie, appelle, réserve, écrit ou demande quelque chose. \
     Pas les choix arrêtés, les constats, les questions ni les simples accords.
     """
+    static let consigneEnBref = """
+    Tu résumes une réunion en français, en deux ou trois phrases simples, pour quelqu'un qui veut savoir \
+    en dix secondes ce qui s'est dit. Tu ne t'appuies que sur les lignes numérotées qu'on te donne, et tu indiques \
+    celles que chaque phrase résume. Tu n'inventes ni nom, ni date, ni chiffre. Ce qui a été promis n'est pas encore fait.
+    """
     static let consigneSujets = """
     Tu relis la transcription d'une réunion, ligne par ligne. Chaque ligne a un numéro. \
     Découpe-la en sujets abordés, un à six, dans l'ordre. Un sujet réunit des lignes qui se suivent. \
@@ -391,7 +459,7 @@ public struct AnalysteApple: Analyste {
     Pas les questions de politesse, ni celles qui reçoivent une réponse.
     """
 
-    static func decouper(_ segments: [Segment], duree: Double) -> [[Segment]] {
+    static func decouper(_ segments: [Segment], duree: Double = dureePassage) -> [[Segment]] {
         var passages: [[Segment]] = []
         var courant: [Segment] = []
         for segment in segments.sorted(by: { $0.debut < $1.debut }) {
@@ -516,9 +584,12 @@ public struct AnalysteApple: Analyste {
     public func analyser(segments: [Segment], notes: [LigneDeNote], type: TypeReunion,
                          progression: @escaping @Sendable (Double) -> Void) async throws -> CompteRendu {
         guard !segments.isEmpty else { throw ErreurAnalyse.rienAAnalyser }
-        if let raison = indisponible() { throw ErreurAnalyse.indisponible(raison) }
+        switch SystemLanguageModel.default.availability {
+        case .available: break
+        case let .unavailable(raison): throw ErreurAnalyse.indisponible(String(describing: raison))
+        }
 
-        let passages = Self.decouper(segments, duree: dureePassage)
+        let passages = Self.decouper(segments)
         var decisions: [ElementSource] = []
         var actions: [ElementSource] = []
         var questions: [ElementSource] = []
@@ -545,9 +616,6 @@ public struct AnalysteApple: Analyste {
                 actions += garder(choisi.actions)
                 questions += garder(choisi.questions)
                 sujets += choisi.sujets
-            } catch let erreur as PrivateCloudComputeLanguageModel.Error {
-                // La limite du jour ou le réseau : les passages suivants échoueraient de même.
-                throw ErreurAnalyse.pcc(erreur)
             } catch {
                 // Un passage refusé par le modèle ne bloque pas les autres, et il est compté.
                 echecs += 1
@@ -556,8 +624,21 @@ public struct AnalysteApple: Analyste {
         }
         guard echecs < passages.count else { throw ErreurAnalyse.aucunPassage }
 
+        // « En bref » se rédige à partir de ce qui a été retenu : une longue réunion tient ainsi dans la fenêtre.
+        let retenus = (decisions + actions + questions).compactMap { element in element.sources.first.map { (element.texte, $0) } }
+            + sujets.map { ($0.titre, $0.debut) }
+        var enBref: [PhraseSourcee]?
+        if !retenus.isEmpty {
+            let liste = retenus.enumerated().map { "\($0.offset + 1). \($0.element.0)" }.joined(separator: "\n")
+            if let genere = try? await session(Self.consigneEnBref).respond(to: liste, generating: EnBrefGenere.self, options: GenerationOptions(sampling: .greedy)).content {
+                let valides = EnBref.valider(genere.phrases.map { .init(texte: $0.texte, lignes: $0.lignes) },
+                                             phrases: retenus.map(\.0), debuts: retenus.map(\.1))
+                enBref = valides.isEmpty ? nil : valides
+            }
+        }
+
         progression(1)
-        return CompteRendu(fournisseur: nom, decisions: decisions, actions: actions, questions: questions, sujets: sujets,
+        return CompteRendu(fournisseur: nom, decisions: decisions, actions: actions, questions: questions, sujets: sujets, enBref: enBref,
                            passagesNonAnalyses: echecs, elementsEcartes: ecartes)
     }
 }

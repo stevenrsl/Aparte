@@ -130,7 +130,7 @@ private let citationMarie = "Marie envoie la musique avant vendredi."
 func analyseLeFichierDeReference() async throws {
     let chemin = try #require(ProcessInfo.processInfo.environment["APARTE_AUDIO_REFERENCE"])
     let segments = try await TranscripteurFichier.transcrire(url: URL(fileURLWithPath: chemin), piste: .micro)
-    let compteRendu = try await AnalysteApple.local.analyser(segments: segments, notes: [], type: .presentiel, progression: { _ in })
+    let compteRendu = try await AnalysteLocal().analyser(segments: segments, notes: [], type: .presentiel, progression: { _ in })
     let elements = compteRendu.decisions + compteRendu.actions + compteRendu.questions
     #expect(elements.allSatisfy { ValidationSources.valider($0, dans: segments) != nil })
     print("resume: \(compteRendu.resume.count) car., decisions: \(compteRendu.decisions.count), actions: \(compteRendu.actions.count), questions: \(compteRendu.questions.count), ecartes: \(compteRendu.elementsEcartes), passages non analyses: \(compteRendu.passagesNonAnalyses)")
@@ -142,14 +142,6 @@ func analyseLeFichierDeReference() async throws {
     #expect(compteRendu.texteACopier(incidents: incidents).contains("Audio incomplet : micro coupé de 00:40 à 00:52."))
     #expect(compteRendu.markdown(incidents: incidents).contains("Audio incomplet"))
     #expect(!compteRendu.texteACopier().contains("Audio incomplet"))
-}
-
-@Test func pccSansAutorisationEstRefuseSansToucherAuModele() async {
-    guard !AnalysteApple.pccAutorise else { return }
-    let segments = [Segment(debut: 0, fin: 2, piste: .micro, texte: "Une phrase inventée.")]
-    await #expect(throws: ErreurAnalyse.self) {
-        _ = try await AnalysteApple.pcc.analyser(segments: segments, notes: [], type: .presentiel, progression: { _ in })
-    }
 }
 
 private let phrasesSujets = ["On parle du budget de la tournée.", "Le budget reste serré.", "Passons à la musique du film.", "Le compositeur a livré."]
@@ -181,5 +173,37 @@ private let debutsSujets = [0.0, 10, 20, 30]
     let extrait = compteRendu.extrait([budget])
     #expect(extrait.decisions.map(\.texte) == ["Dedans"])
     #expect(extrait.sujets?.map(\.titre) == ["Budget"])
+}
+
+@Test func enBrefGardeUnePhraseFideleAvecSesSources() {
+    let phrases = ["Marie envoie la musique avant vendredi.", "On garde la version longue."]
+    let valides = EnBref.valider([.init(texte: "La version longue est retenue et Marie envoie la musique vendredi.", lignes: [1, 2])], phrases: phrases, debuts: [10, 20])
+    #expect(valides.first?.sources == [10, 20])
+}
+
+@Test(arguments: [
+    EnBref.Propose(texte: "Paul envoie la musique.", lignes: [1]),
+    EnBref.Propose(texte: "La musique part lundi.", lignes: [1]),
+    EnBref.Propose(texte: "Il reste 3 morceaux.", lignes: [1]),
+    EnBref.Propose(texte: "La musique part.", lignes: []),
+    EnBref.Propose(texte: "La musique part.", lignes: [9]),
+])
+func enBrefEcarteUnePhraseSansPreuve(propose: EnBref.Propose) {
+    #expect(EnBref.valider([propose], phrases: ["Marie envoie la musique avant vendredi."], debuts: [10]).isEmpty)
+}
+
+@Test func enBrefNeDepassePasTroisPhrases() {
+    let proposes = (0..<5).map { _ in EnBref.Propose(texte: "La musique part.", lignes: [1]) }
+    #expect(EnBref.valider(proposes, phrases: ["La musique part."], debuts: [0]).count == 3)
+}
+
+@Test func lApercuPrefereEnBrefEtRevientAuResumeSansLui() {
+    let sans = CompteRendu(fournisseur: "Test", decisions: [], actions: [], questions: [])
+    #expect(sans.apercu == sans.resume)
+    let avec = CompteRendu(fournisseur: "Test", decisions: [], actions: [], questions: [], enBref: [PhraseSourcee(texte: "On garde la version longue.", sources: [11])])
+    #expect(avec.apercu == "On garde la version longue.")
+    #expect(avec.texteACopier().hasPrefix("On garde"))
+    #expect(avec.revalide(dans: segments).enBref?.count == 1)
+    #expect(avec.revalide(dans: []).enBref?.isEmpty == true)
 }
 
