@@ -37,7 +37,8 @@ public final class ModeleApp {
     @ObservationIgnored private static let cleRacine = "racine"
 
     public init() {
-        if let chemin = UserDefaults.standard.string(forKey: Self.cleRacine) {
+        // Pour essayer l'app dans un dossier de test, sans toucher au choix de Steven.
+        if let chemin = ProcessInfo.processInfo.environment["APARTE_RACINE"] ?? UserDefaults.standard.string(forKey: Self.cleRacine) {
             racine = URL(fileURLWithPath: chemin)
         }
         recharger()
