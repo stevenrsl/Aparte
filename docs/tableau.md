@@ -18,3 +18,4 @@ dans le [plan des agents](plan-agents.md).
 | Reprendre les voix, l'écho et les noms de Cairn | Claude Code | `voix-et-vocabulaire` | en relecture | `Package.swift`, `build.sh`, `Sources/`, `Tests/`, `docs/` |
 | Analyse automatique et PCC | Claude Code | `analyse-auto-pcc` | en relecture | `Sources/Analyse/`, `Sources/Interface/`, `Sources/Stockage/`, `Tests/` |
 | Sujets et répartition d'une réunion | Claude Code | `sujets-repartir` | en relecture | `Sources/Analyse/`, `Sources/Interface/`, `Sources/Stockage/`, `Tests/` |
+| Fournisseur externe : Mistral | Claude Code | `fournisseur-mistral` | en relecture | `Sources/Analyse/`, `Sources/Interface/`, `Tests/`, `docs/`, `README.md` |
