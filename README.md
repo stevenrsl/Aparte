@@ -44,6 +44,7 @@ Chaque réunion est un dossier lisible sans l'app : `meta.json`, `micro.m4a`, `s
 - Les décisions et actions sont volontairement peu nombreuses : ce qui n'a pas de source exacte est écarté.
   L'analyse peut donc manquer des éléments. Le nombre écarté est affiché.
 - Le résumé est construit depuis les éléments validés. Il est sec, c'est voulu.
+- Chaque élément est la phrase exacte de la transcription, sans reformulation : elle garde ses hésitations et ses erreurs de transcription.
 - PCC et les fournisseurs externes ne sont pas branchés : rien ne quitte le Mac.
 - Les polices du brief ne sont pas embarquées, le système les remplace.
 - Pas encore testé : le rendu du mode sombre, un micro externe, un changement de micro en pleine réunion,

@@ -141,6 +141,9 @@ reste son choix, pas une synchro de l'app.
 - **Le résumé n'est pas écrit par un modèle** (décidé par Steven le 2 novembre 2026) : il est construit
   à partir des seuls éléments validés, chacun avec son horodatage. Plus sec, mais rien n'échappe à la
   règle 1.
+- **Chaque élément est une citation exacte** (décidé par Steven le 2 novembre 2026) : la phrase entière
+  de la transcription, jamais une reformulation, car aucun contrôle ne prouve qu'une reformulation dit
+  vrai. Plus sec, et les erreurs de transcription restent visibles.
 - Seule la transcription et les notes partent chez un fournisseur. Jamais l'audio.
 - L'analyse affiche le fournisseur qui l'a produite.
 
