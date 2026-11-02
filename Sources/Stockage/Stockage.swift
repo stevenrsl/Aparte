@@ -18,6 +18,10 @@ public struct MetaReunion: Codable, Sendable, Hashable {
     public var decalages: [String: Double]?
     /// Les moments où l'audio s'est coupé. Absent des réunions sans incident.
     public var incidentsAudio: [IncidentAudio]?
+    /// Le nom que Steven a donné à chaque voix : « Voix 1 » : « Claire ». Rien ne le devine.
+    public var nomsDesVoix: [String: String]?
+    /// La relecture de l'enregistrement a écrit la transcription.
+    public var relue: Bool?
 
     public init(titre: String, date: Date, type: TypeReunion) {
         self.titre = titre
@@ -125,6 +129,20 @@ public struct Reunion: Identifiable, Sendable, Hashable {
 
     public func enregistrer(segments: [Segment]) throws {
         try Bibliotheque.encodeur.encode(segments).write(to: transcriptionURL, options: .atomic)
+    }
+
+    /// Remplace la transcription par celle de la relecture. Celle du direct reste à côté, jamais écrasée.
+    public func remplacer(segments: [Segment]) throws {
+        let direct = url.appendingPathComponent("transcription-direct.json")
+        if !FileManager.default.fileExists(atPath: direct.path), FileManager.default.fileExists(atPath: transcriptionURL.path) {
+            try FileManager.default.copyItem(at: transcriptionURL, to: direct)
+        }
+        try enregistrer(segments: segments)
+    }
+
+    /// Le nom d'une voix : celui donné par Steven, sinon « Voix 1 ».
+    public func nom(de voix: String) -> String {
+        meta.nomsDesVoix?[voix].flatMap { $0.isEmpty ? nil : $0 } ?? voix
     }
 
     public func segments() -> [Segment] {

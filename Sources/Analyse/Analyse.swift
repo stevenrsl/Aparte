@@ -280,18 +280,20 @@ public struct AnalysteLocal: Analyste {
         var phrase: String
         var debut: Double
         var piste: Piste
+        var voix: String?
     }
 
     static func lignes(de passage: [Segment]) -> [Ligne] {
         passage.flatMap { segment in
-            ValidationSources.phrases(de: segment.texte).map { Ligne(phrase: $0, debut: segment.debut, piste: segment.piste) }
+            ValidationSources.phrases(de: segment.texte).map { Ligne(phrase: $0, debut: segment.debut, piste: segment.piste, voix: segment.voix) }
         }
     }
 
     private func invite(_ lignes: [Ligne], notes: [LigneDeNote], type: TypeReunion) -> String {
-        func qui(_ piste: Piste) -> String {
+        func qui(_ ligne: Ligne) -> String {
+            if let voix = ligne.voix { return "\(voix) : " }
             guard type == .visio else { return "" }
-            return piste == .micro ? "moi : " : "eux : "
+            return ligne.piste == .micro ? "moi : " : "eux : "
         }
         let debut = (lignes.first?.debut ?? 0) - 15
         let fin = (lignes.last?.debut ?? 0) + 15
@@ -302,7 +304,7 @@ public struct AnalysteLocal: Analyste {
             texte += ancres.map { "- \($0.texte)" }.joined(separator: "\n") + "\n\n"
         }
         texte += "Transcription :\n"
-        texte += lignes.enumerated().map { "\($0.offset + 1). \(qui($0.element.piste))\($0.element.phrase)" }.joined(separator: "\n")
+        texte += lignes.enumerated().map { "\($0.offset + 1). \(qui($0.element))\($0.element.phrase)" }.joined(separator: "\n")
         return texte
     }
 
