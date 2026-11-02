@@ -41,8 +41,8 @@ Chaque réunion est un dossier lisible sans l'app : `meta.json`, `micro.m4a`, `s
 
 ## Ce qui est connu
 
-- Les décisions et actions sont volontairement peu nombreuses : ce qui n'a pas de source exacte est écarté.
-  L'analyse peut donc manquer des éléments. Le nombre écarté est affiché.
+- L'analyse locale peut manquer des éléments, en retenir de trop ou mal les ranger : voir `docs/mesure-analyse.md`.
+  Les éléments cités sont toujours exacts, leur classement reste à relire.
 - Le résumé est construit depuis les éléments validés. Il est sec, c'est voulu.
 - Chaque élément est la phrase exacte de la transcription, sans reformulation : elle garde ses hésitations et ses erreurs de transcription.
 - PCC et les fournisseurs externes ne sont pas branchés : rien ne quitte le Mac.
