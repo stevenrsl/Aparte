@@ -22,6 +22,8 @@ public struct MetaReunion: Codable, Sendable, Hashable {
     public var nomsDesVoix: [String: String]?
     /// La relecture de l'enregistrement a écrit la transcription.
     public var relue: Bool?
+    /// Pour un extrait : le titre de la réunion dont il vient. L'original n'est pas modifié.
+    public var origine: String?
 
     public init(titre: String, date: Date, type: TypeReunion) {
         self.titre = titre

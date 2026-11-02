@@ -223,6 +223,35 @@ public final class ModeleApp {
         }
     }
 
+    /// Une réunion qui a touché plusieurs dossiers : chacun reçoit un extrait avec ses sujets, leurs
+    /// phrases, leurs notes et leurs éléments. L'original ne change pas. Rien ne s'écrit sans ce clic.
+    public func repartir(_ reunion: Reunion, _ choix: [UUID: String]) {
+        guard let bibliotheque, let compteRendu = compteRendu(de: reunion), !estEnCours(reunion) else { return }
+        let sujets = compteRendu.sujets ?? []
+        let dossiersChoisis = Set(choix.values)
+        do {
+            for dossier in dossiersChoisis.sorted() {
+                let choisis = sujets.filter { choix[$0.id] == dossier }
+                guard !choisis.isEmpty else { continue }
+                func garder(_ temps: Double) -> Bool { choisis.contains { $0.contient(temps) } }
+                var extrait = try bibliotheque.creerReunion(titre: "\(reunion.meta.titre) · extrait", type: reunion.meta.type,
+                                                            dossier: bibliotheque.creerDossier(dossier), date: reunion.meta.date)
+                extrait.meta.origine = reunion.meta.titre
+                extrait.meta.duree = choisis.reduce(0) { $0 + ($1.fin - $1.debut) }
+                extrait.meta.decalages = reunion.meta.decalages
+                extrait.meta.nomsDesVoix = reunion.meta.nomsDesVoix
+                try extrait.enregistrerMeta()
+                try extrait.enregistrer(segments: reunion.segments().filter { garder($0.debut) || garder($0.fin) })
+                try extrait.enregistrer(notes: reunion.notes().filter { garder($0.temps) })
+                try enregistrer(compteRendu.extrait(choisis), pour: extrait)
+            }
+            recharger()
+        } catch {
+            erreur = "La répartition de « \(reunion.meta.titre) » n'a pas pu se terminer : \(error.localizedDescription) L'original n'a pas changé."
+            recharger()
+        }
+    }
+
     /// Donne un nom à une voix, partout dans la réunion. La transcription n'est pas réécrite.
     public func nommer(_ voix: String, _ nom: String, dans reunion: Reunion) {
         var nommee = reunions.first { $0.id == reunion.id } ?? reunion

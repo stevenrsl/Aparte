@@ -158,6 +158,12 @@ de ce qu'elle contient n'est réécrit, sauf le titre dans `meta.json`.
 - **Chaque élément est une citation exacte** (décidé par Steven le 2 novembre 2026) : la phrase entière
   de la transcription, jamais une reformulation, car aucun contrôle ne prouve qu'une reformulation dit
   vrai. Plus sec, et les erreurs de transcription restent visibles.
+- **Les sujets** (demandés par Steven le 2 novembre 2026, repris de Cairn) : le titre d'un sujet ne contient que
+  des mots dits dans ce moment, sinon il devient le début de sa première phrase. Cairn y rédigeait des
+  points : ici, un sujet renvoie au passage, ce qui garde la règle 1.
+- **Répartir une réunion** (demandé par Steven le 2 novembre 2026) : Steven choisit un dossier par sujet, et chaque
+  dossier reçoit un extrait sans audio. La réunion d'origine ne change pas. Un extrait est une réunion
+  marquée `origine`, faute de « notes libres », hors v1.
 - Seule la transcription et les notes partent chez un fournisseur. Jamais l'audio.
 - L'analyse affiche le fournisseur qui l'a produite.
 

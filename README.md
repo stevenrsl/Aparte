@@ -46,9 +46,12 @@ l'écho d'une visio sans casque et corrige les noms qu'il connaît. Pour une ré
 puis « Relire l'enregistrement ». La première relecture télécharge 21 Mo de modèles depuis Hugging Face, sans
 rien envoyer de l'enregistrement.
 
+Le compte rendu s'écrit ensuite tout seul, sur ce Mac. Private Cloud Compute ne part jamais tout seul : c'est un
+bouton, avec une confirmation, et il reste inactif tant qu'Apple n'a pas autorisé l'app.
+
 ## Gérer une réunion
 
-Depuis son compte rendu, « // gérer » renomme la réunion, la déplace ou la met à la Corbeille. Le dossier sur le
+Depuis son compte rendu, « // gérer » renomme la réunion, la déplace, la répartit entre dossiers ou la met à la Corbeille. Le dossier sur le
 disque suit. Une réunion en cours d'enregistrement ne peut pas être modifiée.
 
 ## Ce qui est connu

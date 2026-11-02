@@ -1,4 +1,5 @@
 import Foundation
+import Analyse
 import Stockage
 import Testing
 import Transcription
@@ -148,4 +149,34 @@ import Transcription
     try reunion.remplacer(segments: [Segment(debut: 0, fin: 1, piste: .micro, texte: "Relu 2")])
     #expect(reunion.segments().first?.texte == "Relu 2")
     #expect(try Data(contentsOf: reunion.url.appendingPathComponent("transcription-direct.json")) == direct)
+}
+
+@MainActor
+@Test func repartirCreeDesExtraitsSansToucherLOriginal() throws {
+    let racine = FileManager.default.temporaryDirectory.resolvingSymlinksInPath().appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: racine, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: racine) }
+    let reunion = try Bibliotheque(racine: racine).creerReunion(titre: "Fictive", type: .presentiel, dossier: nil)
+    try reunion.enregistrer(segments: [Segment(debut: 1, fin: 5, piste: .micro, texte: "Le budget est serré."),
+                                       Segment(debut: 25, fin: 30, piste: .micro, texte: "La musique est livrée.")])
+    try reunion.enregistrer(notes: [LigneDeNote(temps: 2, texte: "Note budget"), LigneDeNote(temps: 26, texte: "Note musique")])
+    setenv("APARTE_RACINE", racine.path, 1)
+    defer { unsetenv("APARTE_RACINE") }
+    let modele = ModeleApp()
+    let budget = Sujet(titre: "Budget", debut: 0, fin: 20)
+    let musique = Sujet(titre: "Musique", debut: 20, fin: 40)
+    try modele.enregistrer(CompteRendu(fournisseur: "Test", decisions: [ElementSource(texte: "Le budget est serré.", sources: [2], citation: "Le budget est serré.")],
+                                       actions: [], questions: [], sujets: [budget, musique]), pour: reunion)
+    let segmentsAvant = try Data(contentsOf: reunion.url.appendingPathComponent("transcription.json"))
+    let notesAvant = try Data(contentsOf: reunion.url.appendingPathComponent("notes.md"))
+
+    modele.repartir(reunion, [budget.id: "Production"])
+
+    let extrait = try #require(modele.reunions.first { $0.dossier == "Production" })
+    #expect(extrait.meta.origine == "Fictive")
+    #expect(extrait.segments().map(\.texte) == ["Le budget est serré."])
+    #expect(extrait.notes().map(\.texte) == ["Note budget"])
+    #expect(modele.compteRendu(de: extrait)?.decisions.count == 1)
+    #expect(try Data(contentsOf: reunion.url.appendingPathComponent("transcription.json")) == segmentsAvant)
+    #expect(try Data(contentsOf: reunion.url.appendingPathComponent("notes.md")) == notesAvant)
 }
