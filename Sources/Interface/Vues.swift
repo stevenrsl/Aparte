@@ -734,6 +734,7 @@ struct EcranCompteRendu: View {
             HStack {
                 Libelle("compte rendu · \(reunion.meta.date.formatted(.dateTime.locale(Locale(identifier: "fr_FR")).day().month(.abbreviated))) · \(Int(reunion.meta.duree / 60)) min"
                         + (compteRendu.map { " · \($0.fournisseur.lowercased())" } ?? ""))
+                if let origine = reunion.meta.origine { Libelle("extrait de \(origine)") }
                 Spacer(minLength: 12)
                 GestionReunion(modele: modele, reunion: reunion) { lecteur.arreter() }
             }
@@ -888,9 +889,37 @@ struct EcranCompteRendu: View {
         }
         incidentsAudio
         relecture
+        sectionSujets(compteRendu.sujets ?? [])
         section("décisions", compteRendu.decisions)
         section("actions", compteRendu.actions)
         section("questions ouvertes", compteRendu.questions)
+    }
+
+    /// Choisir un sujet montre son passage et le fait écouter.
+    @ViewBuilder private func sectionSujets(_ sujets: [Sujet]) -> some View {
+        if !sujets.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                Libelle("sujets").padding(.bottom, 6)
+                ForEach(sujets) { sujet in
+                    let choisi = selection?.sources == [sujet.debut, sujet.fin]
+                    Button { choisir(ElementSource(texte: sujet.titre, sources: [sujet.debut, sujet.fin])) } label: {
+                        HStack(alignment: .firstTextBaseline, spacing: 10) {
+                            Text(sujet.titre).multilineTextAlignment(.leading)
+                            Spacer(minLength: 0)
+                            Text(horodatage(sujet.debut)).font(Typo.horodatage)
+                        }
+                        .padding(10)
+                        .background(choisi ? Color.encreColonne : Color.clear)
+                        .foregroundStyle(choisi ? Color.colonneTexte : Color.encre)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("\(sujet.titre), à \(tempsParle(sujet.debut))")
+                    .accessibilityHint("Affiche le passage de la transcription")
+                    .accessibilityAddTraits(choisi ? [.isSelected, .isButton] : .isButton)
+                }
+            }
+        }
     }
 
     @ViewBuilder private func section(_ titre: String, _ elements: [ElementSource]) -> some View {
@@ -943,6 +972,46 @@ struct EcranCompteRendu: View {
 
 // MARK: - Dossier
 
+/// Quel sujet va dans quel dossier. Steven choisit, rien ne s'écrit avant son clic, et la réunion reste entière.
+struct Repartition: View {
+    let modele: ModeleApp
+    let reunion: Reunion
+    let sujets: [Sujet]
+    @Environment(\.dismiss) private var fermer
+    @State private var choix: [UUID: String] = [:]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Répartir entre dossiers").font(Typo.titreSection)
+            Text("Chaque dossier choisi reçoit un extrait avec ses sujets, sans l'audio. La réunion reste telle quelle.")
+                .foregroundStyle(Color.encreDouce)
+            ForEach(sujets) { sujet in
+                Picker(selection: Binding(get: { choix[sujet.id] ?? "" }, set: { choix[sujet.id] = $0.isEmpty ? nil : $0 })) {
+                    Text("Ne pas répartir").tag("")
+                    ForEach(modele.dossiers, id: \.self) { Text($0).tag($0) }
+                } label: {
+                    Text("\(horodatage(sujet.debut)) · \(sujet.titre)")
+                }
+            }
+            HStack {
+                Spacer()
+                Button("Annuler") { fermer() }.buttonStyle(BoutonSecondaire())
+                Button("Créer les extraits") {
+                    modele.repartir(reunion, choix)
+                    fermer()
+                }
+                .buttonStyle(BoutonPrincipal())
+                .disabled(choix.isEmpty)
+            }
+        }
+        .padding(24)
+        .frame(width: 560)
+        .background(Color.creme)
+        .foregroundStyle(Color.encre)
+        .font(Typo.texte)
+    }
+}
+
 /// Renommer, ranger ou jeter une réunion. Rien de tout ça ne touche à ce qu'elle contient.
 struct GestionReunion: View {
     let modele: ModeleApp
@@ -954,6 +1023,7 @@ struct GestionReunion: View {
     @State private var renomme = false
     @State private var nouveauDossier = false
     @State private var corbeille = false
+    @State private var repartition = false
 
     var body: some View {
         Menu {
@@ -974,6 +1044,8 @@ struct GestionReunion: View {
                     nouveauDossier = true
                 }
             }
+            Button("Répartir entre dossiers…") { repartition = true }
+                .disabled((modele.compteRendu(de: reunion)?.sujets ?? []).isEmpty)
             Button("Relire l'enregistrement") { modele.relire(reunion) }
                 .disabled(!FileManager.default.fileExists(atPath: reunion.micro.path))
             Divider()
@@ -986,6 +1058,9 @@ struct GestionReunion: View {
         .fixedSize()
         .disabled(modele.estEnCours(reunion))
         .accessibilityLabel("Gérer la réunion")
+        .sheet(isPresented: $repartition) {
+            Repartition(modele: modele, reunion: reunion, sujets: modele.compteRendu(de: reunion)?.sujets ?? [])
+        }
         .alert("Renommer la réunion", isPresented: $renomme) {
             TextField("Titre", text: $titre)
             Button("Renommer") { avant(); modele.renommer(reunion, en: titre) }

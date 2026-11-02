@@ -17,4 +17,4 @@ dans le [plan des agents](plan-agents.md).
 | Renommer, déplacer et supprimer une réunion | Claude Code | `gerer-reunions` | en relecture | `Sources/Stockage/`, `Sources/Interface/`, `Tests/`, `docs/fiche-reunions-2026-11.md`, `README.md` |
 | Reprendre les voix, l'écho et les noms de Cairn | Claude Code | `voix-et-vocabulaire` | en relecture | `Package.swift`, `build.sh`, `Sources/`, `Tests/`, `docs/` |
 | Analyse automatique et PCC | Claude Code | `analyse-auto-pcc` | en relecture | `Sources/Analyse/`, `Sources/Interface/`, `Sources/Stockage/`, `Tests/` |
-| Sujets et répartition d'une réunion | Claude Code | `sujets-repartir` | en cours | `Sources/Analyse/`, `Sources/Interface/`, `Sources/Stockage/`, `Tests/` |
+| Sujets et répartition d'une réunion | Claude Code | `sujets-repartir` | en relecture | `Sources/Analyse/`, `Sources/Interface/`, `Sources/Stockage/`, `Tests/` |

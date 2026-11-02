@@ -152,3 +152,34 @@ func analyseLeFichierDeReference() async throws {
     }
 }
 
+private let phrasesSujets = ["On parle du budget de la tournée.", "Le budget reste serré.", "Passons à la musique du film.", "Le compositeur a livré."]
+private let debutsSujets = [0.0, 10, 20, 30]
+
+@Test func unSujetGardeSonTitreSiSesMotsOntEteDits() {
+    let sujets = DecoupageSujets.valider([.init(titre: "Budget de la tournée", premiere: 1, derniere: 2), .init(titre: "Musique du film", premiere: 3, derniere: 4)],
+                                         phrases: phrasesSujets, debuts: debutsSujets, fin: 40)
+    #expect(sujets.map(\.titre) == ["Budget de la tournée", "Musique du film"])
+    #expect(sujets.map(\.debut) == [0, 20])
+    #expect(sujets.map(\.fin) == [20, 40])
+}
+
+@Test func unTitreInventeLaissePlaceAuxMotsDits() {
+    let sujets = DecoupageSujets.valider([.init(titre: "Licenciements économiques", premiere: 1, derniere: 2)], phrases: phrasesSujets, debuts: debutsSujets, fin: 40)
+    #expect(sujets.first?.titre == "On parle du budget de la")
+}
+
+@Test func desBornesImpossiblesOuChevauchantesSontCorrigees() {
+    let sujets = DecoupageSujets.valider([.init(titre: "Budget", premiere: 1, derniere: 3), .init(titre: "Compositeur", premiere: 2, derniere: 99), .init(titre: "Rien", premiere: 50, derniere: 60)],
+                                         phrases: phrasesSujets, debuts: debutsSujets, fin: 40)
+    #expect(sujets.count == 2)
+    #expect(sujets[1].debut == 30 && sujets[1].fin == 40)
+}
+
+@Test func unExtraitNeGardeQueSesSujets() {
+    let budget = Sujet(titre: "Budget", debut: 0, fin: 20)
+    let compteRendu = CompteRendu(fournisseur: "Test", decisions: [ElementSource(texte: "Dedans", sources: [5]), ElementSource(texte: "Dehors", sources: [25])], actions: [], questions: [], sujets: [budget, Sujet(titre: "Musique", debut: 20, fin: 40)])
+    let extrait = compteRendu.extrait([budget])
+    #expect(extrait.decisions.map(\.texte) == ["Dedans"])
+    #expect(extrait.sujets?.map(\.titre) == ["Budget"])
+}
+

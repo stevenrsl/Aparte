@@ -23,6 +23,22 @@ public struct ElementSource: Codable, Sendable, Identifiable, Hashable {
     }
 }
 
+/// Un sujet abordé : un moment de la réunion et un titre fait de ses propres mots.
+public struct Sujet: Codable, Sendable, Identifiable, Hashable {
+    public var id = UUID()
+    public var titre: String
+    public var debut: Double
+    public var fin: Double
+
+    public init(titre: String, debut: Double, fin: Double) {
+        self.titre = titre
+        self.debut = debut
+        self.fin = fin
+    }
+
+    public func contient(_ temps: Double) -> Bool { temps >= debut && temps <= fin }
+}
+
 /// La sortie commune, quel que soit le fournisseur.
 public struct CompteRendu: Codable, Sendable, Hashable {
     public var fournisseur: String
@@ -30,17 +46,20 @@ public struct CompteRendu: Codable, Sendable, Hashable {
     public var decisions: [ElementSource]
     public var actions: [ElementSource]
     public var questions: [ElementSource]
+    /// Absent des analyses écrites avant les sujets.
+    public var sujets: [Sujet]?
     public var passagesNonAnalyses: Int
     public var elementsEcartes: Int
 
     public init(fournisseur: String, date: Date = Date(), decisions: [ElementSource], actions: [ElementSource],
-                questions: [ElementSource], passagesNonAnalyses: Int = 0, elementsEcartes: Int = 0) {
+                questions: [ElementSource], sujets: [Sujet]? = nil, passagesNonAnalyses: Int = 0, elementsEcartes: Int = 0) {
         self.fournisseur = fournisseur
         self.date = date
         self.decisions = decisions
         self.actions = actions
         self.questions = questions
         self.passagesNonAnalyses = passagesNonAnalyses
+        self.sujets = sujets
         self.elementsEcartes = elementsEcartes
     }
 
@@ -69,6 +88,15 @@ public struct CompteRendu: Codable, Sendable, Hashable {
         case 1: return "Aucun élément vérifié obtenu. 1 passage non analysé."
         default: return "Aucun élément vérifié obtenu. \(passagesNonAnalyses) passages non analysés."
         }
+    }
+
+    /// Ce qui revient à ces sujets, pour un extrait : le reste de la réunion n'y figure pas.
+    public func extrait(_ choisis: [Sujet]) -> CompteRendu {
+        func garder(_ elements: [ElementSource]) -> [ElementSource] {
+            elements.filter { element in element.sources.contains { temps in choisis.contains { $0.contient(temps) } } }
+        }
+        return CompteRendu(fournisseur: fournisseur, date: date, decisions: garder(decisions), actions: garder(actions),
+                           questions: garder(questions), sujets: choisis)
     }
 
     /// Une analyse relue depuis le disque repasse la validation : une ancienne reformulation laisse
@@ -110,6 +138,7 @@ public struct CompteRendu: Codable, Sendable, Hashable {
         }
         return "# Compte rendu\n\nProduit par : \(fournisseur)\n\n\(resume)\n"
             + (Self.audioIncomplet(incidents).map { "\n\($0)\n" } ?? "")
+            + ((sujets ?? []).isEmpty ? "" : "\n## Sujets\n\n" + (sujets ?? []).map { "- \($0.titre) (\(horodatage($0.debut)))" }.joined(separator: "\n") + "\n")
             + bloc("Décisions", decisions) + bloc("Actions", actions) + bloc("Questions ouvertes", questions)
     }
 }
@@ -186,6 +215,46 @@ public enum ValidationSources {
     }
 }
 
+/// Le découpage en sujets proposé par le modèle. Ses bornes doivent exister, et son titre ne doit
+/// contenir que des mots dits dans ce moment : sinon, le titre devient le début de sa première phrase.
+public enum DecoupageSujets {
+    public struct Propose: Sendable {
+        public var titre: String
+        public var premiere: Int
+        public var derniere: Int
+
+        public init(titre: String, premiere: Int, derniere: Int) {
+            self.titre = titre
+            self.premiere = premiere
+            self.derniere = derniere
+        }
+    }
+
+    /// Les mots trop courts (« de », « la ») ne prouvent rien : ils ne sont pas contrôlés.
+    private static let longueurControlee = 4
+
+    public static func valider(_ proposes: [Propose], phrases: [String], debuts: [Double], fin: Double) -> [Sujet] {
+        guard phrases.count == debuts.count, !phrases.isEmpty else { return [] }
+        var sujets: [Sujet] = []
+        var suivante = 1
+        for propose in proposes.sorted(by: { $0.premiere < $1.premiere }) {
+            let premiere = max(propose.premiere, suivante)
+            let derniere = min(propose.derniere, phrases.count)
+            guard premiere >= 1, premiere <= derniere else { continue }
+            let dites = phrases[(premiere - 1)..<derniere]
+            let lu = Set(ValidationSources.normaliser(dites.joined(separator: " ")).split(separator: " "))
+            let titre = propose.titre.trimmingCharacters(in: .whitespacesAndNewlines)
+            let mots = ValidationSources.normaliser(titre).split(separator: " ")
+            let dit = !mots.isEmpty && mots.allSatisfy { $0.count < longueurControlee || lu.contains($0) }
+            let debutPhrase = dites.first.map { $0.split(separator: " ").prefix(6).joined(separator: " ") } ?? ""
+            sujets.append(Sujet(titre: dit ? titre : debutPhrase, debut: debuts[premiere - 1],
+                                fin: derniere < debuts.count ? debuts[derniere] : fin))
+            suivante = derniere + 1
+        }
+        return sujets
+    }
+}
+
 public protocol Analyste: Sendable {
     var nom: String { get }
     func analyser(segments: [Segment], notes: [LigneDeNote], type: TypeReunion,
@@ -223,6 +292,22 @@ struct LignesChoisies {
 struct Confirmation {
     @Guide(description: "Vrai seulement si la ligne marquée correspond clairement, d'après son contexte.")
     var correspond: Bool
+}
+
+@Generable
+struct SujetChoisi {
+    @Guide(description: "Le sujet en deux à cinq mots, repris tels quels de ces lignes.")
+    var titre: String
+    @Guide(description: "Le numéro de la première ligne du sujet.")
+    var premiere: Int
+    @Guide(description: "Le numéro de la dernière ligne du sujet.")
+    var derniere: Int
+}
+
+@Generable
+struct SujetsChoisis {
+    @Guide(description: "Les sujets, dans l'ordre de la réunion.")
+    var sujets: [SujetChoisi]
 }
 
 @Generable
@@ -295,6 +380,11 @@ public struct AnalysteApple: Analyste {
     static let consigneActions = consigneCommune + """
      Retiens les lignes qui disent qu'une tâche précise est à faire : quelqu'un fait, envoie, appelle, réserve, écrit ou demande quelque chose. \
     Pas les choix arrêtés, les constats, les questions ni les simples accords.
+    """
+    static let consigneSujets = """
+    Tu relis la transcription d'une réunion, ligne par ligne. Chaque ligne a un numéro. \
+    Découpe-la en sujets abordés, un à six, dans l'ordre. Un sujet réunit des lignes qui se suivent. \
+    Ne compte pas les politesses comme un sujet. Son titre reprend des mots de ces lignes, tels quels.
     """
     static let consigneQuestions = consigneCommune + """
      Retiens les lignes qui posent une vraie question sur le travail, à laquelle les lignes suivantes ne répondent pas. \
@@ -387,13 +477,20 @@ public struct AnalysteApple: Analyste {
                     choisi.questions.append(element(numero, dans: lignes))
                 }
             }
+            // Sans sujets, le compte rendu reste utile : un refus ici ne fait pas tomber le passage.
+            if let sujets = try? await session(Self.consigneSujets).respond(to: texte, generating: SujetsChoisis.self, options: options).content.sujets {
+                let proposes = sujets.map { DecoupageSujets.Propose(titre: $0.titre, premiere: $0.premiere, derniere: $0.derniere) }
+                choisi.sujets = DecoupageSujets.valider(proposes, phrases: lignes.map(\.phrase), debuts: lignes.map(\.debut),
+                                                        fin: passage.last?.fin ?? 0)
+            }
             return choisi
         } catch LanguageModelSession.GenerationError.exceededContextWindowSize where passage.count > 1 {
             // Un passage trop dense pour la fenêtre : on le coupe en deux.
             let milieu = passage.count / 2
             let a = try await analyserPassage(Array(passage[..<milieu]), notes: notes, type: type)
             let b = try await analyserPassage(Array(passage[milieu...]), notes: notes, type: type)
-            return PassageChoisi(decisions: a.decisions + b.decisions, actions: a.actions + b.actions, questions: a.questions + b.questions)
+            return PassageChoisi(decisions: a.decisions + b.decisions, actions: a.actions + b.actions, questions: a.questions + b.questions,
+                                 sujets: a.sujets + b.sujets)
         }
     }
 
@@ -413,6 +510,7 @@ public struct AnalysteApple: Analyste {
         var decisions: [ElementSource?]
         var actions: [ElementSource?]
         var questions: [ElementSource?]
+        var sujets: [Sujet] = []
     }
 
     public func analyser(segments: [Segment], notes: [LigneDeNote], type: TypeReunion,
@@ -428,6 +526,7 @@ public struct AnalysteApple: Analyste {
         var ecartes = 0
 
         // Une ligne n'apparaît qu'une fois : une décision prime sur une action, une action sur une question.
+        var sujets: [Sujet] = []
         var vues = Set<String>()
         func garder(_ choisis: [ElementSource?]) -> [ElementSource] {
             choisis.compactMap { choisi in
@@ -445,6 +544,7 @@ public struct AnalysteApple: Analyste {
                 decisions += garder(choisi.decisions)
                 actions += garder(choisi.actions)
                 questions += garder(choisi.questions)
+                sujets += choisi.sujets
             } catch let erreur as PrivateCloudComputeLanguageModel.Error {
                 // La limite du jour ou le réseau : les passages suivants échoueraient de même.
                 throw ErreurAnalyse.pcc(erreur)
@@ -457,7 +557,7 @@ public struct AnalysteApple: Analyste {
         guard echecs < passages.count else { throw ErreurAnalyse.aucunPassage }
 
         progression(1)
-        return CompteRendu(fournisseur: nom, decisions: decisions, actions: actions, questions: questions,
+        return CompteRendu(fournisseur: nom, decisions: decisions, actions: actions, questions: questions, sujets: sujets,
                            passagesNonAnalyses: echecs, elementsEcartes: ecartes)
     }
 }

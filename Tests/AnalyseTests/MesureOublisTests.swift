@@ -107,6 +107,7 @@ func mesureOublis() async throws {
             let inattendus = tous.filter { element in !tousAttendus.contains { trouve($0, [element]) } }
             enTrop += inattendus.count
             ecartes += c.elementsEcartes
+            print("MESURE \(fausse.titre) sujets : \((c.sujets ?? []).map(\.titre).joined(separator: " | "))")
             print("MESURE \(fausse.titre) #\(essai) écartés \(c.elementsEcartes) non analysés \(c.passagesNonAnalyses)")
             for m in manques { print("MESURE   \(m)") }
             for e in inattendus { print("MESURE   en trop : \(e.texte)") }
