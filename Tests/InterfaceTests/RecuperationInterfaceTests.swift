@@ -73,3 +73,46 @@ import Transcription
     #expect(incidents[0].piste == "micro" && incidents[0].fin != nil)
     #expect(incidents[1].piste == "son du Mac" && incidents[1].fin == nil)
 }
+
+@MainActor
+@Test func gererUneReunionSuitLEcranAffiche() throws {
+    let racine = FileManager.default.temporaryDirectory.resolvingSymlinksInPath().appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: racine, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: racine) }
+    let bibliotheque = Bibliotheque(racine: racine)
+    let reunion = try bibliotheque.creerReunion(titre: "Fictive", type: .presentiel, dossier: nil)
+    setenv("APARTE_RACINE", racine.path, 1)
+    defer { unsetenv("APARTE_RACINE") }
+    let modele = ModeleApp()
+
+    modele.ecran = .compteRendu(reunion)
+    modele.renommer(reunion, en: "Fictive renommée")
+    guard case let .compteRendu(renommee) = modele.ecran else { Issue.record("écran perdu"); return }
+    #expect(renommee.meta.titre == "Fictive renommée")
+
+    modele.deplacer(renommee, versNouveauDossier: "Clients")
+    guard case let .compteRendu(rangee) = modele.ecran else { Issue.record("écran perdu"); return }
+    #expect(rangee.dossier == "Clients")
+    #expect(modele.dossiers == ["Clients"])
+
+    modele.mettreALaCorbeille(rangee)
+    #expect(modele.ecran == .accueil)
+    #expect(modele.reunions.isEmpty)
+    #expect(modele.erreur == nil)
+}
+
+@MainActor
+@Test func uneReunionEnCoursNeSeRangePas() throws {
+    let racine = FileManager.default.temporaryDirectory.resolvingSymlinksInPath().appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: racine, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: racine) }
+    let reunion = try Bibliotheque(racine: racine).creerReunion(titre: "En cours", type: .presentiel, dossier: nil)
+    setenv("APARTE_RACINE", racine.path, 1)
+    defer { unsetenv("APARTE_RACINE") }
+    let modele = ModeleApp()
+    modele.session = SessionReunion(reunion: reunion)
+    modele.renommer(reunion, en: "Autre")
+    modele.mettreALaCorbeille(reunion)
+    #expect(FileManager.default.fileExists(atPath: reunion.url.path))
+    #expect(modele.reunions.first?.meta.titre == "En cours")
+}

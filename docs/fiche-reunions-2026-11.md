@@ -110,6 +110,10 @@ Documentaire voile/
 un dossier choisi au premier lancement, qu'il peut mettre dans iCloud Drive s'il le veut. Ça
 reste son choix, pas une synchro de l'app.
 
+**Décidé par Steven le 2 novembre 2026 :** une réunion se renomme, se déplace entre dossiers et se met à la
+Corbeille depuis l'app, après confirmation pour la Corbeille. Son dossier sur le disque suit, et rien
+de ce qu'elle contient n'est réécrit, sauf le titre dans `meta.json`.
+
 ### 4. Les notes pendant la réunion
 
 - Un éditeur texte simple à côté de la transcription en direct. Chaque ligne reçoit l'horodatage

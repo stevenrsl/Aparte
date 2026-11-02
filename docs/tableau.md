@@ -14,3 +14,4 @@ dans le [plan des agents](plan-agents.md).
 | Embarquer les polices du brief | Claude Code | `polices` | en relecture | `Sources/DA/`, `Package.swift`, `build.sh` |
 | Fiabiliser l'enregistrement | Claude Code | `fiabilite-audio` | en relecture | `Sources/Capture/`, `Sources/Interface/`, `Sources/Stockage/`, `Tests/` |
 | Protéger la réunion en cours | Claude Code | `reunion-protegee` | en relecture | `Sources/AparteApp/`, `Sources/Interface/`, `Sources/Analyse/`, `Tests/` |
+| Renommer, déplacer et supprimer une réunion | Claude Code | `gerer-reunions` | en relecture | `Sources/Stockage/`, `Sources/Interface/`, `Tests/`, `docs/fiche-reunions-2026-11.md`, `README.md` |

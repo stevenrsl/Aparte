@@ -39,6 +39,11 @@ En visio, mets un casque. Sinon le micro capte aussi les haut-parleurs et les ph
 Chaque réunion est un dossier lisible sans l'app : `meta.json`, `micro.m4a`, `systeme.m4a`,
 `transcription.json`, `notes.md`, `analyse.json`, `analyse.md`.
 
+## Gérer une réunion
+
+Depuis son compte rendu, « // gérer » renomme la réunion, la déplace ou la met à la Corbeille. Le dossier sur le
+disque suit. Une réunion en cours d'enregistrement ne peut pas être modifiée.
+
 ## Ce qui est connu
 
 - L'analyse locale peut manquer des éléments, en retenir de trop ou mal les ranger : voir `docs/mesure-analyse.md`.
