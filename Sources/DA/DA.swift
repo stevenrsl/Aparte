@@ -1,4 +1,5 @@
 import AppKit
+import CoreText
 import SwiftUI
 
 private func dynamique(_ nom: String, clair: UInt32, sombre: UInt32) -> Color {
@@ -37,17 +38,45 @@ public extension Color {
 }
 
 /// Zalando Sans, JetBrains Mono et Doto ne sont pas encore embarquées : le système les remplace.
+/// Les polices embarquées, lues dans leurs fichiers : une version installée sur le Mac ne peut pas
+/// les remplacer. Si un fichier manque, `Typo` se replie sur la police système.
+enum Polices {
+    private final class Repere {}
+    private static let axePoids = 0x77676874 // wght
+
+    /// Le dossier d'un Aparté construit, ou celui des tests, à côté de leur bundle.
+    static var dossier: URL? {
+        let parents = [Bundle.main.resourceURL, Bundle.main.bundleURL,
+                       Bundle(for: Repere.self).bundleURL.deletingLastPathComponent()].compactMap { $0 }
+        return parents.compactMap { Bundle(url: $0.appendingPathComponent("Aparte_DA.bundle"))?.url(forResource: "Polices", withExtension: nil) }.first
+    }
+
+    static func police(_ fichier: String, taille: CGFloat, poids: Int) -> CTFont? {
+        guard let url = dossier?.appendingPathComponent(fichier),
+              let descripteurs = CTFontManagerCreateFontDescriptorsFromURL(url as CFURL) as? [CTFontDescriptor],
+              let descripteur = descripteurs.first else { return nil }
+        let variation = [kCTFontVariationAttribute: [axePoids: poids]] as CFDictionary
+        return CTFontCreateWithFontDescriptor(CTFontDescriptorCreateCopyWithAttributes(descripteur, variation), taille, nil)
+    }
+
+    static func font(_ fichier: String, taille: CGFloat, poids: Int, repli: Font) -> Font {
+        police(fichier, taille: taille, poids: poids).map { Font($0) } ?? repli
+    }
+}
+
 public enum Typo {
-    public static var titreEcran: Font { .system(size: 38, design: .serif) }
-    public static var titreSection: Font { .system(size: 22, design: .serif) }
-    public static var titreListe: Font { .system(size: 20, design: .serif) }
-    public static var resume: Font { .system(size: 20, design: .serif) }
-    public static var texte: Font { .system(size: 14) }
-    public static var note: Font { .system(size: 16) }
-    public static var libelle: Font { .system(size: 11, design: .monospaced) }
-    public static var horodatage: Font { .system(size: 11, design: .monospaced) }
-    public static var chrono: Font { .system(size: 68, weight: .heavy, design: .monospaced) }
-    public static var grandChiffre: Font { .system(size: 54, weight: .heavy, design: .monospaced) }
+    public static let titreEcran = Font.system(size: 38, design: .serif)
+    public static let titreSection = Font.system(size: 22, design: .serif)
+    public static let titreListe = Font.system(size: 20, design: .serif)
+    public static let resume = Font.system(size: 20, design: .serif)
+    public static let texte = Polices.font("ZalandoSans.ttf", taille: 14, poids: 400, repli: .system(size: 14))
+    public static let texteDemiGras = Polices.font("ZalandoSans.ttf", taille: 14, poids: 600, repli: .system(size: 14, weight: .semibold))
+    public static let texteGras = Polices.font("ZalandoSans.ttf", taille: 14, poids: 700, repli: .system(size: 14, weight: .bold))
+    public static let note = Polices.font("ZalandoSans.ttf", taille: 16, poids: 400, repli: .system(size: 16))
+    public static let libelle = Polices.font("JetBrainsMono.ttf", taille: 11, poids: 400, repli: .system(size: 11, design: .monospaced))
+    public static let horodatage = libelle
+    public static let chrono = Polices.font("Doto.ttf", taille: 68, poids: 800, repli: .system(size: 68, weight: .heavy, design: .monospaced))
+    public static let grandChiffre = Polices.font("Doto.ttf", taille: 54, poids: 800, repli: .system(size: 54, weight: .heavy, design: .monospaced))
 }
 
 public struct Libelle: View {
@@ -71,7 +100,7 @@ public struct BoutonPrincipal: ButtonStyle {
     public init() {}
     public func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .fontWeight(.semibold)
+            .font(Typo.texteDemiGras)
             .padding(.horizontal, 16)
             .padding(.vertical, 9)
             .background(Color.encreColonne)
@@ -84,7 +113,7 @@ public struct BoutonSignal: ButtonStyle {
     public init() {}
     public func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .fontWeight(.bold)
+            .font(Typo.texteGras)
             .padding(.horizontal, 16)
             .padding(.vertical, 9)
             .background(Color.argile)

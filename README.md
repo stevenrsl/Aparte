@@ -46,7 +46,6 @@ Chaque réunion est un dossier lisible sans l'app : `meta.json`, `micro.m4a`, `s
 - Le résumé est construit depuis les éléments validés. Il est sec, c'est voulu.
 - Chaque élément est la phrase exacte de la transcription, sans reformulation : elle garde ses hésitations et ses erreurs de transcription.
 - PCC et les fournisseurs externes ne sont pas branchés : rien ne quitte le Mac.
-- Les polices du brief ne sont pas embarquées, le système les remplace.
 - Si le son s'arrête, Aparté le signale en réunion, repart sur l'entrée disponible et note le blanc dans le compte
   rendu. Ce chemin n'a jamais été essayé en débranchant vraiment un micro.
 - Pas encore testé : le rendu du mode sombre, un micro externe, un changement de micro en pleine réunion,
