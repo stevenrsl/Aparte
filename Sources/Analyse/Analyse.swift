@@ -122,17 +122,19 @@ public enum ValidationSources {
         segments.filter { temps >= $0.debut - marge && temps <= $0.fin + marge }
     }
 
+    static func phrases(de texte: String) -> [String] {
+        let decoupe = NLTokenizer(unit: .sentence)
+        decoupe.string = texte
+        decoupe.setLanguage(.french)
+        return decoupe.tokens(for: texte.startIndex..<texte.endIndex).map {
+            texte[$0].trimmingCharacters(in: .whitespacesAndNewlines)
+        }.filter { !$0.isEmpty }
+    }
+
     /// Les phrases entières de ces segments qui contiennent la citation, telles que transcrites. Une
     /// citation tronquée ne peut pas perdre un « ne… pas » : on rend toujours la phrase complète.
     private static func phrasesEntieres(contenant cherche: String, dans segments: [Segment]) -> String? {
-        let phrases = segments.flatMap { segment -> [String] in
-            let decoupe = NLTokenizer(unit: .sentence)
-            decoupe.string = segment.texte
-            decoupe.setLanguage(.french)
-            return decoupe.tokens(for: segment.texte.startIndex..<segment.texte.endIndex).map {
-                segment.texte[$0].trimmingCharacters(in: .whitespacesAndNewlines)
-            }
-        }
+        let phrases = segments.flatMap { phrases(de: $0.texte) }
         guard !phrases.isEmpty else { return nil }
         for longueur in 1...phrases.count {
             for debut in 0...(phrases.count - longueur) {
@@ -197,25 +199,31 @@ public enum ErreurAnalyse: LocalizedError {
 }
 
 @Generable
-struct ElementGenere {
-    @Guide(description: "Les horodatages exacts entre crochets de la transcription qui prouvent cet élément, au format mm:ss.")
-    var horodatages: [String]
-    @Guide(description: "La phrase entière de la transcription qui dit la décision, l'action ou la question, recopiée mot pour mot.")
-    var citation: String
-    @Guide(description: "La personne responsable, seulement si elle est nommée dans la transcription. Sinon vide.")
+struct LignesChoisies {
+    @Guide(description: "Les numéros des lignes retenues. Vide s'il n'y en a aucune.")
+    var lignes: [Int]
+}
+
+@Generable
+struct Confirmation {
+    @Guide(description: "Vrai seulement si la ligne marquée correspond clairement, d'après son contexte.")
+    var correspond: Bool
+}
+
+@Generable
+struct ActionChoisie {
+    @Guide(description: "Le numéro de la ligne.")
+    var ligne: Int
+    @Guide(description: "La personne qui doit le faire, seulement si la ligne la nomme. Sinon vide.")
     var responsable: String
-    @Guide(description: "L'échéance, seulement si elle est dite dans la transcription. Sinon vide.")
+    @Guide(description: "L'échéance, seulement si la ligne la dit. Sinon vide.")
     var echeance: String
 }
 
 @Generable
-struct PassageGenere {
-    @Guide(description: "Les décisions prises. Vide s'il n'y en a pas.")
-    var decisions: [ElementGenere]
-    @Guide(description: "Les actions à faire. Vide s'il n'y en a pas.")
-    var actions: [ElementGenere]
-    @Guide(description: "Les questions restées sans réponse. Vide s'il n'y en a pas.")
-    var questions: [ElementGenere]
+struct ActionsChoisies {
+    @Guide(description: "Les lignes retenues. Vide s'il n'y en a aucune.")
+    var actions: [ActionChoisie]
 }
 
 /// Foundation Models sur l'appareil. La fenêtre de 4 096 tokens étant partagée entre
@@ -223,9 +231,25 @@ struct PassageGenere {
 public struct AnalysteLocal: Analyste {
     public let nom = "Local · Apple Intelligence"
     static let dureePassage = 300.0
-    static let consignes = """
-    Tu relis la transcription d'une réunion. N'invente rien : chaque élément doit venir d'une phrase \
-    de la transcription, avec son horodatage exact. S'il n'y a rien, renvoie des listes vides. Réponds en français.
+    static let motsMinimum = 4
+    /// Le modèle ne recopie ni n'écrit rien : il choisit des numéros de lignes, une catégorie à la fois.
+    /// Le texte rendu est donc toujours celui de la transcription.
+    private static let consigneCommune = """
+    Tu relis la transcription d'une réunion, ligne par ligne. Chaque ligne a un numéro. \
+    Renvoie seulement les numéros demandés. Sois attentif : ne manque aucune ligne qui correspond, \
+    et n'en retiens aucune qui ne correspond pas.
+    """
+    static let consigneDecisions = consigneCommune + """
+     Retiens les lignes où un choix est arrêté : ce qui est décidé, retenu, validé, refusé, maintenu ou abandonné. \
+    Pas les avis, les préférences, les constats, les questions ni les tâches à faire.
+    """
+    static let consigneActions = consigneCommune + """
+     Retiens les lignes qui disent qu'une tâche précise est à faire : quelqu'un fait, envoie, appelle, réserve, écrit ou demande quelque chose. \
+    Pas les choix arrêtés, les constats, les questions ni les simples accords.
+    """
+    static let consigneQuestions = consigneCommune + """
+     Retiens les lignes qui posent une vraie question sur le travail, à laquelle les lignes suivantes ne répondent pas. \
+    Pas les questions de politesse, ni celles qui reçoivent une réponse.
     """
 
     public init() {}
@@ -244,41 +268,102 @@ public struct AnalysteLocal: Analyste {
         return passages
     }
 
-    private func invite(_ passage: [Segment], notes: [LigneDeNote], type: TypeReunion) -> String {
+    /// Une phrase de la transcription, numérotée pour le modèle.
+    struct Ligne {
+        var phrase: String
+        var debut: Double
+        var piste: Piste
+    }
+
+    static func lignes(de passage: [Segment]) -> [Ligne] {
+        passage.flatMap { segment in
+            ValidationSources.phrases(de: segment.texte).map { Ligne(phrase: $0, debut: segment.debut, piste: segment.piste) }
+        }
+    }
+
+    private func invite(_ lignes: [Ligne], notes: [LigneDeNote], type: TypeReunion) -> String {
         func qui(_ piste: Piste) -> String {
             guard type == .visio else { return "" }
             return piste == .micro ? "moi : " : "eux : "
         }
-        let debut = (passage.first?.debut ?? 0) - 15
-        let fin = (passage.last?.fin ?? 0) + 15
-        let ancres = notes.filter { $0.temps >= debut && $0.temps <= fin }
+        let debut = (lignes.first?.debut ?? 0) - 15
+        let fin = (lignes.last?.debut ?? 0) + 15
+        let ancres = notes.filter { $0.temps >= debut && $0.temps <= fin && !$0.texte.isEmpty }
         var texte = ""
         if !ancres.isEmpty {
             texte += "Regarde en priorité autour de ce que j'ai noté :\n"
-            texte += ancres.map { "[\(horodatage($0.temps))] \($0.texte)" }.joined(separator: "\n") + "\n\n"
+            texte += ancres.map { "- \($0.texte)" }.joined(separator: "\n") + "\n\n"
         }
         texte += "Transcription :\n"
-        texte += passage.map { "[\(horodatage($0.debut))] \(qui($0.piste))\($0.texte)" }.joined(separator: "\n")
+        texte += lignes.enumerated().map { "\($0.offset + 1). \(qui($0.element.piste))\($0.element.phrase)" }.joined(separator: "\n")
         return texte
     }
 
-    private func elementSource(_ genere: ElementGenere) -> ElementSource {
-        ElementSource(texte: genere.citation, sources: genere.horodatages.compactMap { secondes(depuis: $0) },
-                      citation: genere.citation, responsable: genere.responsable, echeance: genere.echeance)
+    private func element(_ numero: Int, dans lignes: [Ligne], responsable: String? = nil, echeance: String? = nil) -> ElementSource? {
+        guard lignes.indices.contains(numero - 1) else { return nil }
+        let ligne = lignes[numero - 1]
+        return ElementSource(texte: ligne.phrase, sources: [ligne.debut], citation: ligne.phrase, responsable: responsable, echeance: echeance)
     }
 
-    private func analyserPassage(_ passage: [Segment], notes: [LigneDeNote], type: TypeReunion) async throws -> [PassageGenere] {
+    private func analyserPassage(_ passage: [Segment], notes: [LigneDeNote], type: TypeReunion) async throws -> PassageChoisi {
+        let lignes = Self.lignes(de: passage)
+        let texte = invite(lignes, notes: notes, type: type)
+        // Sans tirage au hasard : la même réunion donne le même compte rendu.
+        let options = GenerationOptions(sampling: .greedy)
         do {
-            let session = LanguageModelSession(instructions: Self.consignes)
-            let reponse = try await session.respond(to: invite(passage, notes: notes, type: type), generating: PassageGenere.self)
-            return [reponse.content]
+            let decisions = try await LanguageModelSession(instructions: Self.consigneDecisions)
+                .respond(to: texte, generating: LignesChoisies.self, options: options).content.lignes
+            let actions = try await LanguageModelSession(instructions: Self.consigneActions)
+                .respond(to: texte, generating: ActionsChoisies.self, options: options).content.actions
+            let questions = try await LanguageModelSession(instructions: Self.consigneQuestions)
+                .respond(to: texte, generating: LignesChoisies.self, options: options).content.lignes
+            // « Très bien » ou « ok ça marche » ne disent rien à eux seuls, même si le modèle les retient.
+            func parlante(_ numero: Int) -> Bool {
+                !lignes.indices.contains(numero - 1)
+                    || ValidationSources.normaliser(lignes[numero - 1].phrase).split(separator: " ").count >= Self.motsMinimum
+            }
+            var choisi = PassageChoisi(decisions: [], actions: [], questions: [])
+            for numero in decisions where parlante(numero) {
+                if await confirmer(numero, dans: lignes, consigne: Self.consigneDecisions, options: options) {
+                    choisi.decisions.append(element(numero, dans: lignes))
+                }
+            }
+            for action in actions where parlante(action.ligne) {
+                if await confirmer(action.ligne, dans: lignes, consigne: Self.consigneActions, options: options) {
+                    choisi.actions.append(element(action.ligne, dans: lignes, responsable: action.responsable, echeance: action.echeance))
+                }
+            }
+            for numero in questions where parlante(numero) {
+                if await confirmer(numero, dans: lignes, consigne: Self.consigneQuestions, options: options) {
+                    choisi.questions.append(element(numero, dans: lignes))
+                }
+            }
+            return choisi
         } catch LanguageModelSession.GenerationError.exceededContextWindowSize where passage.count > 1 {
             // Un passage trop dense pour la fenêtre : on le coupe en deux.
             let milieu = passage.count / 2
             let a = try await analyserPassage(Array(passage[..<milieu]), notes: notes, type: type)
             let b = try await analyserPassage(Array(passage[milieu...]), notes: notes, type: type)
-            return a + b
+            return PassageChoisi(decisions: a.decisions + b.decisions, actions: a.actions + b.actions, questions: a.questions + b.questions)
         }
+    }
+
+    /// Seconde lecture de chaque ligne retenue, avec ses voisines : la première passe en retient trop.
+    /// Si le modèle refuse de répondre, la ligne reste : le passage entier ne doit pas tomber pour autant.
+    private func confirmer(_ numero: Int, dans lignes: [Ligne], consigne: String, options: GenerationOptions) async -> Bool {
+        guard lignes.indices.contains(numero - 1) else { return true }
+        let voisines = max(0, numero - 3)...min(lignes.count - 1, numero + 1)
+        let contexte = voisines.map { ($0 == numero - 1 ? ">>> " : "") + lignes[$0].phrase }.joined(separator: "\n")
+        let reponse = try? await LanguageModelSession(instructions: consigne + " La ligne à juger est marquée >>>.")
+            .respond(to: contexte, generating: Confirmation.self, options: options)
+        return reponse?.content.correspond ?? true
+    }
+
+    /// Ce qu'un passage a retenu. nil : un numéro de ligne qui n'existe pas.
+    private struct PassageChoisi {
+        var decisions: [ElementSource?]
+        var actions: [ElementSource?]
+        var questions: [ElementSource?]
     }
 
     public func analyser(segments: [Segment], notes: [LigneDeNote], type: TypeReunion,
@@ -296,21 +381,24 @@ public struct AnalysteLocal: Analyste {
         var echecs = 0
         var ecartes = 0
 
-        func garder(_ generes: [ElementGenere]) -> [ElementSource] {
-            generes.compactMap { genere in
-                let valide = ValidationSources.valider(elementSource(genere), dans: segments)
-                if valide == nil { ecartes += 1 }
-                return valide
+        // Une ligne n'apparaît qu'une fois : une décision prime sur une action, une action sur une question.
+        var vues = Set<String>()
+        func garder(_ choisis: [ElementSource?]) -> [ElementSource] {
+            choisis.compactMap { choisi in
+                guard let choisi, let valide = ValidationSources.valider(choisi, dans: segments) else {
+                    ecartes += 1
+                    return nil
+                }
+                return vues.insert("\(valide.sources) \(valide.texte)").inserted ? valide : nil
             }
         }
 
         for (rang, passage) in passages.enumerated() {
             do {
-                for genere in try await analyserPassage(passage, notes: notes, type: type) {
-                    decisions += garder(genere.decisions)
-                    actions += garder(genere.actions)
-                    questions += garder(genere.questions)
-                }
+                let choisi = try await analyserPassage(passage, notes: notes, type: type)
+                decisions += garder(choisi.decisions)
+                actions += garder(choisi.actions)
+                questions += garder(choisi.questions)
             } catch {
                 // Un passage refusé par le modèle ne bloque pas les autres, et il est compté.
                 echecs += 1
