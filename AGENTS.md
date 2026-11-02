@@ -28,6 +28,9 @@ Pas de base de données, pas de compte utilisateur.
   suite (structure, dépendance, version de macOS) : arrête-toi, présente les options avec une
   recommandation, attends sa réponse. Ne tranche rien dans le code « en attendant ».
 - Si une demande va contre la fiche ou le brief, dis-le avant de l'exécuter.
+- **Claude Code dirige Codex.** Il répartit les tâches, rédige les consignes de Codex et lui confie
+  les relectures. Steven reste le chef de projet : il tranche les décisions « À Steven » et fusionne.
+  Codex garde un avis indépendant quand il relit : un désaccord remonte à Steven.
 - **Le tableau :** inscris ta tâche dans [docs/tableau.md](docs/tableau.md) avant de commencer. Passe
   la ligne à « en relecture » quand tu ouvres ta proposition.
 - **Une tâche, une branche, un agent.** La branche porte le nom de la tâche.

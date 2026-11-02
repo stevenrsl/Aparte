@@ -9,14 +9,17 @@ le même repo sans se marcher dessus.
 Deux agents qui codent la même chose en même temps, c'est des conflits et deux versions d'une même
 idée. Ici, chacun a un rôle :
 
-- **Claude Code est l'atelier.** Il construit les chantiers de la fiche, dans l'ordre, un par un.
+- **Claude Code est l'atelier et le maître d'orchestre.** Il construit les chantiers de la fiche,
+  dans l'ordre, un par un. Il dirige Codex : il répartit les tâches, rédige ses consignes et lui
+  confie les relectures.
 - **Codex est le relecteur et l'artisan.** Il relit chaque proposition de Claude Code au regard des
   règles, écrit les tests *avant* le code quand c'est possible, et prend des tâches **isolées**,
   bien bornées, qui ne touchent pas le chantier en cours.
 - **Steven est le chef de projet.** Il tranche les décisions « À Steven », fusionne les branches, et
   teste sur de vraies réunions. Aucun agent ne fusionne dans `main`.
 
-Chaque agent relit le travail de l'autre. Personne ne valide son propre code.
+Chaque agent relit le travail de l'autre. Personne ne valide son propre code. Codex garde un avis
+indépendant quand il relit : Claude Code lui dit quoi relire, pas quoi en penser.
 
 ## Les fichiers communs
 
@@ -100,7 +103,7 @@ mêmes fichiers :
 | 5. Finitions | Accueil, dossiers, réglages | Export Markdown, « Copier le compte rendu », relecture d'accessibilité (contrastes, VoiceOver) |
 
 Ce partage est un point de départ. Si un chantier s'avère plus simple ou plus long que prévu,
-Steven réattribue dans le tableau.
+Claude Code réattribue dans le tableau et le dit à Steven, qui garde le dernier mot.
 
 ## Ce qui ne marche pas avec deux agents
 
