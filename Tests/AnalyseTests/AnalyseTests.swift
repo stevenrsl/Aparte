@@ -71,6 +71,33 @@ private let citationMarie = "Marie envoie la musique avant vendredi."
     #expect(valide.echeance == "vendredi")
 }
 
+@Test func leResumeNeDitQueLesElementsValidesAvecLeursSources() {
+    let compteRendu = CompteRendu(fournisseur: "Test",
+                                  decisions: [ElementSource(texte: "Garder la version longue.", sources: [250])],
+                                  actions: [ElementSource(texte: "Envoyer la musique", sources: [1410, 1500])],
+                                  questions: [])
+    #expect(compteRendu.resume == "Décision : Garder la version longue (04:10). Action : Envoyer la musique (23:30, 25:00).")
+}
+
+@Test func leResumeDitCeQuIlNeMontrePas() {
+    let decisions = (1...5).map { ElementSource(texte: "D\($0)", sources: [Double($0)]) }
+    let compteRendu = CompteRendu(fournisseur: "Test", decisions: decisions, actions: [], questions: [])
+    #expect(compteRendu.resume == "Décisions : D1 (00:01) ; D2 (00:02) ; D3 (00:03), et 2 de plus.")
+}
+
+@Test func unResumeSansElementValideNInventeRien() {
+    let compteRendu = CompteRendu(fournisseur: "Test", decisions: [], actions: [], questions: [])
+    #expect(compteRendu.resume == "Aucune décision, action ou question vérifiable dans cette réunion.")
+}
+
+@Test func uneAncienneAnalyseSeRelitSansSonResumeLibre() throws {
+    let ancienne = #"{"fournisseur":"Test","date":"2026-11-02T14:00:00Z","resume":"Un résumé libre, non vérifié.","decisions":[],"actions":[],"questions":[],"passagesNonAnalyses":0,"elementsEcartes":0}"#
+    let decodeur = JSONDecoder()
+    decodeur.dateDecodingStrategy = .iso8601
+    let relue = try decodeur.decode(CompteRendu.self, from: Data(ancienne.utf8))
+    #expect(!relue.resume.contains("libre"))
+}
+
 /// Analyse le fichier de APARTE_AUDIO_REFERENCE. N'affiche que des nombres, jamais le contenu de la réunion.
 @Test(.enabled(if: ProcessInfo.processInfo.environment["APARTE_AUDIO_REFERENCE"] != nil))
 func analyseLeFichierDeReference() async throws {

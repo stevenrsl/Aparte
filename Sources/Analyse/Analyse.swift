@@ -26,23 +26,42 @@ public struct ElementSource: Codable, Sendable, Identifiable, Hashable {
 public struct CompteRendu: Codable, Sendable, Hashable {
     public var fournisseur: String
     public var date: Date
-    public var resume: String
     public var decisions: [ElementSource]
     public var actions: [ElementSource]
     public var questions: [ElementSource]
     public var passagesNonAnalyses: Int
     public var elementsEcartes: Int
 
-    public init(fournisseur: String, date: Date = Date(), resume: String, decisions: [ElementSource], actions: [ElementSource],
+    public init(fournisseur: String, date: Date = Date(), decisions: [ElementSource], actions: [ElementSource],
                 questions: [ElementSource], passagesNonAnalyses: Int = 0, elementsEcartes: Int = 0) {
         self.fournisseur = fournisseur
         self.date = date
-        self.resume = resume
         self.decisions = decisions
         self.actions = actions
         self.questions = questions
         self.passagesNonAnalyses = passagesNonAnalyses
         self.elementsEcartes = elementsEcartes
+    }
+
+    /// Le résumé ne dit que ce qui a été validé, chaque élément avec son horodatage. Il n'est jamais
+    /// écrit par un modèle : calculé ici, il ne peut pas échapper à la règle 1.
+    public var resume: String {
+        func phrase(_ singulier: String, _ pluriel: String, _ elements: [ElementSource], maximum: Int) -> String? {
+            guard !elements.isEmpty else { return nil }
+            let cites = elements.prefix(maximum).map { element -> String in
+                let texte = element.texte.trimmingCharacters(in: CharacterSet(charactersIn: " .;"))
+                return "\(texte) (\(element.sources.map { horodatage($0) }.joined(separator: ", ")))"
+            }
+            let reste = elements.count - cites.count
+            let suite = reste > 0 ? ", et \(reste) de plus" : ""
+            return "\(elements.count > 1 ? pluriel : singulier) : \(cites.joined(separator: " ; "))\(suite)."
+        }
+        let phrases = [
+            phrase("Décision", "Décisions", decisions, maximum: 3),
+            phrase("Action", "Actions", actions, maximum: 2),
+            phrase("Question ouverte", "Questions ouvertes", questions, maximum: 1),
+        ].compactMap { $0 }
+        return phrases.isEmpty ? "Aucune décision, action ou question vérifiable dans cette réunion." : phrases.joined(separator: " ")
     }
 
     /// Résumé, décisions et actions, sans la transcription : prêt à coller.
@@ -192,8 +211,6 @@ struct ElementGenere {
 
 @Generable
 struct PassageGenere {
-    @Guide(description: "Ce qui s'est dit dans ce passage, en deux phrases au plus en français.")
-    var resume: String
     @Guide(description: "Les décisions prises. Vide s'il n'y en a pas.")
     var decisions: [ElementGenere]
     @Guide(description: "Les actions à faire. Vide s'il n'y en a pas.")
@@ -274,7 +291,6 @@ public struct AnalysteLocal: Analyste {
         }
 
         let passages = Self.decouper(segments)
-        var resumes: [String] = []
         var decisions: [ElementSource] = []
         var actions: [ElementSource] = []
         var questions: [ElementSource] = []
@@ -292,7 +308,6 @@ public struct AnalysteLocal: Analyste {
         for (rang, passage) in passages.enumerated() {
             do {
                 for genere in try await analyserPassage(passage, notes: notes, type: type) {
-                    if !genere.resume.isEmpty { resumes.append(genere.resume) }
                     decisions += garder(genere.decisions)
                     actions += garder(genere.actions)
                     questions += garder(genere.questions)
@@ -305,15 +320,8 @@ public struct AnalysteLocal: Analyste {
         }
         guard echecs < passages.count else { throw ErreurAnalyse.aucunPassage }
 
-        var resume = resumes.joined(separator: " ")
-        if resumes.count > 1 {
-            let session = LanguageModelSession(instructions: "Tu résumes une réunion en français, en trois phrases au plus, sans rien ajouter à ce qui t'est donné.")
-            if let reponse = try? await session.respond(to: resumes.joined(separator: "\n")) {
-                resume = reponse.content
-            }
-        }
         progression(1)
-        return CompteRendu(fournisseur: nom, resume: resume, decisions: decisions, actions: actions, questions: questions,
+        return CompteRendu(fournisseur: nom, decisions: decisions, actions: actions, questions: questions,
                            passagesNonAnalyses: echecs, elementsEcartes: ecartes)
     }
 }
