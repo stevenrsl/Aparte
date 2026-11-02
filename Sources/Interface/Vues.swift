@@ -206,7 +206,7 @@ struct PuceSource: View {
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
             .background(active ? Color.argile : Color.surface)
-            .foregroundStyle(Color.encreColonne)
+            .foregroundStyle(active ? Color.encreColonne : Color.encre)
     }
 }
 
@@ -824,7 +824,7 @@ struct EcranCompteRendu: View {
                                     Text(horodatage(temps)).font(Typo.horodatage)
                                         .padding(.horizontal, 8).padding(.vertical, 3)
                                         .background(choisi ? Color.argile : Color.surface)
-                                        .foregroundStyle(Color.encreColonne)
+                                        .foregroundStyle(choisi ? Color.encreColonne : Color.encre)
                                 }
                             }
                         }
