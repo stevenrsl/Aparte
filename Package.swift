@@ -2,16 +2,34 @@
 
 import PackageDescription
 
-let modules = ["Transcription", "Capture", "Stockage", "Analyse", "DA", "Interface"]
+// Le code audio repris de Cairn reste en mode Swift 5 : voir docs/rapport-cairn.md.
+let swift5: [SwiftSetting] = [.swiftLanguageMode(.v5)]
 
 let package = Package(
     name: "Aparte",
     platforms: [.macOS(.v27)],
-    products: modules.map { .library(name: $0, targets: [$0]) },
-    targets: modules.flatMap { module in
-        [
-            .target(name: module),
-            .testTarget(name: "\(module)Tests", dependencies: [.target(name: module)]),
-        ]
-    }
+    products: [
+        .executable(name: "Aparte", targets: ["AparteApp"]),
+        .library(name: "Transcription", targets: ["Transcription"]),
+        .library(name: "Capture", targets: ["Capture"]),
+        .library(name: "Stockage", targets: ["Stockage"]),
+        .library(name: "Analyse", targets: ["Analyse"]),
+        .library(name: "DA", targets: ["DA"]),
+        .library(name: "Interface", targets: ["Interface"]),
+    ],
+    targets: [
+        .target(name: "Transcription", swiftSettings: swift5),
+        .target(name: "Capture", swiftSettings: swift5),
+        .target(name: "Stockage", dependencies: ["Transcription"]),
+        .target(name: "Analyse", dependencies: ["Transcription", "Stockage"]),
+        .target(name: "DA"),
+        .target(name: "Interface", dependencies: ["Transcription", "Capture", "Stockage", "Analyse", "DA"]),
+        .executableTarget(name: "AparteApp", dependencies: ["Interface"]),
+        .testTarget(name: "TranscriptionTests", dependencies: ["Transcription"]),
+        .testTarget(name: "CaptureTests", dependencies: ["Capture"]),
+        .testTarget(name: "StockageTests", dependencies: ["Stockage"]),
+        .testTarget(name: "AnalyseTests", dependencies: ["Analyse"]),
+        .testTarget(name: "DATests", dependencies: ["DA"]),
+        .testTarget(name: "InterfaceTests", dependencies: ["Interface"]),
+    ]
 )

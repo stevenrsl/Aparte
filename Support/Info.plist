@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>
+    <string>Aparté</string>
+    <key>CFBundleDisplayName</key>
+    <string>Aparté</string>
+    <key>CFBundleExecutable</key>
+    <string>Aparte</string>
+    <key>CFBundleIdentifier</key>
+    <string>eu.stevenrsl.aparte</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>0.1</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>fr</string>
+    <key>CFBundleLocalizations</key>
+    <array>
+        <string>fr</string>
+    </array>
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.productivity</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>27.0</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSPrincipalClass</key>
+    <string>NSApplication</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Aparté écoute ton micro pendant une réunion pour la transcrire. Tout reste sur ce Mac.</string>
+    <key>NSAudioCaptureUsageDescription</key>
+    <string>Aparté écoute le son du Mac pendant une visio pour transcrire ce que disent les autres. Tout reste sur ce Mac.</string>
+</dict>
+</plist>
