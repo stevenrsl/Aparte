@@ -14,7 +14,7 @@ mkdir -p "$APP/Contents/MacOS"
 cp "$BIN" "$APP/Contents/MacOS/Aparte"
 cp Support/Info.plist "$APP/Contents/Info.plist"
 mkdir -p "$APP/Contents/Resources"
-cp -R "$(dirname "$BIN")/Aparte_DA.bundle" "$APP/Contents/Resources/"
+cp -R "$(dirname "$BIN")"/*.bundle "$APP/Contents/Resources/"
 
 # Le certificat de développement garde les autorisations d'une version à l'autre.
 IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null \

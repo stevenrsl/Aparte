@@ -17,13 +17,18 @@ let package = Package(
         .library(name: "DA", targets: ["DA"]),
         .library(name: "Interface", targets: ["Interface"]),
     ],
+    dependencies: [
+        // La séparation des voix, sur l'appareil, comme dans Cairn. Accord de Steven du 2 novembre 2026.
+        .package(url: "https://github.com/FluidInference/FluidAudio.git", exact: "0.16.1", traits: []),
+    ],
     targets: [
         .target(name: "Transcription", swiftSettings: swift5),
         .target(name: "Capture", swiftSettings: swift5),
+        .target(name: "Voix", dependencies: ["Transcription", .product(name: "FluidAudio", package: "FluidAudio")], swiftSettings: swift5),
         .target(name: "Stockage", dependencies: ["Transcription"]),
         .target(name: "Analyse", dependencies: ["Transcription", "Stockage"]),
         .target(name: "DA", resources: [.copy("Polices")]),
-        .target(name: "Interface", dependencies: ["Transcription", "Capture", "Stockage", "Analyse", "DA"]),
+        .target(name: "Interface", dependencies: ["Transcription", "Capture", "Stockage", "Analyse", "DA", "Voix"]),
         .executableTarget(name: "AparteApp", dependencies: ["Interface"]),
         .testTarget(name: "TranscriptionTests", dependencies: ["Transcription"]),
         .testTarget(name: "CaptureTests", dependencies: ["Capture"]),
