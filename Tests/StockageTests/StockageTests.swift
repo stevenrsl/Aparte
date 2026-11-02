@@ -68,3 +68,63 @@ private func racineTemporaire() throws -> URL {
     #expect(positionDeLecture(temps: 10, decalage: 1.5) == (8.5, 0))
     #expect(positionDeLecture(temps: 1, decalage: 1.5) == (0, 0.5))
 }
+
+private func bibliothequeDeGestion() throws -> (Bibliotheque, URL) {
+    let racine = FileManager.default.temporaryDirectory.resolvingSymlinksInPath().appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: racine, withIntermediateDirectories: true)
+    return (Bibliotheque(racine: racine), racine)
+}
+
+@Test func renommerGardeLeContenuIntact() throws {
+    let (bibliotheque, racine) = try bibliothequeDeGestion()
+    defer { try? FileManager.default.removeItem(at: racine) }
+    let reunion = try bibliotheque.creerReunion(titre: "Avant", type: .presentiel, dossier: nil)
+    try reunion.enregistrer(notes: [LigneDeNote(temps: 3, texte: "Une note précieuse")])
+    try Data("son".utf8).write(to: reunion.micro)
+    let notesAvant = try Data(contentsOf: reunion.url.appendingPathComponent("notes.md"))
+
+    let renommee = try bibliotheque.renommer(reunion, en: "Après : bilan")
+    #expect(!FileManager.default.fileExists(atPath: reunion.url.path))
+    #expect(renommee.url.lastPathComponent.hasSuffix("Après   bilan"))
+    #expect(try Data(contentsOf: renommee.url.appendingPathComponent("notes.md")) == notesAvant)
+    #expect(try Data(contentsOf: renommee.micro) == Data("son".utf8))
+    #expect(bibliotheque.reunions().map(\.meta.titre) == ["Après : bilan"])
+}
+
+@Test func renommerSansChangerNeDeplaceRien() throws {
+    let (bibliotheque, racine) = try bibliothequeDeGestion()
+    defer { try? FileManager.default.removeItem(at: racine) }
+    let reunion = try bibliotheque.creerReunion(titre: "Même", type: .presentiel, dossier: nil)
+    #expect(try bibliotheque.renommer(reunion, en: " Même ").url == reunion.url)
+    #expect(try bibliotheque.renommer(reunion, en: "   ").url == reunion.url)
+}
+
+@Test func renommerNEcrasePasUneAutreReunion() throws {
+    let (bibliotheque, racine) = try bibliothequeDeGestion()
+    defer { try? FileManager.default.removeItem(at: racine) }
+    let date = Date()
+    let a = try bibliotheque.creerReunion(titre: "A", type: .presentiel, dossier: nil, date: date)
+    let b = try bibliotheque.creerReunion(titre: "B", type: .presentiel, dossier: nil, date: date)
+    let renommee = try bibliotheque.renommer(b, en: "A")
+    #expect(renommee.url != a.url)
+    #expect(bibliotheque.reunions().count == 2)
+}
+
+@Test func deplacerVersEtDepuisUnDossier() throws {
+    let (bibliotheque, racine) = try bibliothequeDeGestion()
+    defer { try? FileManager.default.removeItem(at: racine) }
+    let reunion = try bibliotheque.creerReunion(titre: "R", type: .presentiel, dossier: nil)
+    let rangee = try bibliotheque.deplacer(reunion, vers: "Clients")
+    #expect(bibliotheque.reunions().first?.dossier == "Clients")
+    let revenue = try bibliotheque.deplacer(rangee, vers: nil)
+    #expect(revenue.url.lastPathComponent == reunion.url.lastPathComponent)
+    #expect(bibliotheque.reunions().first?.dossier == nil)
+}
+
+@Test func laCorbeilleRetireLaReunionDeLaBibliotheque() throws {
+    let (bibliotheque, racine) = try bibliothequeDeGestion()
+    defer { try? FileManager.default.removeItem(at: racine) }
+    let reunion = try bibliotheque.creerReunion(titre: "Fictive à jeter", type: .presentiel, dossier: nil)
+    try bibliotheque.mettreALaCorbeille(reunion)
+    #expect(bibliotheque.reunions().isEmpty)
+}

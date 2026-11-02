@@ -225,22 +225,66 @@ public struct Bibliotheque: Sendable {
     }
 
     public func creerReunion(titre: String, type: TypeReunion, dossier: String?, date: Date = Date()) throws -> Reunion {
-        let parent = dossier.map { racine.appendingPathComponent($0) } ?? racine
+        let titrePropre = titre.trimmingCharacters(in: .whitespacesAndNewlines)
+        let url = emplacementLibre(dans: dossier, base: Self.nomDeDossier(titre: titrePropre.isEmpty ? "Réunion" : titrePropre, date: date))
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        let reunion = Reunion(url: url, meta: MetaReunion(titre: titrePropre.isEmpty ? "Réunion" : titrePropre, date: date, type: type), dossier: dossier)
+        try reunion.enregistrerMeta()
+        return reunion
+    }
+
+    private static func nomDeDossier(titre: String, date: Date) -> String {
         let format = DateFormatter()
         format.locale = Locale(identifier: "fr_FR")
         format.dateFormat = "yyyy-MM-dd"
-        let titrePropre = titre.trimmingCharacters(in: .whitespacesAndNewlines)
-        let base = "\(format.string(from: date)) \(Self.nomDeFichier(titrePropre.isEmpty ? "Réunion" : titrePropre))"
+        return "\(format.string(from: date)) \(nomDeFichier(titre))"
+    }
+
+    private func emplacementLibre(dans dossier: String?, base: String) -> URL {
+        let parent = dossier.map { racine.appendingPathComponent($0) } ?? racine
         var url = parent.appendingPathComponent(base)
         var n = 2
         while FileManager.default.fileExists(atPath: url.path) {
             url = parent.appendingPathComponent("\(base) \(n)")
             n += 1
         }
-        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
-        let reunion = Reunion(url: url, meta: MetaReunion(titre: titrePropre.isEmpty ? "Réunion" : titrePropre, date: date, type: type), dossier: dossier)
-        try reunion.enregistrerMeta()
-        return reunion
+        return url
+    }
+
+    /// Change le titre et le nom du dossier. Tout le contenu suit, notes comprises, sans y toucher.
+    public func renommer(_ reunion: Reunion, en titre: String) throws -> Reunion {
+        let propre = titre.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !propre.isEmpty, propre != reunion.meta.titre else { return reunion }
+        let cible = emplacementLibre(dans: reunion.dossier, base: Self.nomDeDossier(titre: propre, date: reunion.meta.date))
+        try FileManager.default.moveItem(at: reunion.url, to: cible)
+        var renommee = reunion
+        renommee.url = cible
+        renommee.meta.titre = propre
+        do {
+            try renommee.enregistrerMeta()
+        } catch {
+            // Le titre et le dossier ne doivent pas se contredire : tout revient en place.
+            try? FileManager.default.moveItem(at: cible, to: reunion.url)
+            throw error
+        }
+        return renommee
+    }
+
+    /// Range la réunion dans un dossier, ou à la racine avec nil.
+    public func deplacer(_ reunion: Reunion, vers dossier: String?) throws -> Reunion {
+        guard dossier != reunion.dossier else { return reunion }
+        let cible = emplacementLibre(dans: dossier, base: reunion.url.lastPathComponent)
+        try FileManager.default.createDirectory(at: cible.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try FileManager.default.moveItem(at: reunion.url, to: cible)
+        var deplacee = reunion
+        deplacee.url = cible
+        deplacee.dossier = dossier
+        return deplacee
+    }
+
+    /// Le dossier entier part à la Corbeille, d'où il reste récupérable.
+    public func mettreALaCorbeille(_ reunion: Reunion) throws {
+        try FileManager.default.trashItem(at: reunion.url, resultingItemURL: nil)
     }
 
     static func nomDeFichier(_ nom: String) -> String {

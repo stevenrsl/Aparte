@@ -152,6 +152,50 @@ public final class ModeleApp {
         }
     }
 
+    /// La réunion en cours d'enregistrement ne se range pas : ses fichiers sont ouverts.
+    func estEnCours(_ reunion: Reunion) -> Bool { session?.reunion.id == reunion.id }
+
+    public func renommer(_ reunion: Reunion, en titre: String) {
+        ranger(reunion) { try $0.renommer(reunion, en: titre) }
+    }
+
+    public func deplacer(_ reunion: Reunion, vers dossier: String?) {
+        ranger(reunion) { try $0.deplacer(reunion, vers: dossier) }
+    }
+
+    /// Crée un dossier et y range la réunion.
+    public func deplacer(_ reunion: Reunion, versNouveauDossier nom: String) {
+        let propre = nom.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !propre.isEmpty else { return }
+        ranger(reunion) { try $0.deplacer(reunion, vers: $0.creerDossier(propre)) }
+    }
+
+    private func ranger(_ reunion: Reunion, _ action: (Bibliotheque) throws -> Reunion) {
+        guard let bibliotheque, !estEnCours(reunion) else { return }
+        do {
+            let rangee = try action(bibliotheque)
+            faites[reunion.id] = nil
+            recharger()
+            if case let .compteRendu(affichee) = ecran, affichee.id == reunion.id {
+                ecran = .compteRendu(reunions.first { $0.id == rangee.id } ?? rangee)
+            }
+        } catch {
+            erreur = "« \(reunion.meta.titre) » n'a pas pu être rangée : \(error.localizedDescription)"
+        }
+    }
+
+    public func mettreALaCorbeille(_ reunion: Reunion) {
+        guard let bibliotheque, !estEnCours(reunion) else { return }
+        do {
+            try bibliotheque.mettreALaCorbeille(reunion)
+            faites[reunion.id] = nil
+            if case let .compteRendu(affichee) = ecran, affichee.id == reunion.id { ecran = .accueil }
+            recharger()
+        } catch {
+            erreur = "« \(reunion.meta.titre) » n'a pas pu aller à la Corbeille : \(error.localizedDescription)"
+        }
+    }
+
     public func terminer() async {
         guard let session else { return }
         do {

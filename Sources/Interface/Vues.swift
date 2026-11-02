@@ -723,8 +723,12 @@ struct EcranCompteRendu: View {
 
     var body: some View {
         Colonnes {
-            Libelle("compte rendu · \(reunion.meta.date.formatted(.dateTime.locale(Locale(identifier: "fr_FR")).day().month(.abbreviated))) · \(Int(reunion.meta.duree / 60)) min"
-                    + (compteRendu.map { " · \($0.fournisseur.lowercased())" } ?? ""))
+            HStack {
+                Libelle("compte rendu · \(reunion.meta.date.formatted(.dateTime.locale(Locale(identifier: "fr_FR")).day().month(.abbreviated))) · \(Int(reunion.meta.duree / 60)) min"
+                        + (compteRendu.map { " · \($0.fournisseur.lowercased())" } ?? ""))
+                Spacer(minLength: 12)
+                GestionReunion(modele: modele, reunion: reunion) { lecteur.arreter() }
+            }
             TitreEcran(debut: reunion.meta.titre, fin: reunion.dossier.map { ", \($0.lowercased())" } ?? "")
         } contenu: {
             ScrollView {
@@ -897,6 +901,66 @@ struct EcranCompteRendu: View {
 }
 
 // MARK: - Dossier
+
+/// Renommer, ranger ou jeter une réunion. Rien de tout ça ne touche à ce qu'elle contient.
+struct GestionReunion: View {
+    let modele: ModeleApp
+    let reunion: Reunion
+    /// Avant de bouger les fichiers : la lecture en cours s'arrête.
+    let avant: () -> Void
+    @State private var titre = ""
+    @State private var nomDossier = ""
+    @State private var renomme = false
+    @State private var nouveauDossier = false
+    @State private var corbeille = false
+
+    var body: some View {
+        Menu {
+            Button("Renommer…") {
+                titre = reunion.meta.titre
+                renomme = true
+            }
+            Menu("Déplacer vers") {
+                Button("Sans dossier") { avant(); modele.deplacer(reunion, vers: nil) }
+                    .disabled(reunion.dossier == nil)
+                ForEach(modele.dossiers, id: \.self) { dossier in
+                    Button(dossier) { avant(); modele.deplacer(reunion, vers: dossier) }
+                        .disabled(reunion.dossier == dossier)
+                }
+                Divider()
+                Button("Nouveau dossier…") {
+                    nomDossier = ""
+                    nouveauDossier = true
+                }
+            }
+            Divider()
+            Button("Mettre à la corbeille…", role: .destructive) { corbeille = true }
+        } label: {
+            Libelle("gérer")
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .disabled(modele.estEnCours(reunion))
+        .accessibilityLabel("Gérer la réunion")
+        .alert("Renommer la réunion", isPresented: $renomme) {
+            TextField("Titre", text: $titre)
+            Button("Renommer") { avant(); modele.renommer(reunion, en: titre) }
+            Button("Annuler", role: .cancel) {}
+        }
+        .alert("Nouveau dossier", isPresented: $nouveauDossier) {
+            TextField("Nom du dossier", text: $nomDossier)
+            Button("Créer et déplacer") { avant(); modele.deplacer(reunion, versNouveauDossier: nomDossier) }
+            Button("Annuler", role: .cancel) {}
+        }
+        .alert("Mettre « \(reunion.meta.titre) » à la corbeille ?", isPresented: $corbeille) {
+            Button("Mettre à la corbeille", role: .destructive) { avant(); modele.mettreALaCorbeille(reunion) }
+            Button("Annuler", role: .cancel) {}
+        } message: {
+            Text("L'audio, la transcription, tes notes et le compte rendu y partent ensemble. Tu pourras les récupérer depuis la Corbeille.")
+        }
+    }
+}
 
 struct EcranDossier: View {
     @Bindable var modele: ModeleApp
