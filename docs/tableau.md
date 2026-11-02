@@ -6,4 +6,4 @@ dans le [plan des agents](plan-agents.md).
 
 | Tâche | Agent | Branche | État | Fichiers touchés |
 |---|---|---|---|---|
-| Mise en place du projet | Claude Code | `mise-en-place` | en cours | `AGENTS.md`, `CLAUDE.md`, `.gitignore`, `.github/`, `docs/`, `Package.swift`, `Sources/`, `Tests/` |
+| Mise en place du projet | Claude Code | `mise-en-place` | en relecture | `AGENTS.md`, `CLAUDE.md`, `.gitignore`, `.github/`, `docs/`, `Package.swift`, `Sources/`, `Tests/` |
