@@ -1,6 +1,6 @@
 # Aparté
 
-Notes et enregistrement de réunions pour Mac, avec une analyse en local. Version de test : V0.1. Les
+Notes et enregistrement de réunions pour Mac, avec une analyse en local. Version de test : V0.2. Les
 règles du projet sont dans [AGENTS.md](AGENTS.md).
 
 ## Ce qu'il faut
@@ -8,19 +8,21 @@ règles du projet sont dans [AGENTS.md](AGENTS.md).
 - Un Mac Apple Silicon en **macOS 27**, avec **Xcode 27** et Swift 6.4 pour construire depuis les sources.
 - **Apple Intelligence activé**, pour l'analyse. Sans lui, tout le reste marche et l'app dit pourquoi
   l'analyse n'est pas disponible.
-- Au premier lancement, le système peut télécharger son modèle de français. C'est le seul accès réseau.
+- Le réseau ne sert qu'à trois choses : le modèle de français du système au premier lancement, 21 Mo de modèles
+  pour séparer les voix à la première relecture, sans rien envoyer de l'enregistrement, et une analyse avec
+  Mistral, si tu la lances toi-même.
 
 ## Installer
 
 Depuis les sources, le plus simple pour un développeur :
 
 ```bash
-git clone --branch v0.1 https://github.com/stevenrsl/Aparte.git
+git clone --branch v0.2 https://github.com/stevenrsl/Aparte.git
 cd Aparte
 ./build.sh && open "build/Aparté.app"
 ```
 
-Ou avec `Aparte-0.1.zip`, joint à la [publication V0.1](https://github.com/stevenrsl/Aparte/releases/tag/v0.1).
+Ou avec `Aparte-0.2.zip`, joint à la [publication V0.2](https://github.com/stevenrsl/Aparte/releases/tag/v0.2).
 L'app n'est pas notarisée : macOS la bloque tant qu'on ne retire pas la quarantaine.
 
 ```bash
@@ -31,10 +33,11 @@ xattr -dr com.apple.quarantine "/Applications/Aparté.app"
 
 1. Choisis un dossier pour les réunions, puis lance une courte réunion. Accepte le micro, et en visio le
    son du Mac. **Préviens les personnes que tu enregistres.**
-2. Note quelques lignes, parle, termine, puis clique sur « Analyser sur ce Mac ».
+2. Note quelques lignes, parle, puis termine. Aparté relit l'enregistrement et écrit le compte rendu tout seul.
 3. Clique sur une décision : l'app affiche et relit le passage source.
 
-En visio, mets un casque. Sinon le micro capte aussi les haut-parleurs et les phrases sortent en double.
+En visio, un casque reste préférable. Sans casque, Aparté retire ce que le micro répète des haut-parleurs, mais ce
+que tu dis par-dessus peut être moins bien transcrit.
 
 Chaque réunion est un dossier lisible sans l'app : `meta.json`, `micro.m4a`, `systeme.m4a`,
 `transcription.json`, `notes.md`, `analyse.json`, `analyse.md`.
