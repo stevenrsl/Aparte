@@ -1,6 +1,7 @@
 import Foundation
 import FoundationModels
 import NaturalLanguage
+import Security
 import Stockage
 import Transcription
 
@@ -195,11 +196,18 @@ public enum ErreurAnalyse: LocalizedError {
     case indisponible(String)
     case rienAAnalyser
     case aucunPassage
+    case pcc(PrivateCloudComputeLanguageModel.Error)
 
     public var errorDescription: String? {
         switch self {
-        case let .indisponible(raison): return "L'analyse locale n'est pas disponible : \(raison)"
+        case let .indisponible(raison): return "Cette analyse n'est pas disponible : \(raison)"
         case .rienAAnalyser: return "Il n'y a pas de transcription à analyser."
+        case let .pcc(erreur):
+            switch erreur {
+            case .quotaLimitReached: return "La limite du jour de Private Cloud Compute est atteinte. Analyse sur ce Mac, ou réessaie demain."
+            case .networkFailure: return "Private Cloud Compute n'a pas pu être joint. Vérifie ta connexion."
+            default: return "Private Cloud Compute n'a pas pu analyser cette réunion."
+            }
         case .aucunPassage: return "Aucun passage n'a pu être analysé. Rien n'a été inventé : réessaie plus tard."
         }
     }
@@ -235,9 +243,43 @@ struct ActionsChoisies {
 
 /// Foundation Models sur l'appareil. La fenêtre de 4 096 tokens étant partagée entre
 /// l'entrée et la sortie, la transcription est découpée en passages d'environ cinq minutes.
-public struct AnalysteLocal: Analyste {
-    public let nom = "Local · Apple Intelligence"
-    static let dureePassage = 300.0
+///
+/// PCC est le même lecteur avec une fenêtre bien plus grande : une réunion d'une heure tient d'un coup.
+public struct AnalysteApple: Analyste {
+    public let nom: String
+    let dureePassage: Double
+    let session: @Sendable (String) -> LanguageModelSession
+    let indisponible: @Sendable () -> String?
+
+    /// Sur ce Mac. Rien ne part. Résumer les mots de quelqu'un, c'est les transformer, d'où ces garde-fous :
+    /// ceux par défaut refusent parfois un passage pour un mot sorti de son contexte.
+    public static let local = AnalysteApple(
+        nom: "Local · Apple Intelligence", dureePassage: 300,
+        session: { LanguageModelSession(model: SystemLanguageModel(guardrails: .permissiveContentTransformations), instructions: $0) },
+        indisponible: {
+            if case let .unavailable(raison) = SystemLanguageModel.default.availability { return String(describing: raison) }
+            return nil
+        })
+
+    /// Dans Private Cloud Compute : la transcription et les notes partent chez Apple. Seul Steven peut le
+    /// lancer, pour une réunion précise.
+    public static let pcc = AnalysteApple(
+        nom: "PCC · Apple", dureePassage: 3600,
+        session: { LanguageModelSession(model: PrivateCloudComputeLanguageModel(), instructions: $0) },
+        indisponible: {
+            guard pccAutorise else { return "Apple doit d'abord autoriser Aparté à utiliser Private Cloud Compute." }
+            if case let .unavailable(raison) = PrivateCloudComputeLanguageModel().availability { return String(describing: raison) }
+            return nil
+        })
+
+    /// PCC demande une autorisation qu'Apple accorde sur demande. Sans elle, le premier appel fait planter
+    /// l'app, même si le modèle se dit disponible : on regarde donc avant de le toucher.
+    public static var pccAutorise: Bool {
+        guard let tache = SecTaskCreateFromSelf(nil) else { return false }
+        let droit = SecTaskCopyValueForEntitlement(tache, "com.apple.developer.private-cloud-compute" as CFString, nil)
+        return (droit as? Bool) == true
+    }
+
     static let motsMinimum = 4
     /// Le modèle ne recopie ni n'écrit rien : il choisit des numéros de lignes, une catégorie à la fois.
     /// Le texte rendu est donc toujours celui de la transcription.
@@ -259,9 +301,7 @@ public struct AnalysteLocal: Analyste {
     Pas les questions de politesse, ni celles qui reçoivent une réponse.
     """
 
-    public init() {}
-
-    static func decouper(_ segments: [Segment], duree: Double = dureePassage) -> [[Segment]] {
+    static func decouper(_ segments: [Segment], duree: Double) -> [[Segment]] {
         var passages: [[Segment]] = []
         var courant: [Segment] = []
         for segment in segments.sorted(by: { $0.debut < $1.debut }) {
@@ -320,11 +360,11 @@ public struct AnalysteLocal: Analyste {
         // Sans tirage au hasard : la même réunion donne le même compte rendu.
         let options = GenerationOptions(sampling: .greedy)
         do {
-            let decisions = try await LanguageModelSession(instructions: Self.consigneDecisions)
+            let decisions = try await session(Self.consigneDecisions)
                 .respond(to: texte, generating: LignesChoisies.self, options: options).content.lignes
-            let actions = try await LanguageModelSession(instructions: Self.consigneActions)
+            let actions = try await session(Self.consigneActions)
                 .respond(to: texte, generating: ActionsChoisies.self, options: options).content.actions
-            let questions = try await LanguageModelSession(instructions: Self.consigneQuestions)
+            let questions = try await session(Self.consigneQuestions)
                 .respond(to: texte, generating: LignesChoisies.self, options: options).content.lignes
             // « Très bien » ou « ok ça marche » ne disent rien à eux seuls, même si le modèle les retient.
             func parlante(_ numero: Int) -> Bool {
@@ -363,7 +403,7 @@ public struct AnalysteLocal: Analyste {
         guard lignes.indices.contains(numero - 1) else { return true }
         let voisines = max(0, numero - 3)...min(lignes.count - 1, numero + 1)
         let contexte = voisines.map { ($0 == numero - 1 ? ">>> " : "") + lignes[$0].phrase }.joined(separator: "\n")
-        let reponse = try? await LanguageModelSession(instructions: consigne + " La ligne à juger est marquée >>>.")
+        let reponse = try? await session(consigne + " La ligne à juger est marquée >>>.")
             .respond(to: contexte, generating: Confirmation.self, options: options)
         return reponse?.content.correspond ?? true
     }
@@ -378,12 +418,9 @@ public struct AnalysteLocal: Analyste {
     public func analyser(segments: [Segment], notes: [LigneDeNote], type: TypeReunion,
                          progression: @escaping @Sendable (Double) -> Void) async throws -> CompteRendu {
         guard !segments.isEmpty else { throw ErreurAnalyse.rienAAnalyser }
-        switch SystemLanguageModel.default.availability {
-        case .available: break
-        case let .unavailable(raison): throw ErreurAnalyse.indisponible(String(describing: raison))
-        }
+        if let raison = indisponible() { throw ErreurAnalyse.indisponible(raison) }
 
-        let passages = Self.decouper(segments)
+        let passages = Self.decouper(segments, duree: dureePassage)
         var decisions: [ElementSource] = []
         var actions: [ElementSource] = []
         var questions: [ElementSource] = []
@@ -408,6 +445,9 @@ public struct AnalysteLocal: Analyste {
                 decisions += garder(choisi.decisions)
                 actions += garder(choisi.actions)
                 questions += garder(choisi.questions)
+            } catch let erreur as PrivateCloudComputeLanguageModel.Error {
+                // La limite du jour ou le réseau : les passages suivants échoueraient de même.
+                throw ErreurAnalyse.pcc(erreur)
             } catch {
                 // Un passage refusé par le modèle ne bloque pas les autres, et il est compté.
                 echecs += 1

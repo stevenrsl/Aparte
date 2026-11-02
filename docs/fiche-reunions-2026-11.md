@@ -134,8 +134,13 @@ de ce qu'elle contient n'est réécrit, sauf le titre dans `meta.json`.
     l'entrée et la sortie. On découpe la transcription en segments d'environ cinq minutes, on
     produit une structure `@Generable` par segment, puis une synthèse des segments.
   - **PCC** : environ 32K tokens, de quoi passer une réunion d'une heure en une fois.
+    Vérifié le 2 novembre 2026 : il faut l'autorisation `com.apple.developer.private-cloud-compute`,
+    qu'Apple accorde sur demande au compte développeur. Tant qu'elle manque, le bouton reste inactif.
   - **Externe** : l'API du fournisseur choisi, en une fois. La clé est rangée dans le trousseau,
     jamais dans le repo ni dans un fichier.
+  - **Analyse automatique** (demandée par Steven le 2 novembre 2026) : après la relecture, une réunion sans
+    analyse est analysée toute seule, en local seulement. PCC et l'externe restent toujours lancés
+    par Steven, réunion par réunion, après confirmation.
   - Vérifié le 2 novembre 2026 : le framework Foundation Models accepte d'autres modèles par le
     protocole `LanguageModel`, à partir de macOS 27. Chaque fournisseur peut livrer un package
     Swift. Apple cite Anthropic et Google ; rien de trouvé pour ChatGPT ou Mistral, où il faudrait

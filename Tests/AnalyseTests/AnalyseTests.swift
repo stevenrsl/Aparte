@@ -130,7 +130,7 @@ private let citationMarie = "Marie envoie la musique avant vendredi."
 func analyseLeFichierDeReference() async throws {
     let chemin = try #require(ProcessInfo.processInfo.environment["APARTE_AUDIO_REFERENCE"])
     let segments = try await TranscripteurFichier.transcrire(url: URL(fileURLWithPath: chemin), piste: .micro)
-    let compteRendu = try await AnalysteLocal().analyser(segments: segments, notes: [], type: .presentiel, progression: { _ in })
+    let compteRendu = try await AnalysteApple.local.analyser(segments: segments, notes: [], type: .presentiel, progression: { _ in })
     let elements = compteRendu.decisions + compteRendu.actions + compteRendu.questions
     #expect(elements.allSatisfy { ValidationSources.valider($0, dans: segments) != nil })
     print("resume: \(compteRendu.resume.count) car., decisions: \(compteRendu.decisions.count), actions: \(compteRendu.actions.count), questions: \(compteRendu.questions.count), ecartes: \(compteRendu.elementsEcartes), passages non analyses: \(compteRendu.passagesNonAnalyses)")
@@ -143,3 +143,12 @@ func analyseLeFichierDeReference() async throws {
     #expect(compteRendu.markdown(incidents: incidents).contains("Audio incomplet"))
     #expect(!compteRendu.texteACopier().contains("Audio incomplet"))
 }
+
+@Test func pccSansAutorisationEstRefuseSansToucherAuModele() async {
+    guard !AnalysteApple.pccAutorise else { return }
+    let segments = [Segment(debut: 0, fin: 2, piste: .micro, texte: "Une phrase inventée.")]
+    await #expect(throws: ErreurAnalyse.self) {
+        _ = try await AnalysteApple.pcc.analyser(segments: segments, notes: [], type: .presentiel, progression: { _ in })
+    }
+}
+

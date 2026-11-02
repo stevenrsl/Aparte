@@ -77,6 +77,8 @@ private let fausses = [
 
 @Test(.enabled(if: ProcessInfo.processInfo.environment["APARTE_MESURE"] != nil))
 func mesureOublis() async throws {
+    // APARTE_MESURE_PCC envoie ces fausses réunions chez Apple. Jamais une vraie.
+    let analyste = ProcessInfo.processInfo.environment["APARTE_MESURE_PCC"] != nil ? AnalysteApple.pcc : .local
     let essais = Int(ProcessInfo.processInfo.environment["APARTE_MESURE"] ?? "") ?? 1
     func trouve(_ attendu: String, _ elements: [ElementSource]) -> Bool {
         let cherche = attendu.lowercased().filter { $0.isLetter || $0.isNumber }
@@ -89,7 +91,7 @@ func mesureOublis() async throws {
                     piste: fausse.type == .visio && rang % 2 == 1 ? .systeme : .micro, texte: phrase)
         }
         for essai in 1...essais {
-            let c = try await AnalysteLocal().analyser(segments: segments, notes: [], type: fausse.type, progression: { _ in })
+            let c = try await analyste.analyser(segments: segments, notes: [], type: fausse.type, progression: { _ in })
             let tous = c.decisions + c.actions + c.questions
             var manques: [String] = []
             let groupes = [(fausse.decisions, c.decisions), (fausse.actions, c.actions), (fausse.questions, c.questions)]
