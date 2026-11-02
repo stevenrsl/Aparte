@@ -11,6 +11,6 @@ dans le [plan des agents](plan-agents.md).
 | Tester les pannes d'enregistrement | Codex | `tests-pannes` | en relecture | `Tests/`, `docs/pannes-enregistrement.md` |
 | Mesurer les oublis de l'analyse | Claude Code | `mesure-oublis` | en relecture | `Sources/Analyse/`, `Tests/AnalyseTests/`, `docs/mesure-analyse.md`, `README.md` |
 | Vérifier le mode sombre et l'accessibilité | Claude Code | `accessibilite` | en relecture | `Sources/Interface/Vues.swift`, `docs/accessibilite.md` |
-| Embarquer les polices du brief | Claude Code | `polices` | à faire | `Sources/DA/`, `Package.swift`, `build.sh` |
+| Embarquer les polices du brief | Claude Code | `polices` | en relecture | `Sources/DA/`, `Package.swift`, `build.sh` |
 | Fiabiliser l'enregistrement | Claude Code | `fiabilite-audio` | en relecture | `Sources/Capture/`, `Sources/Interface/`, `Sources/Stockage/`, `Tests/` |
 | Protéger la réunion en cours | Claude Code | `reunion-protegee` | en relecture | `Sources/AparteApp/`, `Sources/Interface/`, `Sources/Analyse/`, `Tests/` |

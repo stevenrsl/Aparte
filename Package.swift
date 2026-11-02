@@ -22,7 +22,7 @@ let package = Package(
         .target(name: "Capture", swiftSettings: swift5),
         .target(name: "Stockage", dependencies: ["Transcription"]),
         .target(name: "Analyse", dependencies: ["Transcription", "Stockage"]),
-        .target(name: "DA"),
+        .target(name: "DA", resources: [.copy("Polices")]),
         .target(name: "Interface", dependencies: ["Transcription", "Capture", "Stockage", "Analyse", "DA"]),
         .executableTarget(name: "AparteApp", dependencies: ["Interface"]),
         .testTarget(name: "TranscriptionTests", dependencies: ["Transcription"]),
