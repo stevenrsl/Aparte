@@ -31,6 +31,8 @@ Pas de base de données, pas de compte utilisateur.
 - **Le tableau :** inscris ta tâche dans [docs/tableau.md](docs/tableau.md) avant de commencer. Passe
   la ligne à « en relecture » quand tu ouvres ta proposition.
 - **Une tâche, une branche, un agent.** La branche porte le nom de la tâche.
+- **Chaque agent travaille dans son propre dossier** (un clone ou un `git worktree`), jamais dans
+  celui de l'autre. Ne change pas de branche dans un dossier qui n'est pas le tien.
 - **Un commit par sujet**, avec un message en français, court.
 - **Chaque branche se termine par une proposition** au format de
   [.github/pull_request_template.md](.github/pull_request_template.md). L'autre agent la relit au
