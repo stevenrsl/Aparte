@@ -70,6 +70,21 @@ public struct CompteRendu: Codable, Sendable, Hashable {
         }
     }
 
+    /// Une analyse relue depuis le disque repasse la validation : une ancienne reformulation laisse
+    /// place à la transcription, et ce qui n'est plus prouvé est écarté.
+    public func revalide(dans segments: [Segment]) -> CompteRendu {
+        var copie = self
+        func garder(_ elements: [ElementSource]) -> [ElementSource] {
+            let gardes = elements.compactMap { ValidationSources.valider($0, dans: segments) }
+            copie.elementsEcartes += elements.count - gardes.count
+            return gardes
+        }
+        copie.decisions = garder(decisions)
+        copie.actions = garder(actions)
+        copie.questions = garder(questions)
+        return copie
+    }
+
     /// Résumé, décisions et actions, sans la transcription : prêt à coller.
     public var texteACopier: String {
         var parties = [resume]
@@ -107,74 +122,54 @@ public enum ValidationSources {
         segments.filter { temps >= $0.debut - marge && temps <= $0.fin + marge }
     }
 
-    /// Les mots de temps dont on vérifie qu'ils ont été dits.
-    private static let motsDeTemps: Set<String> = [
-        "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche",
-        "janvier", "fevrier", "mars", "avril", "mai", "juin", "juillet", "aout", "septembre", "octobre", "novembre", "decembre",
-        "demain", "hier", "matin", "soir", "midi", "semaine", "mois", "annee",
-    ]
-
-    /// Les noms que le système reconnaît dans le texte, en mots normalisés.
-    private static func noms(dans texte: String) -> [String] {
-        let tagger = NLTagger(tagSchemes: [.nameType])
-        tagger.string = texte
-        tagger.setLanguage(.french, range: texte.startIndex..<texte.endIndex)
-        var trouves: [String] = []
-        tagger.enumerateTags(in: texte.startIndex..<texte.endIndex, unit: .word, scheme: .nameType,
-                             options: [.omitWhitespace, .omitPunctuation, .joinNames]) { tag, plage in
-            if let tag, [.personalName, .placeName, .organizationName].contains(tag) {
-                trouves += normaliser(String(texte[plage])).split(separator: " ").map(String.init)
+    /// Les phrases entières de ces segments qui contiennent la citation, telles que transcrites. Une
+    /// citation tronquée ne peut pas perdre un « ne… pas » : on rend toujours la phrase complète.
+    private static func phrasesEntieres(contenant cherche: String, dans segments: [Segment]) -> String? {
+        let phrases = segments.flatMap { segment -> [String] in
+            let decoupe = NLTokenizer(unit: .sentence)
+            decoupe.string = segment.texte
+            decoupe.setLanguage(.french)
+            return decoupe.tokens(for: segment.texte.startIndex..<segment.texte.endIndex).map {
+                segment.texte[$0].trimmingCharacters(in: .whitespacesAndNewlines)
             }
-            return true
         }
-        return trouves
+        guard !phrases.isEmpty else { return nil }
+        for longueur in 1...phrases.count {
+            for debut in 0...(phrases.count - longueur) {
+                let bloc = phrases[debut..<(debut + longueur)].joined(separator: " ")
+                if " \(normaliser(bloc)) ".contains(" \(cherche) ") { return bloc }
+            }
+        }
+        return nil
     }
 
-    /// Les noms, chiffres et mots de temps du texte qui ne sont pas dans les passages sources.
-    /// C'est une garde, pas une preuve : une reformulation fausse sans aucun de ces mots passerait,
-    /// d'où la citation exacte, qui permet à Steven de vérifier.
-    static func motsNonDits(texte: String, passages lu: Set<String>) -> [String] {
-        let mots = normaliser(texte).split(separator: " ").map(String.init)
-        var suspects = mots.filter { mot in
-            motsDeTemps.contains(mot) || mot.contains(where: \.isNumber)
-        }
-        suspects += noms(dans: texte)
-        // Une majuscule au milieu d'une phrase annonce un nom propre.
-        let bruts = texte.split(whereSeparator: { $0.isWhitespace })
-        for (precedent, mot) in zip(bruts, bruts.dropFirst()) where mot.first?.isUppercase == true {
-            if let dernier = precedent.last, ".!?:".contains(dernier) { continue }
-            suspects += normaliser(String(mot)).split(separator: " ").map(String.init)
-        }
-        return suspects.filter { !lu.contains($0) }
-    }
-
-    /// L'élément si ses sources le prouvent, sinon nil : la citation exacte doit se trouver dans les
-    /// passages cités, et le texte ne doit pas nommer ce qui n'y a pas été dit.
+    /// L'élément si ses sources le prouvent, sinon nil. Son texte est toujours la transcription : aucune
+    /// reformulation n'est gardée, puisqu'aucun contrôle ne peut prouver qu'elle dit vrai. Seules les sources
+    /// où la citation se trouve restent, et un responsable ou une échéance doit être dans la phrase rendue.
     public static func valider(_ element: ElementSource, dans segments: [Segment]) -> ElementSource? {
-        let texte = element.texte.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !texte.isEmpty, !element.sources.isEmpty else { return nil }
+        guard !element.sources.isEmpty else { return nil }
         let passages = element.sources.map { segmentsSources(de: $0, dans: segments) }
         guard !passages.contains(where: \.isEmpty) else { return nil }
 
+        let cherche = normaliser(element.citation ?? "")
+        guard !cherche.isEmpty else { return nil }
+        let prouvants = zip(element.sources, passages).filter { _, passage in
+            " \(normaliser(passage.map(\.texte).joined(separator: " "))) ".contains(" \(cherche) ")
+        }
         var vus = Set<UUID>()
-        let cites = passages.flatMap { $0 }.filter { vus.insert($0.id).inserted }.sorted { $0.debut < $1.debut }
-        let lu = normaliser(cites.map(\.texte).joined(separator: " "))
-
-        let citation = element.citation?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let citationNormalisee = normaliser(citation)
-        guard !citationNormalisee.isEmpty, " \(lu) ".contains(" \(citationNormalisee) ") else { return nil }
-
-        let motsLus = Set(lu.split(separator: " ").map(String.init))
-        guard motsNonDits(texte: texte, passages: motsLus).isEmpty else { return nil }
+        let cites = prouvants.flatMap(\.1).filter { vus.insert($0.id).inserted }.sorted { $0.debut < $1.debut }
+        guard let phrases = phrasesEntieres(contenant: cherche, dans: cites) else { return nil }
+        let lu = normaliser(phrases)
 
         func dit(_ valeur: String?) -> String? {
             guard let valeur = valeur?.trimmingCharacters(in: .whitespacesAndNewlines), !valeur.isEmpty else { return nil }
-            let cherche = normaliser(valeur)
-            return !cherche.isEmpty && " \(lu) ".contains(" \(cherche) ") ? valeur : nil
+            let mots = normaliser(valeur)
+            return !mots.isEmpty && " \(lu) ".contains(" \(mots) ") ? valeur : nil
         }
         var valide = element
-        valide.texte = texte
-        valide.citation = citation
+        valide.texte = phrases
+        valide.citation = phrases
+        valide.sources = prouvants.map(\.0)
         valide.responsable = dit(element.responsable)
         valide.echeance = dit(element.echeance)
         return valide
@@ -203,11 +198,9 @@ public enum ErreurAnalyse: LocalizedError {
 
 @Generable
 struct ElementGenere {
-    @Guide(description: "La décision, l'action ou la question, en une phrase courte en français.")
-    var texte: String
     @Guide(description: "Les horodatages exacts entre crochets de la transcription qui prouvent cet élément, au format mm:ss.")
     var horodatages: [String]
-    @Guide(description: "La phrase exacte de la transcription, recopiée mot pour mot.")
+    @Guide(description: "La phrase entière de la transcription qui dit la décision, l'action ou la question, recopiée mot pour mot.")
     var citation: String
     @Guide(description: "La personne responsable, seulement si elle est nommée dans la transcription. Sinon vide.")
     var responsable: String
@@ -270,7 +263,7 @@ public struct AnalysteLocal: Analyste {
     }
 
     private func elementSource(_ genere: ElementGenere) -> ElementSource {
-        ElementSource(texte: genere.texte, sources: genere.horodatages.compactMap { secondes(depuis: $0) },
+        ElementSource(texte: genere.citation, sources: genere.horodatages.compactMap { secondes(depuis: $0) },
                       citation: genere.citation, responsable: genere.responsable, echeance: genere.echeance)
     }
 

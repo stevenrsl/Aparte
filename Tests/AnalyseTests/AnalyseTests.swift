@@ -43,18 +43,42 @@ private let citationMarie = "Marie envoie la musique avant vendredi."
     #expect(try #require(ValidationSources.valider(element, dans: segments)).citation != nil)
 }
 
-@Test func unTexteQuiInventeUnNomOuUneDateEstEcarte() {
-    for texte in ["Paul envoie la musique lundi", "Envoyer la musique à Paul", "Envoyer la musique lundi", "Envoyer 3 morceaux"] {
-        let element = ElementSource(texte: texte, sources: [21], citation: citationMarie)
-        #expect(ValidationSources.valider(element, dans: segments) == nil, "\(texte)")
-    }
+@Test func uneReformulationFausseNEstJamaisRendue() throws {
+    let element = ElementSource(texte: "On ne valide pas la version longue.", sources: [11], citation: "On valide la version longue.")
+    #expect(try #require(ValidationSources.valider(element, dans: segments)).texte == "On valide la version longue.")
 }
 
-@Test func unTexteFideleEstGarde() {
-    for texte in ["Marie envoie la musique avant vendredi", "Envoyer la musique"] {
-        let element = ElementSource(texte: texte, sources: [21], citation: citationMarie)
-        #expect(ValidationSources.valider(element, dans: segments) != nil, "\(texte)")
-    }
+@Test func uneCitationTronqueeRendLaPhraseEntiere() throws {
+    let negation = [Segment(debut: 10, fin: 14, piste: .micro, texte: "On ne valide pas la version longue. Autre sujet.")]
+    let element = ElementSource(texte: "Validé", sources: [11], citation: "valide pas la version longue")
+    let valide = try #require(ValidationSources.valider(element, dans: negation))
+    #expect(valide.texte == "On ne valide pas la version longue.")
+    #expect(valide.citation == valide.texte)
+}
+
+@Test func uneSourceSansLaCitationEstRetiree() throws {
+    let element = ElementSource(texte: "Décision", sources: [11, 21], citation: "On valide la version longue.")
+    #expect(try #require(ValidationSources.valider(element, dans: segments)).sources == [11])
+}
+
+@Test func unResponsableDitAilleursQueDansLaPhraseEstRetire() throws {
+    let voisins = [Segment(debut: 10, fin: 12, piste: .micro, texte: "Paul est en retard."),
+                   Segment(debut: 12, fin: 14, piste: .micro, texte: "On envoie la musique lundi.")]
+    let element = ElementSource(texte: "Envoyer", sources: [13], citation: "On envoie la musique lundi.", responsable: "Paul", echeance: "lundi")
+    let valide = try #require(ValidationSources.valider(element, dans: voisins))
+    #expect(valide.responsable == nil)
+    #expect(valide.echeance == "lundi")
+}
+
+@Test func uneAnalyseEnregistreeRepasseLaValidation() {
+    let ancienne = CompteRendu(fournisseur: "Test", decisions: [
+        ElementSource(texte: "On ne valide pas.", sources: [11], citation: "On valide la version longue."),
+        ElementSource(texte: "Sans preuve", sources: [11], citation: "On annule tout."),
+    ], actions: [], questions: [])
+    let relue = ancienne.revalide(dans: segments)
+    #expect(relue.decisions.map(\.texte) == ["On valide la version longue."])
+    #expect(relue.decisions.first?.id == ancienne.decisions.first?.id)
+    #expect(relue.elementsEcartes == 1)
 }
 
 @Test func unResponsableOuUneEcheanceNonDitsSontRetires() throws {

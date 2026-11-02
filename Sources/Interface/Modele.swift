@@ -87,7 +87,7 @@ public final class ModeleApp {
         guard let data = reunion.analyseJSON() else { return nil }
         let decodeur = JSONDecoder()
         decodeur.dateDecodingStrategy = .iso8601
-        return try? decodeur.decode(CompteRendu.self, from: data)
+        return (try? decodeur.decode(CompteRendu.self, from: data))?.revalide(dans: reunion.segments())
     }
 
     func resumeEnregistre(de reunion: Reunion) -> CompteRendu? { compteRendus[reunion.id] }
