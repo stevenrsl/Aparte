@@ -37,6 +37,8 @@ public final class ModeleApp {
     public private(set) var relectures: [String: Double] = [:]
     /// Les réunions en cours d'analyse, avec leur avancée.
     public private(set) var analyses: [String: Double] = [:]
+    /// Une clé Mistral est dans le trousseau. Elle-même n'est lue qu'au moment d'envoyer.
+    public private(set) var cleMistralPresente = Trousseau.mistral.lire() != nil
     @ObservationIgnored private var compteRendus: [String: CompteRendu] = [:]
     @ObservationIgnored private var faites: [String: Set<UUID>] = [:]
     @ObservationIgnored private var echecsSignales: Set<String> = []
@@ -193,14 +195,14 @@ public final class ModeleApp {
             actualiser(reunion)
             // Le compte rendu est prêt sans clic, mais seulement sur ce Mac : rien ne part jamais tout seul.
             if let relue = reunions.first(where: { $0.id == reunion.id }), compteRendu(de: relue) == nil {
-                analyser(relue, avec: .local, signaler: false)
+                analyser(relue, avec: AnalysteApple.local, signaler: false)
             }
         }
     }
 
     /// Analyse une réunion. `signaler` : une analyse lancée sans clic n'interrompt pas pour dire
     /// qu'Apple Intelligence n'est pas disponible, le bouton reste là.
-    public func analyser(_ reunion: Reunion, avec analyste: AnalysteApple, signaler: Bool = true) {
+    public func analyser(_ reunion: Reunion, avec analyste: any Analyste, signaler: Bool = true) {
         guard analyses[reunion.id] == nil, relectures[reunion.id] == nil else { return }
         // Le modèle lit les noms donnés aux voix. Les temps et les mots ne changent pas.
         var segments = reunion.segments()
@@ -221,6 +223,35 @@ public final class ModeleApp {
             analyses[reunion.id] = nil
             actualiser(reunion)
         }
+    }
+
+    /// Envoie cette réunion à Mistral. Seul un clic de Steven, confirmé, arrive ici (règle 2).
+    public func analyserAvecMistral(_ reunion: Reunion) {
+        guard let cle = Trousseau.mistral.lire() else { return }
+        analyser(reunion, avec: AnalysteMistral(cle: cle))
+    }
+
+    public func enregistrerCleMistral(_ cle: String?) {
+        if !Trousseau.mistral.ecrire(cle) { erreur = "La clé n'a pas pu être rangée dans le trousseau." }
+        cleMistralPresente = Trousseau.mistral.lire() != nil
+    }
+
+    /// Copie la clé que Cairn a rangée, sur le clic de Steven. macOS peut demander son autorisation, et
+    /// la clé de Cairn reste en place. Vrai si une clé a été reprise.
+    @discardableResult
+    public func reprendreCleDeCairn(depuis source: Trousseau = .mistralDeCairn, vers cible: Trousseau = .mistral) -> Bool {
+        guard let cle = source.lire() else { return false }
+        guard cible.ecrire(cle) else {
+            erreur = "La clé n'a pas pu être rangée dans le trousseau."
+            return false
+        }
+        cleMistralPresente = Trousseau.mistral.lire() != nil
+        return true
+    }
+
+    /// Le nombre de réunions déjà envoyées à un service hors du Mac.
+    public var reunionsEnvoyees: Int {
+        reunions.filter { $0.meta.fournisseurs.contains { !$0.hasPrefix("Local") } }.count
     }
 
     /// Une réunion qui a touché plusieurs dossiers : chacun reçoit un extrait avec ses sujets, leurs

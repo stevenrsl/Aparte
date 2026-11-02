@@ -726,6 +726,7 @@ struct EcranCompteRendu: View {
     @State private var notes: [LigneDeNote] = []
     @State private var selection: ElementSource?
     @State private var confirmerPCC = false
+    @State private var confirmerMistral = false
     @State private var lecteur = Lecteur()
     @State private var copie = false
 
@@ -808,6 +809,7 @@ struct EcranCompteRendu: View {
             boutonAnalyser("Analyser sur ce Mac", style: BoutonPrincipal())
             Libelle("rien ne quitte ce mac pour cette analyse")
             boutonPCC
+            boutonMistral
             incidentsAudio
         }
     }
@@ -816,10 +818,24 @@ struct EcranCompteRendu: View {
 
     private func boutonAnalyser<Style: ButtonStyle>(_ titre: String, style: Style) -> some View {
         Button(modele.analyses[reunion.id].map { "Analyse en cours · \(Int($0 * 100)) %" } ?? titre) {
-            modele.analyser(reunion, avec: .local)
+            modele.analyser(reunion, avec: AnalysteApple.local)
         }
         .buttonStyle(style)
         .disabled(occupee || segments.isEmpty)
+    }
+
+    /// Mistral : un envoi hors du Mac, confirmé à chaque fois, pour cette réunion seule (règle 2).
+    private var boutonMistral: some View {
+        Button("Analyser avec Mistral…") { confirmerMistral = true }
+            .buttonStyle(BoutonSecondaire())
+            .disabled(occupee || segments.isEmpty || !modele.cleMistralPresente)
+            .help(modele.cleMistralPresente ? "" : "Ajoute ta clé Mistral dans les réglages.")
+            .alert("Envoyer cette réunion à Mistral ?", isPresented: $confirmerMistral) {
+                Button("Envoyer cette réunion") { modele.analyserAvecMistral(reunion) }
+                Button("Annuler", role: .cancel) {}
+            } message: {
+                Text("La transcription et tes notes partent chez Mistral pour cette analyse. L'audio reste sur ce Mac.")
+            }
     }
 
     /// PCC : un envoi hors du Mac, donc une confirmation à chaque fois, pour cette réunion seule (règle 2).
@@ -829,7 +845,7 @@ struct EcranCompteRendu: View {
             .disabled(occupee || segments.isEmpty || !AnalysteApple.pccAutorise)
             .help(AnalysteApple.pccAutorise ? "" : "Apple doit d'abord autoriser Aparté à utiliser Private Cloud Compute.")
             .alert("Envoyer cette réunion à Private Cloud Compute ?", isPresented: $confirmerPCC) {
-                Button("Envoyer cette réunion") { modele.analyser(reunion, avec: .pcc) }
+                Button("Envoyer cette réunion") { modele.analyser(reunion, avec: AnalysteApple.pcc) }
                 Button("Annuler", role: .cancel) {}
             } message: {
                 Text("La transcription et tes notes partent chez Apple pour cette analyse. L'audio reste sur ce Mac.")
@@ -883,6 +899,7 @@ struct EcranCompteRendu: View {
             .buttonStyle(BoutonPrincipal())
             boutonAnalyser("Relancer l'analyse", style: BoutonSecondaire())
             boutonPCC
+            boutonMistral
         }
         if compteRendu.passagesNonAnalyses > 0 || compteRendu.elementsEcartes > 0 {
             Libelle("\(accord(compteRendu.passagesNonAnalyses, "passage non analysé", "passages non analysés")) · \(accord(compteRendu.elementsEcartes, "élément écarté", "éléments écartés")) faute de source")
@@ -1140,6 +1157,19 @@ struct EcranDossier: View {
 
 struct EcranReglages: View {
     @Bindable var modele: ModeleApp
+    @State private var cle = ""
+    @State private var enTest = false
+    @State private var resultatTest: String?
+
+    /// Un seul mot part, aucune réunion.
+    private func tester() {
+        guard let cle = Trousseau.mistral.lire() else { return }
+        enTest = true
+        Task {
+            resultatTest = await AnalysteMistral(cle: cle).tester()
+            enTest = false
+        }
+    }
 
     var body: some View {
         Colonnes {
@@ -1150,7 +1180,43 @@ struct EcranReglages: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Libelle("analyste par défaut")
                     Text("Local · Apple Intelligence")
-                    Text("PCC et un fournisseur externe ne sont pas encore branchés.").foregroundStyle(Color.encreDouce)
+                    Text("Une réunion ne part chez Private Cloud Compute ou Mistral que si tu le demandes, une par une.").foregroundStyle(Color.encreDouce)
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    Libelle("clé mistral")
+                    Text(modele.cleMistralPresente ? "Une clé est rangée dans le trousseau." : "Aucune clé pour l'instant.")
+                        .foregroundStyle(Color.encreDouce)
+                    SecureField("Colle ta clé d'API", text: $cle)
+                        .textFieldStyle(.plain)
+                        .padding(6)
+                        .background(Color.surface)
+                        .accessibilityLabel("Clé d'API Mistral")
+                    HStack(spacing: 10) {
+                        if !modele.cleMistralPresente {
+                            Button("Reprendre la clé de Cairn") {
+                                let reprise = modele.reprendreCleDeCairn()
+                                resultatTest = reprise ? "La clé de Cairn est reprise. Tu peux la tester." : "Aucune clé de Cairn n'a pu être lue."
+                            }
+                            .buttonStyle(BoutonSecondaire())
+                        }
+                        Button("Enregistrer la clé") {
+                            modele.enregistrerCleMistral(cle)
+                            cle = ""
+                            resultatTest = nil
+                        }
+                        .buttonStyle(BoutonPrincipal())
+                        .disabled(cle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        Button(enTest ? "Test en cours…" : "Tester la clé") { tester() }
+                            .buttonStyle(BoutonSecondaire())
+                            .disabled(enTest || !modele.cleMistralPresente)
+                        Button("Retirer la clé") {
+                            modele.enregistrerCleMistral(nil)
+                            resultatTest = nil
+                        }
+                        .buttonStyle(BoutonSecondaire())
+                        .disabled(!modele.cleMistralPresente)
+                    }
+                    if let resultatTest { Text(resultatTest).foregroundStyle(Color.encreDouce) }
                 }
                 VStack(alignment: .leading, spacing: 8) {
                     Libelle("emplacement des réunions")
@@ -1164,11 +1230,12 @@ struct EcranReglages: View {
         } enteteEncre: {
             Libelle("ce qui quitte le mac", surColonne: true)
             Spacer(minLength: 0)
-            Text("0").font(Typo.grandChiffre)
+            Text("\(modele.reunionsEnvoyees)").font(Typo.grandChiffre)
+                .accessibilityLabel("\(accord(modele.reunionsEnvoyees, "réunion envoyée", "réunions envoyées")) hors du Mac")
         } contenuEncre: {
             VStack(alignment: .leading, spacing: 14) {
                 Text("L'audio : jamais.")
-                Text("La transcription : aujourd'hui, jamais. Plus tard, seulement si tu lances toi-même une analyse hors du Mac, pour cette réunion.")
+                Text("La transcription et tes notes : seulement si tu lances toi-même une analyse avec Private Cloud Compute ou Mistral, pour cette réunion.")
                 Text("Aucune télémétrie, aucun compte.")
             }
             .padding(.horizontal, 28)

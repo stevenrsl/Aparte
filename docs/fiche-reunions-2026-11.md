@@ -167,10 +167,11 @@ de ce qu'elle contient n'est réécrit, sauf le titre dans `meta.json`.
 - Seule la transcription et les notes partent chez un fournisseur. Jamais l'audio.
 - L'analyse affiche le fournisseur qui l'a produite.
 
+**Décidé par Steven le 2 novembre 2026 :** le fournisseur externe de la v1 est Mistral. Faute de package pour le
+protocole `LanguageModel`, un client HTTP, d'après celui de Cairn. Le modèle y choisit des numéros de
+lignes, comme en local : le texte rendu reste celui de la transcription.
+
 **À Steven :**
-- Quel fournisseur externe en v1. Recommandation : un seul pour commencer, celui qu'il utilise
-  déjà. Mistral est une option à considérer pour des clients européens, puisque les données
-  restent chez un acteur européen.
 - Le fournisseur par défaut quand on clique « Analyser ». Recommandation : local, toujours, avec
   un menu pour en choisir un autre.
 
@@ -209,7 +210,6 @@ Prévus après la v1, dans cet ordre, et dessinés sur le canvas (sauf la détec
 
 ## Les questions encore ouvertes
 
-- Le fournisseur externe de la v1 (chantier 5).
 - La détection de réunion, à décider après le jalon de l'étape 2.
 
 ## L'ordre

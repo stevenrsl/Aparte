@@ -419,7 +419,7 @@ public struct AnalysteApple: Analyste {
         }
     }
 
-    private func invite(_ lignes: [Ligne], notes: [LigneDeNote], type: TypeReunion) -> String {
+    static func invite(_ lignes: [Ligne], notes: [LigneDeNote], type: TypeReunion) -> String {
         func qui(_ ligne: Ligne) -> String {
             if let voix = ligne.voix { return "\(voix) : " }
             guard type == .visio else { return "" }
@@ -438,7 +438,7 @@ public struct AnalysteApple: Analyste {
         return texte
     }
 
-    private func element(_ numero: Int, dans lignes: [Ligne], responsable: String? = nil, echeance: String? = nil) -> ElementSource? {
+    static func element(_ numero: Int, dans lignes: [Ligne], responsable: String? = nil, echeance: String? = nil) -> ElementSource? {
         guard lignes.indices.contains(numero - 1) else { return nil }
         let ligne = lignes[numero - 1]
         return ElementSource(texte: ligne.phrase, sources: [ligne.debut], citation: ligne.phrase, responsable: responsable, echeance: echeance)
@@ -446,7 +446,7 @@ public struct AnalysteApple: Analyste {
 
     private func analyserPassage(_ passage: [Segment], notes: [LigneDeNote], type: TypeReunion) async throws -> PassageChoisi {
         let lignes = Self.lignes(de: passage)
-        let texte = invite(lignes, notes: notes, type: type)
+        let texte = Self.invite(lignes, notes: notes, type: type)
         // Sans tirage au hasard : la même réunion donne le même compte rendu.
         let options = GenerationOptions(sampling: .greedy)
         do {
@@ -464,17 +464,17 @@ public struct AnalysteApple: Analyste {
             var choisi = PassageChoisi(decisions: [], actions: [], questions: [])
             for numero in decisions where parlante(numero) {
                 if await confirmer(numero, dans: lignes, consigne: Self.consigneDecisions, options: options) {
-                    choisi.decisions.append(element(numero, dans: lignes))
+                    choisi.decisions.append(Self.element(numero, dans: lignes))
                 }
             }
             for action in actions where parlante(action.ligne) {
                 if await confirmer(action.ligne, dans: lignes, consigne: Self.consigneActions, options: options) {
-                    choisi.actions.append(element(action.ligne, dans: lignes, responsable: action.responsable, echeance: action.echeance))
+                    choisi.actions.append(Self.element(action.ligne, dans: lignes, responsable: action.responsable, echeance: action.echeance))
                 }
             }
             for numero in questions where parlante(numero) {
                 if await confirmer(numero, dans: lignes, consigne: Self.consigneQuestions, options: options) {
-                    choisi.questions.append(element(numero, dans: lignes))
+                    choisi.questions.append(Self.element(numero, dans: lignes))
                 }
             }
             // Sans sujets, le compte rendu reste utile : un refus ici ne fait pas tomber le passage.
