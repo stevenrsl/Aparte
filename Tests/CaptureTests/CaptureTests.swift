@@ -11,6 +11,7 @@ import Testing
     let format = try #require(AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 48_000, channels: 1, interleaved: false))
     let tampon = try #require(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 48_000))
     tampon.frameLength = 48_000
+    tampon.floatChannelData?[0].initialize(repeating: 0, count: 48_000)
     do {
         let fichier = try Recording.open(aac, sampleRate: 48_000)
         try fichier.write(from: tampon)
@@ -49,9 +50,13 @@ private final class Erreurs: @unchecked Sendable {
     let format = try #require(AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 48_000, channels: 1, interleaved: false))
     let tampon = try #require(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 4_800))
     tampon.frameLength = 4_800
+    tampon.floatChannelData?[0].initialize(repeating: 0, count: 4_800)
     let source = SourceDeTest()
     let erreurs = Erreurs()
-    let impossible = URL(fileURLWithPath: "/dossier-qui-n-existe-pas-\(UUID().uuidString)/micro.aac")
+    let dossier = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: dossier, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: dossier) }
+    let impossible = dossier.appendingPathComponent("absent/micro.aac")
     let piste = PisteAudio(source: source, fichier: impossible, formatCible: format,
                            surConverti: { _ in }, surNiveau: { _ in }, surPremierSon: { _ in },
                            surErreur: { _ in erreurs.ajouter() })

@@ -25,6 +25,94 @@ private func ecrire(_ url: URL, secondes: Int = 6) throws {
     for _ in 0..<secondes { try fichier.write(from: tampon) }
 }
 
+private func commande(_ executable: String, _ arguments: [String]) throws {
+    let processus = Process()
+    processus.executableURL = URL(fileURLWithPath: executable)
+    processus.arguments = arguments
+    try processus.run()
+    processus.waitUntilExit()
+    try #require(processus.terminationStatus == 0)
+}
+
+private func producteur(dans dossier: URL, disquePlein: Bool) throws -> Process {
+    let repo = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+    let support = repo.appendingPathComponent("Tests/Support/Pannes")
+    let binaire = dossier.appendingPathComponent("producteur")
+    try commande("/usr/bin/xcrun", ["swiftc", "-swift-version", "5", "-module-cache-path", dossier.appendingPathComponent("cache").path,
+        repo.appendingPathComponent("Sources/Capture/Recording.swift").path,
+        repo.appendingPathComponent("Sources/Capture/Capture.swift").path,
+        repo.appendingPathComponent("Sources/Capture/AudioBuffers.swift").path,
+        support.appendingPathComponent("main.swift").path, "-o", binaire.path])
+    let processus = Process()
+    processus.executableURL = binaire
+    processus.arguments = [dossier.path]
+    var environnement = ProcessInfo.processInfo.environment
+    environnement.removeValue(forKey: "APARTE_AUDIO_REFERENCE")
+    environnement.removeValue(forKey: "DYLD_INSERT_LIBRARIES")
+    if disquePlein {
+        let dylib = dossier.appendingPathComponent("plein.dylib")
+        try commande("/usr/bin/xcrun", ["clang", "-dynamiclib", "-framework", "AudioToolbox", support.appendingPathComponent("disque-plein.c").path, "-o", dylib.path])
+        environnement["DYLD_INSERT_LIBRARIES"] = dylib.path
+        environnement["APARTE_PANNE_PLEIN"] = dossier.appendingPathComponent("plein").path
+    }
+    processus.environment = environnement
+    try processus.run()
+    return processus
+}
+
+private func nettoyer(_ processus: Process) {
+    if processus.isRunning { _ = kill(processus.processIdentifier, SIGKILL) }
+    processus.waitUntilExit()
+}
+
+private func attendre(_ fichier: URL, processus: Process) throws {
+    let limite = Date().addingTimeInterval(15)
+    while !FileManager.default.fileExists(atPath: fichier.path), processus.isRunning, Date() < limite {
+        Thread.sleep(forTimeInterval: 0.01)
+    }
+    try #require(FileManager.default.fileExists(atPath: fichier.path))
+}
+
+@Test func panneKill9PendantEcriture() throws {
+    let dossier = try temporaire()
+    defer { try? FileManager.default.removeItem(at: dossier) }
+    let processus = try producteur(dans: dossier, disquePlein: false)
+    defer { nettoyer(processus) }
+    try attendre(dossier.appendingPathComponent("pret"), processus: processus)
+    let aac = dossier.appendingPathComponent("micro.aac")
+    try #require(try Data(contentsOf: aac).count > 0)
+    try #require(processus.isRunning)
+    try #require(kill(processus.processIdentifier, SIGKILL) == 0)
+    processus.waitUntilExit()
+    #expect(processus.terminationReason == .uncaughtSignal)
+    #expect(processus.terminationStatus == SIGKILL)
+    let avant = try #require(Recording.seconds(of: aac))
+    let m4a = dossier.appendingPathComponent("micro.m4a")
+    try Recording.remux(aac, to: m4a)
+    let apres = try #require(Recording.seconds(of: m4a))
+    #expect(apres > 8 && abs(apres - avant) < 0.5)
+}
+
+@Test func panneDisquePleinPendantEcriture() throws {
+    let dossier = try temporaire()
+    defer { try? FileManager.default.removeItem(at: dossier) }
+    let processus = try producteur(dans: dossier, disquePlein: true)
+    defer { nettoyer(processus) }
+    try attendre(dossier.appendingPathComponent("pret"), processus: processus)
+    let aac = dossier.appendingPathComponent("micro.aac")
+    let avant = try Data(contentsOf: aac)
+    try #require(!avant.isEmpty)
+    try Data().write(to: dossier.appendingPathComponent("plein"))
+    try attendre(dossier.appendingPathComponent("erreurs"), processus: processus)
+    processus.waitUntilExit()
+    #expect(processus.terminationStatus == 0)
+    #expect(try String(contentsOf: dossier.appendingPathComponent("erreurs"), encoding: .utf8) == "1")
+    #expect(try Data(contentsOf: aac).starts(with: avant))
+    let m4a = dossier.appendingPathComponent("micro.m4a")
+    try Recording.remux(aac, to: m4a)
+    #expect(try #require(Recording.seconds(of: m4a)) > 8)
+}
+
 @Test func panneAACTronqueAuMilieuDUneTrame() throws {
     let dossier = try temporaire()
     defer { try? FileManager.default.removeItem(at: dossier) }
