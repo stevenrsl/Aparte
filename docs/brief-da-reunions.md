@@ -1,4 +1,4 @@
-# Brief DA : l'outil de réunions
+# Brief DA : Aparté, l'outil de réunions
 
 Rédigé le 2 novembre 2026. À lire avec la [fiche de travail](fiche-reunions-2026-11.md) avant toute
 session qui touche à l'interface. La référence visuelle est la rangée « Définitive » du canvas
@@ -136,8 +136,13 @@ Il rend l'interface organique. Il doit se sentir, pas se voir.
 - **Case à cocher** : carré de 14 pt, bordure 2 pt.
 - **Boutons** : principal en aplat `encre`, texte crème ; signal en aplat `argile`, texte encre, sur
   la colonne encre uniquement ; secondaire en bordure 1 pt, fond transparent. Carrés, sans ombre.
-- **Logo provisoire** : carré de 2 × 2 pixels (encre, terracotta, argile, encre) suivi du nom en
-  New York.
+- **Logo provisoire** : carré de 2 × 2 pixels (encre, terracotta, argile, encre) suivi du nom,
+  « Aparté », en New York.
+- **Alerte de réunion détectée** (seulement si la détection est retenue, voir la fiche) : un bandeau
+  carré sur fond `encre`, sans ombre, fermé par un filet `colonne-filet`. Libellé
+  « // réunion détectée », la phrase « Zoom utilise le micro », un bouton signal « Démarrer
+  l'enregistrement » et de quoi fermer. Jamais de pastille ronde ni de rouge. Pas encore dessinée
+  sur le canvas.
 
 ## Les écrans
 
@@ -145,17 +150,19 @@ Il rend l'interface organique. Il doit se sentir, pas se voir.
    de décisions et d'actions). Colonne encre : démarrage rapide (Visio ou Présentiel, ⌘N) et
    « À faire suite aux réunions », chaque action renvoyant au moment où elle a été dite. C'est une
    liste à cocher, pas un gestionnaire de tâches.
-2. **Nouvelle réunion** : titre, dossier, type, micro, analyste. Colonne encre : test du micro et du
-   son du Mac, bouton « Démarrer l'enregistrement » (⌘↩). Le rappel de prévenir les participants
-   est un encadré, jamais une fenêtre de confirmation.
+2. **Nouvelle réunion** : un écran de la charpente, jamais une fenêtre par-dessus. Titre, dossier,
+   type, micro (une liste bien visible, avec les micros externes), analyste. Colonne encre : test du
+   micro et du son du Mac, chacun avec un verdict en mots sous ses niveaux (« Le micro t'entend
+   bien. »), puis `// l'audio ne quitte jamais ce Mac` juste au-dessus du bouton « Démarrer
+   l'enregistrement » (⌘↩). Cette dernière ligne n'est pas encore sur le canvas. Le rappel de
+   prévenir les participants est un encadré, jamais une fenêtre de confirmation.
 3. **En réunion** : mes notes horodatées à gauche ; chrono, niveaux et transcription en bulles à
    droite.
 4. **Compte rendu** : résumé, décisions, actions, question ouverte, chacune avec sa puce de source.
    Colonne encre : écoute du passage source, l'échange en bulles, ma note à ce moment.
 5. **Dossier** : le fil chronologique des réunions du dossier, les dernières décisions avec leur
    source, le nombre d'actions ouvertes. **Un dossier n'est qu'un dossier sur le disque** : pas de
-   statut, pas d'échéance, rien à gérer. (La fiche de travail est à mettre à jour sur ce point :
-   elle ne prévoyait pas de dossiers.)
+   statut, pas d'échéance, rien à gérer.
 6. **Réglages** : analyste par défaut, micro, emplacement des réunions. Colonne encre : ce qui
    quitte le Mac, en clair (l'audio jamais, la transcription seulement sur choix, aucune
    télémétrie).
@@ -169,6 +176,6 @@ Il rend l'interface organique. Il doit se sentir, pas se voir.
 
 ## À Steven
 
-- **Le nom de l'app** et donc le vrai logo. Le carré de pixels est provisoire.
-- **L'icône de l'app** : à dessiner une fois le nom choisi, dans la même palette.
+- **Le vrai logo.** Le nom est choisi, Aparté, mais le carré de pixels reste provisoire.
+- **L'icône de l'app** : à dessiner dans la même palette.
 - **L'intensité du grain** : 16 % est un point de départ, à juger sur son écran réel.
