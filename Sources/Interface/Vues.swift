@@ -190,6 +190,10 @@ struct TitreEcran: View {
 
 // MARK: - Les petits composants
 
+func accord(_ nombre: Int, _ singulier: String, _ pluriel: String? = nil) -> String {
+    "\(nombre) \(nombre > 1 ? (pluriel ?? singulier + "s") : singulier)"
+}
+
 struct PuceSource: View {
     let temps: Double
     var active = false
@@ -332,7 +336,7 @@ struct LigneReunion: View {
                             .background(Color.surface)
                     }
                     if let compteRendu {
-                        Text("\(compteRendu.decisions.count) décisions · \(compteRendu.actions.count) actions")
+                        Text("\(accord(compteRendu.decisions.count, "décision")) · \(accord(compteRendu.actions.count, "action"))")
                             .font(Typo.horodatage)
                             .foregroundStyle(Color.encreDouce)
                     }
@@ -788,7 +792,7 @@ struct EcranCompteRendu: View {
             boutonAnalyser("Relancer l'analyse", style: BoutonSecondaire())
         }
         if compteRendu.passagesNonAnalyses > 0 || compteRendu.elementsEcartes > 0 {
-            Libelle("\(compteRendu.passagesNonAnalyses) passages non analysés · \(compteRendu.elementsEcartes) éléments écartés faute de source")
+            Libelle("\(accord(compteRendu.passagesNonAnalyses, "passage non analysé", "passages non analysés")) · \(accord(compteRendu.elementsEcartes, "élément écarté", "éléments écartés")) faute de source")
         }
         section("décisions", compteRendu.decisions)
         section("actions", compteRendu.actions)
@@ -848,7 +852,7 @@ struct EcranDossier: View {
 
     var body: some View {
         Colonnes {
-            Libelle("dossier · \(reunions.count) réunions")
+            Libelle("dossier · \(accord(reunions.count, "réunion"))")
             TitreEcran(debut: nom, fin: "")
         } contenu: {
             ScrollView {
