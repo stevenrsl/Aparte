@@ -39,3 +39,14 @@ private let segments = [
     #expect(valide.responsable == "Marie")
     #expect(valide.echeance == "vendredi")
 }
+
+/// Analyse le fichier de APARTE_AUDIO_REFERENCE. N'affiche que des nombres, jamais le contenu de la réunion.
+@Test(.enabled(if: ProcessInfo.processInfo.environment["APARTE_AUDIO_REFERENCE"] != nil))
+func analyseLeFichierDeReference() async throws {
+    let chemin = try #require(ProcessInfo.processInfo.environment["APARTE_AUDIO_REFERENCE"])
+    let segments = try await TranscripteurFichier.transcrire(url: URL(fileURLWithPath: chemin), piste: .micro)
+    let compteRendu = try await AnalysteLocal().analyser(segments: segments, notes: [], type: .presentiel, progression: { _ in })
+    let elements = compteRendu.decisions + compteRendu.actions + compteRendu.questions
+    #expect(elements.allSatisfy { ValidationSources.valider($0, dans: segments) != nil })
+    print("resume: \(compteRendu.resume.count) car., decisions: \(compteRendu.decisions.count), actions: \(compteRendu.actions.count), questions: \(compteRendu.questions.count), ecartes: \(compteRendu.elementsEcartes), passages non analyses: \(compteRendu.passagesNonAnalyses)")
+}
