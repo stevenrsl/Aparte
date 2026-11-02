@@ -161,6 +161,8 @@ struct EntreeLaterale: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(active ? .isSelected : [])
+        .accessibilityValue(enCours ? "enregistrement en cours" : "")
     }
 }
 
@@ -229,7 +231,14 @@ struct PuceSource: View {
             .padding(.vertical, 3)
             .background(active ? Color.argile : Color.surface)
             .foregroundStyle(active ? Color.encreColonne : Color.encre)
+            .accessibilityLabel("Écouter à \(tempsParle(temps))")
     }
+}
+
+/// « 12 minutes 3 secondes », là où VoiceOver lirait mal « 12:03 ».
+func tempsParle(_ secondes: Double) -> String {
+    let total = Int(secondes)
+    return "\(total / 60) minutes \(total % 60) secondes"
 }
 
 struct Niveaux: View {
@@ -263,6 +272,8 @@ struct Chrono: View {
                 .font(Typo.chrono)
                 .monospacedDigit()
                 .foregroundStyle(session.debut == nil ? Color.chronoRepos : Color.colonneTexte)
+                .accessibilityLabel("Temps écoulé")
+                .accessibilityValue(tempsParle(session.temps))
         }
     }
 }
@@ -686,6 +697,10 @@ struct EcranEnReunion: View {
                         .padding(10)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(Color.argile)
+                        .onChange(of: alerte, initial: true) { _, texte in
+                            // Une alerte peut arriver écran caché ou yeux ailleurs : VoiceOver la lit aussitôt.
+                            AccessibilityNotification.Announcement(texte).post()
+                        }
                 }
                 Bulles(segments: session.segments, provisoires: session.provisoires, type: session.reunion.meta.type, suivre: true)
             }
@@ -865,6 +880,11 @@ struct EcranCompteRendu: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(([element.texte] + [element.responsable, element.echeance].compactMap { $0 }
+                        + element.sources.map { "à \(tempsParle($0))" }).joined(separator: ", "))
+                    .accessibilityHint("Affiche le passage de la transcription")
+                    .accessibilityAddTraits(choisi ? [.isSelected, .isButton] : .isButton)
                 }
             }
         }
