@@ -750,6 +750,7 @@ struct EcranCompteRendu: View {
                 .foregroundStyle(Color.encreDouce)
             boutonAnalyser("Analyser sur ce Mac", style: BoutonPrincipal())
             Libelle("rien ne quitte ce mac pour cette analyse")
+            incidentsAudio
         }
     }
 
@@ -779,6 +780,13 @@ struct EcranCompteRendu: View {
         }
     }
 
+    /// Il manque un moment de la réunion : le compte rendu le dit, y compris après une relance.
+    @ViewBuilder private var incidentsAudio: some View {
+        if let incidents = reunion.meta.incidentsAudio, !incidents.isEmpty {
+            Libelle("audio incomplet : " + incidents.map(\.description).joined(separator: " · "))
+        }
+    }
+
     @ViewBuilder private func analyse(_ compteRendu: CompteRendu) -> some View {
         HStack(alignment: .top, spacing: 14) {
             Color.terracotta.frame(width: 3)
@@ -797,6 +805,7 @@ struct EcranCompteRendu: View {
         if compteRendu.passagesNonAnalyses > 0 || compteRendu.elementsEcartes > 0 {
             Libelle("\(accord(compteRendu.passagesNonAnalyses, "passage non analysé", "passages non analysés")) · \(accord(compteRendu.elementsEcartes, "élément écarté", "éléments écartés")) faute de source")
         }
+        incidentsAudio
         section("décisions", compteRendu.decisions)
         section("actions", compteRendu.actions)
         section("questions ouvertes", compteRendu.questions)
