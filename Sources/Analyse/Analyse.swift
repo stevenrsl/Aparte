@@ -1,5 +1,6 @@
 import Foundation
 import FoundationModels
+import NaturalLanguage
 import Stockage
 import Transcription
 
@@ -81,30 +82,74 @@ public enum ValidationSources {
         segments.filter { temps >= $0.debut - marge && temps <= $0.fin + marge }
     }
 
-    /// L'élément si ses sources tiennent, sinon nil. Un responsable ou une échéance
-    /// qui n'ont pas été dits dans les passages sources sont retirés.
+    /// Les mots de temps dont on vérifie qu'ils ont été dits.
+    private static let motsDeTemps: Set<String> = [
+        "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche",
+        "janvier", "fevrier", "mars", "avril", "mai", "juin", "juillet", "aout", "septembre", "octobre", "novembre", "decembre",
+        "demain", "hier", "matin", "soir", "midi", "semaine", "mois", "annee",
+    ]
+
+    /// Les noms que le système reconnaît dans le texte, en mots normalisés.
+    private static func noms(dans texte: String) -> [String] {
+        let tagger = NLTagger(tagSchemes: [.nameType])
+        tagger.string = texte
+        tagger.setLanguage(.french, range: texte.startIndex..<texte.endIndex)
+        var trouves: [String] = []
+        tagger.enumerateTags(in: texte.startIndex..<texte.endIndex, unit: .word, scheme: .nameType,
+                             options: [.omitWhitespace, .omitPunctuation, .joinNames]) { tag, plage in
+            if let tag, [.personalName, .placeName, .organizationName].contains(tag) {
+                trouves += normaliser(String(texte[plage])).split(separator: " ").map(String.init)
+            }
+            return true
+        }
+        return trouves
+    }
+
+    /// Les noms, chiffres et mots de temps du texte qui ne sont pas dans les passages sources.
+    /// C'est une garde, pas une preuve : une reformulation fausse sans aucun de ces mots passerait,
+    /// d'où la citation exacte, qui permet à Steven de vérifier.
+    static func motsNonDits(texte: String, passages lu: Set<String>) -> [String] {
+        let mots = normaliser(texte).split(separator: " ").map(String.init)
+        var suspects = mots.filter { mot in
+            motsDeTemps.contains(mot) || mot.contains(where: \.isNumber)
+        }
+        suspects += noms(dans: texte)
+        // Une majuscule au milieu d'une phrase annonce un nom propre.
+        let bruts = texte.split(whereSeparator: { $0.isWhitespace })
+        for (precedent, mot) in zip(bruts, bruts.dropFirst()) where mot.first?.isUppercase == true {
+            if let dernier = precedent.last, ".!?:".contains(dernier) { continue }
+            suspects += normaliser(String(mot)).split(separator: " ").map(String.init)
+        }
+        return suspects.filter { !lu.contains($0) }
+    }
+
+    /// L'élément si ses sources le prouvent, sinon nil : la citation exacte doit se trouver dans les
+    /// passages cités, et le texte ne doit pas nommer ce qui n'y a pas été dit.
     public static func valider(_ element: ElementSource, dans segments: [Segment]) -> ElementSource? {
         let texte = element.texte.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !texte.isEmpty, !element.sources.isEmpty else { return nil }
         let passages = element.sources.map { segmentsSources(de: $0, dans: segments) }
         guard !passages.contains(where: \.isEmpty) else { return nil }
 
-        let toutLeTexte = normaliser(segments.map(\.texte).joined(separator: " "))
-        var valide = element
-        valide.texte = texte
-        if let citation = element.citation?.trimmingCharacters(in: .whitespacesAndNewlines), !citation.isEmpty {
-            guard toutLeTexte.contains(normaliser(citation)) else { return nil }
-            valide.citation = citation
-        } else {
-            valide.citation = nil
-        }
+        var vus = Set<UUID>()
+        let cites = passages.flatMap { $0 }.filter { vus.insert($0.id).inserted }.sorted { $0.debut < $1.debut }
+        let lu = normaliser(cites.map(\.texte).joined(separator: " "))
 
-        let lu = normaliser(passages.flatMap { $0 }.map(\.texte).joined(separator: " "))
+        let citation = element.citation?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let citationNormalisee = normaliser(citation)
+        guard !citationNormalisee.isEmpty, " \(lu) ".contains(" \(citationNormalisee) ") else { return nil }
+
+        let motsLus = Set(lu.split(separator: " ").map(String.init))
+        guard motsNonDits(texte: texte, passages: motsLus).isEmpty else { return nil }
+
         func dit(_ valeur: String?) -> String? {
             guard let valeur = valeur?.trimmingCharacters(in: .whitespacesAndNewlines), !valeur.isEmpty else { return nil }
             let cherche = normaliser(valeur)
-            return !cherche.isEmpty && lu.contains(cherche) ? valeur : nil
+            return !cherche.isEmpty && " \(lu) ".contains(" \(cherche) ") ? valeur : nil
         }
+        var valide = element
+        valide.texte = texte
+        valide.citation = citation
         valide.responsable = dit(element.responsable)
         valide.echeance = dit(element.echeance)
         return valide

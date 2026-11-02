@@ -8,16 +8,33 @@ private let segments = [
     Segment(debut: 20, fin: 25, piste: .systeme, texte: "Marie envoie la musique avant vendredi."),
 ]
 
+private let citationMarie = "Marie envoie la musique avant vendredi."
+
 @Test func unElementSansHorodatageEstEcarte() {
-    #expect(ValidationSources.valider(ElementSource(texte: "Décision", sources: []), dans: segments) == nil)
+    #expect(ValidationSources.valider(ElementSource(texte: "Décision", sources: [], citation: "On valide la version longue."), dans: segments) == nil)
 }
 
 @Test func unHorodatageQuiNExistePasEstEcarte() {
-    #expect(ValidationSources.valider(ElementSource(texte: "Décision", sources: [500]), dans: segments) == nil)
+    #expect(ValidationSources.valider(ElementSource(texte: "Décision", sources: [500], citation: "On valide la version longue."), dans: segments) == nil)
 }
 
 @Test func uneCitationIntrouvableEstEcartee() {
     let element = ElementSource(texte: "Décision", sources: [11], citation: "On annule tout le projet.")
+    #expect(ValidationSources.valider(element, dans: segments) == nil)
+}
+
+@Test func uneCitationVideEstEcartee() {
+    #expect(ValidationSources.valider(ElementSource(texte: "Décision", sources: [11]), dans: segments) == nil)
+    #expect(ValidationSources.valider(ElementSource(texte: "Décision", sources: [11], citation: " ... "), dans: segments) == nil)
+}
+
+@Test func uneCitationAilleursQuAuMomentCiteEstEcartee() {
+    let element = ElementSource(texte: "Envoyer la musique", sources: [11], citation: citationMarie)
+    #expect(ValidationSources.valider(element, dans: segments) == nil)
+}
+
+@Test func uneCitationDoitTomberSurDesMotsEntiers() {
+    let element = ElementSource(texte: "Décision", sources: [11], citation: "alide la version")
     #expect(ValidationSources.valider(element, dans: segments) == nil)
 }
 
@@ -26,15 +43,29 @@ private let segments = [
     #expect(try #require(ValidationSources.valider(element, dans: segments)).citation != nil)
 }
 
+@Test func unTexteQuiInventeUnNomOuUneDateEstEcarte() {
+    for texte in ["Paul envoie la musique lundi", "Envoyer la musique à Paul", "Envoyer la musique lundi", "Envoyer 3 morceaux"] {
+        let element = ElementSource(texte: texte, sources: [21], citation: citationMarie)
+        #expect(ValidationSources.valider(element, dans: segments) == nil, "\(texte)")
+    }
+}
+
+@Test func unTexteFideleEstGarde() {
+    for texte in ["Marie envoie la musique avant vendredi", "Envoyer la musique"] {
+        let element = ElementSource(texte: texte, sources: [21], citation: citationMarie)
+        #expect(ValidationSources.valider(element, dans: segments) != nil, "\(texte)")
+    }
+}
+
 @Test func unResponsableOuUneEcheanceNonDitsSontRetires() throws {
-    let element = ElementSource(texte: "Envoyer la musique", sources: [21], responsable: "Paul", echeance: "lundi")
+    let element = ElementSource(texte: "Envoyer la musique", sources: [21], citation: citationMarie, responsable: "Paul", echeance: "lundi")
     let valide = try #require(ValidationSources.valider(element, dans: segments))
     #expect(valide.responsable == nil)
     #expect(valide.echeance == nil)
 }
 
 @Test func unResponsableEtUneEcheanceDitsSontGardes() throws {
-    let element = ElementSource(texte: "Envoyer la musique", sources: [21], responsable: "Marie", echeance: "vendredi")
+    let element = ElementSource(texte: "Envoyer la musique", sources: [21], citation: citationMarie, responsable: "Marie", echeance: "vendredi")
     let valide = try #require(ValidationSources.valider(element, dans: segments))
     #expect(valide.responsable == "Marie")
     #expect(valide.echeance == "vendredi")
