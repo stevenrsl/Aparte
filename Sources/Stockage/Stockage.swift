@@ -13,6 +13,9 @@ public struct MetaReunion: Codable, Sendable, Hashable {
     public var type: TypeReunion
     public var participants: [String]
     public var fournisseurs: [String]
+    /// Le temps, depuis le début de la réunion, où chaque piste a commencé à écrire son son.
+    /// Absent des réunions enregistrées avant que ce décalage soit mesuré.
+    public var decalages: [String: Double]?
 
     public init(titre: String, date: Date, type: TypeReunion) {
         self.titre = titre
@@ -35,6 +38,12 @@ public struct LigneDeNote: Identifiable, Sendable, Hashable {
         self.temps = temps
         self.texte = texte
     }
+}
+
+/// Où lire une piste pour un moment de la réunion : sa position, et l'attente si elle n'avait pas encore commencé.
+public func positionDeLecture(temps: Double, decalage: Double) -> (position: Double, attente: Double) {
+    let position = temps - decalage
+    return position >= 0 ? (position, 0) : (0, -position)
 }
 
 public func horodatage(_ secondes: Double) -> String {
@@ -83,6 +92,10 @@ public struct Reunion: Identifiable, Sendable, Hashable {
     private var metaURL: URL { url.appendingPathComponent("meta.json") }
     private var transcriptionURL: URL { url.appendingPathComponent("transcription.json") }
     private var notesURL: URL { url.appendingPathComponent("notes.md") }
+
+    public func decalage(_ piste: Piste) -> Double {
+        meta.decalages?[piste.rawValue] ?? 0
+    }
 
     public func enregistrerMeta() throws {
         try Bibliotheque.encodeur.encode(meta).write(to: metaURL, options: .atomic)

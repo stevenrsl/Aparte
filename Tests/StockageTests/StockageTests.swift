@@ -42,3 +42,29 @@ private func racineTemporaire() throws -> URL {
     let archives = try FileManager.default.contentsOfDirectory(atPath: reunion.url.appendingPathComponent("analyses").path)
     #expect(archives.count == 2)
 }
+
+@Test func uneAncienneReunionSansDecalageSeRelit() throws {
+    let racine = try racineTemporaire()
+    defer { try? FileManager.default.removeItem(at: racine) }
+    let dossier = racine.appendingPathComponent("2026-11-02 Ancienne")
+    try FileManager.default.createDirectory(at: dossier, withIntermediateDirectories: true)
+    let ancienne = #"{"titre":"Ancienne","date":"2026-11-02T13:08:00Z","duree":10,"type":"visio","participants":[],"fournisseurs":[]}"#
+    try Data(ancienne.utf8).write(to: dossier.appendingPathComponent("meta.json"))
+    let relue = try #require(Bibliotheque(racine: racine).reunions().first)
+    #expect(relue.decalage(.systeme) == 0)
+}
+
+@Test func leDecalageDUnePisteSeRelit() throws {
+    let racine = try racineTemporaire()
+    defer { try? FileManager.default.removeItem(at: racine) }
+    let biblio = Bibliotheque(racine: racine)
+    var reunion = try biblio.creerReunion(titre: "R", type: .visio, dossier: nil)
+    reunion.meta.decalages = ["systeme": 1.7]
+    try reunion.enregistrerMeta()
+    #expect(try #require(biblio.reunions().first).decalage(.systeme) == 1.7)
+}
+
+@Test func lireAvantLeDebutDUnePisteAttendSonDepart() {
+    #expect(positionDeLecture(temps: 10, decalage: 1.5) == (8.5, 0))
+    #expect(positionDeLecture(temps: 1, decalage: 1.5) == (0, 0.5))
+}

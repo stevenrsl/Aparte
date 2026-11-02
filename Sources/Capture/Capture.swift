@@ -119,6 +119,8 @@ public final class PisteAudio: @unchecked Sendable {
     private let formatCible: AVAudioFormat
     private let surConverti: @Sendable (AVAudioPCMBuffer) -> Void
     private let surNiveau: @Sendable (Float) -> Void
+    private let surPremierSon: @Sendable (Date) -> Void
+    private var premierSonVu = false
     private let file = DispatchQueue(label: "eu.stevenrsl.aparte.piste", qos: .userInitiated)
     private var fichier: AVAudioFile?
     private var convertisseur: StreamConverter?
@@ -126,17 +128,24 @@ public final class PisteAudio: @unchecked Sendable {
 
     public init(source: AudioSource, fichier: URL, formatCible: AVAudioFormat,
                 surConverti: @escaping @Sendable (AVAudioPCMBuffer) -> Void,
-                surNiveau: @escaping @Sendable (Float) -> Void) {
+                surNiveau: @escaping @Sendable (Float) -> Void,
+                surPremierSon: @escaping @Sendable (Date) -> Void) {
         self.source = source
         self.fichierURL = fichier
         self.formatCible = formatCible
         self.surConverti = surConverti
         self.surNiveau = surNiveau
+        self.surPremierSon = surPremierSon
     }
 
     public func demarrer() throws {
         source.onBuffer = { [weak self] tampon in
             guard let self, let mono = AudioBuffers.mono(tampon) else { return }
+            // Le temps de cette piste part d'ici : son fichier et sa transcription commencent à ce tampon.
+            if !self.premierSonVu {
+                self.premierSonVu = true
+                self.surPremierSon(Date())
+            }
             self.file.async { self.traiter(mono) }
         }
         try source.start()

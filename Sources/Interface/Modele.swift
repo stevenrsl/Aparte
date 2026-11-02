@@ -182,25 +182,39 @@ public final class SessionReunion {
         let surFinal: @MainActor (Segment) -> Void = { [weak self] segment in self?.ajouter(segment) }
         let surProvisoire: @MainActor (Piste, String) -> Void = { [weak self] piste, texte in self?.provisoires[piste] = texte }
 
+        // Tout se prépare d'abord, pour que les pistes démarrent au plus près l'une de l'autre.
         let micro = try await TranscripteurDirect.demarrer(locale: locale, piste: .micro, surFinal: surFinal, surProvisoire: surProvisoire)
         transcripteurs.append(micro)
+        var transcripteurSysteme: TranscripteurDirect?
+        if reunion.meta.type == .visio {
+            do {
+                let systeme = try await TranscripteurDirect.demarrer(locale: locale, piste: .systeme, surFinal: surFinal, surProvisoire: surProvisoire)
+                transcripteurs.append(systeme)
+                transcripteurSysteme = systeme
+            } catch {
+                alerte = "\(error.localizedDescription) Le micro continue d'enregistrer."
+            }
+        }
+
+        let origine = Date()
+        debut = origine
+        etat = ""
+
         let pisteMicro = PisteAudio(source: MicrophoneSource(entree: entree?.id), fichier: reunion.microEnCours,
                                     formatCible: micro.formatAttendu,
                                     surConverti: { micro.alimenter($0) },
-                                    surNiveau: { [weak self] niveau in Task { @MainActor in self?.pousser(niveau, moi: true) } })
+                                    surNiveau: { [weak self] niveau in Task { @MainActor in self?.pousser(niveau, moi: true) } },
+                                    surPremierSon: { [weak self] date in Task { @MainActor in self?.noter(.micro, date.timeIntervalSince(origine)) } })
         try pisteMicro.demarrer()
         pistes.append(pisteMicro)
-        debut = Date()
-        etat = ""
 
-        guard reunion.meta.type == .visio else { return }
+        guard let transcripteurSysteme else { return }
         do {
-            let systeme = try await TranscripteurDirect.demarrer(locale: locale, piste: .systeme, surFinal: surFinal, surProvisoire: surProvisoire)
-            transcripteurs.append(systeme)
             let pisteSysteme = PisteAudio(source: SystemAudioSource(), fichier: reunion.systemeEnCours,
-                                          formatCible: systeme.formatAttendu,
-                                          surConverti: { systeme.alimenter($0) },
-                                          surNiveau: { [weak self] niveau in Task { @MainActor in self?.pousser(niveau, moi: false) } })
+                                          formatCible: transcripteurSysteme.formatAttendu,
+                                          surConverti: { transcripteurSysteme.alimenter($0) },
+                                          surNiveau: { [weak self] niveau in Task { @MainActor in self?.pousser(niveau, moi: false) } },
+                                          surPremierSon: { [weak self] date in Task { @MainActor in self?.noter(.systeme, date.timeIntervalSince(origine)) } })
             try pisteSysteme.demarrer()
             pistes.append(pisteSysteme)
         } catch {
@@ -209,7 +223,17 @@ public final class SessionReunion {
         }
     }
 
-    private func ajouter(_ segment: Segment) {
+    /// Le décalage d'une piste part sur le disque dès qu'il est connu, pour survivre à un plantage.
+    private func noter(_ piste: Piste, _ decalage: Double) {
+        reunion.meta.decalages = (reunion.meta.decalages ?? [:]).merging([piste.rawValue: decalage]) { _, nouveau in nouveau }
+        try? reunion.enregistrerMeta()
+    }
+
+    private func ajouter(_ recu: Segment) {
+        // Le transcripteur compte depuis le premier son de sa piste : on revient à l'horloge de la réunion.
+        var segment = recu
+        segment.debut += reunion.decalage(recu.piste)
+        segment.fin += reunion.decalage(recu.piste)
         let rang = segments.firstIndex { $0.debut > segment.debut } ?? segments.endIndex
         segments.insert(segment, at: rang)
         try? reunion.enregistrer(segments: segments)
@@ -260,29 +284,32 @@ public final class SessionReunion {
 @MainActor
 @Observable
 final class Lecteur {
-    private var lecteurs: [AVAudioPlayer] = []
+    private var lecteurs: [(lecteur: AVAudioPlayer, decalage: Double)] = []
     private(set) var enLecture = false
 
     func charger(_ reunion: Reunion) {
         arreter()
-        lecteurs = [reunion.micro, reunion.systeme].compactMap { try? AVAudioPlayer(contentsOf: $0) }
-        lecteurs.forEach { $0.prepareToPlay() }
+        lecteurs = [(reunion.micro, Piste.micro), (reunion.systeme, Piste.systeme)].compactMap { url, piste in
+            (try? AVAudioPlayer(contentsOf: url)).map { ($0, reunion.decalage(piste)) }
+        }
+        lecteurs.forEach { $0.lecteur.prepareToPlay() }
     }
 
     var disponible: Bool { !lecteurs.isEmpty }
 
     func lire(a temps: Double) {
-        guard let horloge = lecteurs.first?.deviceCurrentTime else { return }
-        for lecteur in lecteurs {
+        guard let horloge = lecteurs.first?.lecteur.deviceCurrentTime else { return }
+        for (lecteur, decalage) in lecteurs {
+            let (position, attente) = positionDeLecture(temps: max(0, temps), decalage: decalage)
             lecteur.stop()
-            lecteur.currentTime = max(0, temps)
-            lecteur.play(atTime: horloge + 0.05)
+            lecteur.currentTime = position
+            lecteur.play(atTime: horloge + 0.05 + attente)
         }
         enLecture = true
     }
 
     func arreter() {
-        lecteurs.forEach { $0.stop() }
+        lecteurs.forEach { $0.lecteur.stop() }
         enLecture = false
     }
 }

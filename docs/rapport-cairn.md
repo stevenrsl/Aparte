@@ -24,8 +24,9 @@
 
 - **Swift 5 :** le code audio repose sur `@unchecked Sendable` et reste en mode Swift 5 dans les modules
   `Transcription` et `Capture`. À passer en Swift 6 plus tard.
-- **Le décalage entre pistes :** chaque piste compte le temps depuis son premier tampon. Micro et son du
-  Mac démarrent à quelques dixièmes d'écart. Non mesuré.
+- **Le décalage entre pistes :** chaque piste compte le temps depuis son premier son. Aparté mesure ce
+  moment, le garde dans `meta.json` et ramène tout sur l'horloge de la réunion. La mesure se fait à
+  l'arrivée du premier tampon, sans la latence matérielle de chaque entrée.
 - **Changement de micro en pleine réunion :** Cairn ne le gère que sur iPhone. Sur Mac, débrancher le
   micro peut couper la piste. Non testé.
 - **Aucun test** de ce code dans Cairn, d'après les noms de fichiers de test.
