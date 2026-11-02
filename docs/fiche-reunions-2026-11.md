@@ -78,8 +78,13 @@ Le conseil de Rushes s'applique aussi ici : pas de base de données, pas de comp
   plus).
 - **Deux pistes séparées** plutôt qu'un mixage : la piste micro, c'est Steven, la piste système,
   ce sont les autres. On obtient ainsi en visio un « moi / eux » gratuit, sans diarisation. En
-  présentiel, tout passe par le micro et la transcription ne distingue pas les voix (accepté pour
-  la v1).
+  présentiel, tout passe par le micro.
+- **Les voix, l'écho et les noms, repris de Cairn** (décidé par Steven le 2 novembre 2026, ce qui lève
+  le « hors v1 » sur les voix, et accorde la dépendance FluidAudio). Après la réunion, Aparté relit
+  l'enregistrement sur le Mac : voix séparées en présentiel et sur le son du Mac, que Steven nomme, écho du
+  haut-parleur retiré de la piste du micro, noms connus corrigés. La transcription du direct reste dans
+  `transcription-direct.json`. Les modèles (21 Mo) se téléchargent une fois depuis Hugging Face, sans rien
+  envoyer de l'enregistrement.
 - Un indicateur d'enregistrement toujours visible. Les permissions (micro, capture audio)
   demandées au premier enregistrement, avec une phrase claire.
 - **Le consentement** : une ligne discrète dans la vue d'enregistrement rappelle de prévenir les
@@ -171,7 +176,7 @@ de ce qu'elle contient n'est réécrit, sauf le titre dans `meta.json`.
 
 ## Hors v1
 
-Notes libres, projets, tags, synchro par l'app, distinction des voix en présentiel, recherche
+Notes libres, projets, tags, synchro par l'app, recherche
 entre réunions, base de données, compte. Chacun peut revenir plus tard, mais seulement si l'usage
 le réclame.
 

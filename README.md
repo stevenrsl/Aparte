@@ -39,6 +39,13 @@ En visio, mets un casque. Sinon le micro capte aussi les haut-parleurs et les ph
 Chaque réunion est un dossier lisible sans l'app : `meta.json`, `micro.m4a`, `systeme.m4a`,
 `transcription.json`, `notes.md`, `analyse.json`, `analyse.md`.
 
+## Après une réunion
+
+Aparté relit l'enregistrement sur le Mac : il sépare les voix, que tu peux nommer dans le compte rendu, retire
+l'écho d'une visio sans casque et corrige les noms qu'il connaît. Pour une réunion plus ancienne, « // gérer »,
+puis « Relire l'enregistrement ». La première relecture télécharge 21 Mo de modèles depuis Hugging Face, sans
+rien envoyer de l'enregistrement.
+
 ## Gérer une réunion
 
 Depuis son compte rendu, « // gérer » renomme la réunion, la déplace ou la met à la Corbeille. Le dossier sur le

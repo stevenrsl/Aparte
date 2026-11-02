@@ -285,6 +285,14 @@ struct Bulles: View {
     let type: TypeReunion
     var sources: Set<Double> = []
     var suivre = false
+    /// Pour nommer les voix, une fois la réunion relue.
+    var reunion: Reunion?
+
+    private func etiquette(_ segment: Segment) -> String {
+        if let voix = segment.voix { return " · " + (reunion?.nom(de: voix) ?? voix) }
+        if estMoi(segment.piste) { return " · moi" }
+        return type == .visio ? " · eux" : ""
+    }
 
     private func estMoi(_ piste: Piste) -> Bool { type == .visio && piste == .micro }
 
@@ -317,7 +325,7 @@ struct Bulles: View {
         let moi = estMoi(segment.piste)
         let source = sources.contains { $0 >= segment.debut - 2 && $0 <= segment.fin + 2 }
         return VStack(alignment: moi ? .trailing : .leading, spacing: 4) {
-            Text(horodatage(segment.debut) + (moi ? " · moi" : (type == .visio ? " · eux" : "")))
+            Text(horodatage(segment.debut) + etiquette(segment))
                 .font(Typo.horodatage)
                 .foregroundStyle(Color.colonneSignal)
             Text(segment.texte)
@@ -702,7 +710,7 @@ struct EcranEnReunion: View {
                             AccessibilityNotification.Announcement(texte).post()
                         }
                 }
-                Bulles(segments: session.segments, provisoires: session.provisoires, type: session.reunion.meta.type, suivre: true)
+                Bulles(segments: session.segmentsLisibles, provisoires: session.provisoires, type: session.reunion.meta.type, suivre: true)
             }
         }
     }
@@ -768,7 +776,7 @@ struct EcranCompteRendu: View {
                 }
             }
         } contenuEncre: {
-            Bulles(segments: passage, type: reunion.meta.type, sources: Set(selection?.sources ?? []))
+            Bulles(segments: passage, type: reunion.meta.type, sources: Set(selection?.sources ?? []), reunion: reunion)
         }
         .onAppear {
             compteRendu = modele.compteRendu(de: reunion)
@@ -777,6 +785,12 @@ struct EcranCompteRendu: View {
             lecteur.charger(reunion)
         }
         .onDisappear { lecteur.arreter() }
+        .onChange(of: modele.relectures[reunion.id] == nil) { _, finie in
+            guard finie else { return }
+            compteRendu = modele.compteRendu(de: reunion)
+            segments = reunion.segments()
+            lecteur.charger(reunion)
+        }
     }
 
     /// Le passage autour de l'élément choisi, ou toute la transcription.
@@ -789,6 +803,7 @@ struct EcranCompteRendu: View {
         VStack(alignment: .leading, spacing: 14) {
             Text(segments.isEmpty ? "Aucune phrase n'a été transcrite." : "\(segments.count) phrases transcrites. Pas encore d'analyse.")
                 .foregroundStyle(Color.encreDouce)
+            relecture
             boutonAnalyser("Analyser sur ce Mac", style: BoutonPrincipal())
             Libelle("rien ne quitte ce mac pour cette analyse")
             incidentsAudio
@@ -798,12 +813,14 @@ struct EcranCompteRendu: View {
     private func boutonAnalyser<Style: ButtonStyle>(_ titre: String, style: Style) -> some View {
         Button(progression.map { "Analyse en cours · \(Int($0 * 100)) %" } ?? titre) { analyser() }
             .buttonStyle(style)
-            .disabled(progression != nil || segments.isEmpty)
+            .disabled(progression != nil || segments.isEmpty || modele.relectures[reunion.id] != nil)
     }
 
     private func analyser() {
         progression = 0
-        let segments = self.segments
+        // Le modèle lit les noms donnés aux voix. Les temps et les mots ne changent pas.
+        var segments = self.segments
+        for i in segments.indices { segments[i].voix = segments[i].voix.map { reunion.nom(de: $0) } }
         let notes = self.notes
         let type = reunion.meta.type
         let avancer: @Sendable (Double) -> Void = { valeur in
@@ -818,6 +835,31 @@ struct EcranCompteRendu: View {
                 modele.erreur = error.localizedDescription
             }
             progression = nil
+        }
+    }
+
+    /// La relecture en cours, puis les voix à nommer.
+    @ViewBuilder private var relecture: some View {
+        if let avancee = modele.relectures[reunion.id] {
+            Libelle("relecture de l'enregistrement · \(Int(avancee * 100)) %")
+        }
+        let voix = Array(Set(segments.compactMap(\.voix))).sorted()
+        if !voix.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Libelle("les voix")
+                ForEach(voix, id: \.self) { uneVoix in
+                    HStack(spacing: 12) {
+                        Text(uneVoix).font(Typo.horodatage).frame(width: 60, alignment: .leading)
+                        TextField("Nom de cette personne", text: Binding(
+                            get: { reunion.meta.nomsDesVoix?[uneVoix] ?? "" },
+                            set: { modele.nommer(uneVoix, $0, dans: reunion) }))
+                        .textFieldStyle(.plain)
+                        .padding(6)
+                        .background(Color.surface)
+                        .accessibilityLabel("Nom de \(uneVoix)")
+                    }
+                }
+            }
         }
     }
 
@@ -847,6 +889,7 @@ struct EcranCompteRendu: View {
             Libelle("\(accord(compteRendu.passagesNonAnalyses, "passage non analysé", "passages non analysés")) · \(accord(compteRendu.elementsEcartes, "élément écarté", "éléments écartés")) faute de source")
         }
         incidentsAudio
+        relecture
         section("décisions", compteRendu.decisions)
         section("actions", compteRendu.actions)
         section("questions ouvertes", compteRendu.questions)
@@ -933,6 +976,8 @@ struct GestionReunion: View {
                     nouveauDossier = true
                 }
             }
+            Button("Relire l'enregistrement") { modele.relire(reunion) }
+                .disabled(!FileManager.default.fileExists(atPath: reunion.micro.path))
             Divider()
             Button("Mettre à la corbeille…", role: .destructive) { corbeille = true }
         } label: {

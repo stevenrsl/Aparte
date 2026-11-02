@@ -33,9 +33,9 @@
 
 ## Ce qui n'est pas repris
 
-- `FluidAudio` et `Voices.swift` : la distinction des voix est hors v1.
-- `NameFixer` et le vocabulaire du projet : ils dépendent des carnets de Cairn. Les noms propres seront
-  donc moins bien écrits.
+- `FluidAudio` et `Voices.swift` : repris depuis, à la demande de Steven (voir la fiche).
+- `NameFixer` et le vocabulaire du projet : repris depuis, avec le titre, le dossier et les noms déjà donnés
+  aux voix à la place des carnets. `Echo` aussi, qu'il faut pour une visio sans casque.
 - Le registre des écoutes en cours : au lancement, Aparté termine les `.aac` qu'il trouve.
 - Tout le code iPhone.
 

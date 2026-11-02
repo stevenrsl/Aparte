@@ -116,3 +116,36 @@ import Transcription
     #expect(FileManager.default.fileExists(atPath: reunion.url.path))
     #expect(modele.reunions.first?.meta.titre == "En cours")
 }
+
+@MainActor
+@Test func nommerUneVoixNeReecritPasLaTranscription() throws {
+    let racine = FileManager.default.temporaryDirectory.resolvingSymlinksInPath().appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: racine, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: racine) }
+    let reunion = try Bibliotheque(racine: racine).creerReunion(titre: "Fictive", type: .presentiel, dossier: nil)
+    try reunion.enregistrer(segments: [Segment(debut: 0, fin: 1, piste: .micro, texte: "Bonjour", voix: "Voix 1")])
+    let avant = try Data(contentsOf: reunion.url.appendingPathComponent("transcription.json"))
+    setenv("APARTE_RACINE", racine.path, 1)
+    defer { unsetenv("APARTE_RACINE") }
+    let modele = ModeleApp()
+    modele.nommer("Voix 1", "Claire", dans: reunion)
+    let relue = try #require(modele.reunions.first)
+    #expect(relue.nom(de: "Voix 1") == "Claire")
+    #expect(relue.nom(de: "Voix 2") == "Voix 2")
+    #expect(try Data(contentsOf: reunion.url.appendingPathComponent("transcription.json")) == avant)
+    #expect(modele.vocabulaire(pour: relue).contains("Claire"))
+}
+
+@MainActor
+@Test func laTranscriptionDuDirectResteApresUneRelecture() throws {
+    let racine = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: racine, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: racine) }
+    let reunion = try Bibliotheque(racine: racine).creerReunion(titre: "Fictive", type: .presentiel, dossier: nil)
+    try reunion.enregistrer(segments: [Segment(debut: 0, fin: 1, piste: .micro, texte: "Direct")])
+    let direct = try Data(contentsOf: reunion.url.appendingPathComponent("transcription.json"))
+    try reunion.remplacer(segments: [Segment(debut: 0, fin: 1, piste: .micro, texte: "Relu 1")])
+    try reunion.remplacer(segments: [Segment(debut: 0, fin: 1, piste: .micro, texte: "Relu 2")])
+    #expect(reunion.segments().first?.texte == "Relu 2")
+    #expect(try Data(contentsOf: reunion.url.appendingPathComponent("transcription-direct.json")) == direct)
+}

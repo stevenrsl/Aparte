@@ -6,6 +6,7 @@ import Foundation
 import Observation
 import Stockage
 import Transcription
+import Voix
 
 public enum Ecran: Hashable {
     case accueil
@@ -32,6 +33,8 @@ public final class ModeleApp {
     public var dossiers: [String] = []
     public var session: SessionReunion?
     public var erreur: String?
+    /// Les réunions en cours de relecture, avec leur avancée.
+    public private(set) var relectures: [String: Double] = [:]
     @ObservationIgnored private var compteRendus: [String: CompteRendu] = [:]
     @ObservationIgnored private var faites: [String: Set<UUID>] = [:]
     @ObservationIgnored private var echecsSignales: Set<String> = []
@@ -143,7 +146,7 @@ public final class ModeleApp {
             let nouvelle = SessionReunion(reunion: reunion)
             session = nouvelle
             ecran = .enReunion
-            try await nouvelle.demarrer(entree: entree)
+            try await nouvelle.demarrer(entree: entree, vocabulaire: vocabulaire(pour: reunion))
             recharger()
         } catch {
             session = nil
@@ -152,8 +155,62 @@ public final class ModeleApp {
         }
     }
 
-    /// La réunion en cours d'enregistrement ne se range pas : ses fichiers sont ouverts.
-    func estEnCours(_ reunion: Reunion) -> Bool { session?.reunion.id == reunion.id }
+    /// La réunion en cours d'enregistrement ou de relecture ne se range pas : ses fichiers sont utilisés.
+    func estEnCours(_ reunion: Reunion) -> Bool { session?.reunion.id == reunion.id || relectures[reunion.id] != nil }
+
+    /// Les noms que le transcripteur doit reconnaître : le titre, le dossier, et tous les noms déjà
+    /// donnés à des voix. Plus on nomme de voix, mieux les noms s'écrivent.
+    func vocabulaire(pour reunion: Reunion) -> [String] {
+        let noms = reunions.flatMap { Array(($0.meta.nomsDesVoix ?? [:]).values) + $0.meta.participants }
+        var vus = Set<String>()
+        return ([reunion.meta.titre, reunion.dossier].compactMap { $0 } + noms).filter { !$0.isEmpty && vus.insert($0).inserted }
+    }
+
+    /// Relit l'enregistrement : les voix séparées, l'écho retiré, les noms corrigés. Si les voix
+    /// échouent, les mots restent : ils valent plus que de savoir qui les a dits.
+    public func relire(_ reunion: Reunion) {
+        guard relectures[reunion.id] == nil, session?.reunion.id != reunion.id else { return }
+        relectures[reunion.id] = 0
+        let vocabulaire = vocabulaire(pour: reunion)
+        Task {
+            do {
+                let resultat = try await Relecture.relire(reunion, vocabulaire: vocabulaire) { [weak self] avancee in
+                    Task { @MainActor in if self?.relectures[reunion.id] != nil { self?.relectures[reunion.id] = avancee } }
+                }
+                var relue = reunion
+                relue.meta.relue = true
+                try relue.remplacer(segments: resultat.segments)
+                try relue.enregistrerMeta()
+                if let raison = resultat.voixEchouees {
+                    erreur = "Les voix n'ont pas pu être séparées (\(raison)). La transcription est là, sans elles."
+                }
+            } catch {
+                erreur = "L'enregistrement de « \(reunion.meta.titre) » n'a pas pu être relu : \(error.localizedDescription) La transcription du direct reste là."
+            }
+            relectures[reunion.id] = nil
+            actualiser(reunion)
+        }
+    }
+
+    /// Donne un nom à une voix, partout dans la réunion. La transcription n'est pas réécrite.
+    public func nommer(_ voix: String, _ nom: String, dans reunion: Reunion) {
+        var nommee = reunions.first { $0.id == reunion.id } ?? reunion
+        nommee.meta.nomsDesVoix = (nommee.meta.nomsDesVoix ?? [:]).merging([voix: nom.trimmingCharacters(in: .whitespacesAndNewlines)]) { _, nouveau in nouveau }
+        do {
+            try nommee.enregistrerMeta()
+            actualiser(reunion)
+        } catch {
+            erreur = "Le nom n'a pas pu être enregistré : \(error.localizedDescription)"
+        }
+    }
+
+    private func actualiser(_ reunion: Reunion) {
+        recharger()
+        if case let .compteRendu(affichee) = ecran, affichee.id == reunion.id,
+           let relue = reunions.first(where: { $0.id == reunion.id }) {
+            ecran = .compteRendu(relue)
+        }
+    }
 
     public func renommer(_ reunion: Reunion, en titre: String) {
         ranger(reunion) { try $0.renommer(reunion, en: titre) }
@@ -202,7 +259,9 @@ public final class ModeleApp {
             let reunion = try await session.terminer()
             self.session = nil
             recharger()
-            ecran = .compteRendu(reunions.first { $0.id == reunion.id } ?? reunion)
+            let terminee = reunions.first { $0.id == reunion.id } ?? reunion
+            ecran = .compteRendu(terminee)
+            relire(terminee)
         } catch {
             // La session reste ouverte : rien de ce qui est en mémoire n'est abandonné.
             erreur = "Ta réunion n'a pas pu être écrite sur le disque : \(error.localizedDescription) Vérifie le dossier, puis clique de nouveau sur Terminer."
@@ -216,6 +275,8 @@ public final class ModeleApp {
 public final class SessionReunion {
     public private(set) var reunion: Reunion
     public private(set) var segments: [Segment] = []
+    /// Ce qui s'affiche : sans l'écho du haut-parleur, les phrases réunies. `segments` reste brut.
+    public private(set) var segmentsLisibles: [Segment] = []
     public private(set) var provisoires: [Piste: String] = [:]
     public var lignes: [LigneDeNote] = [LigneDeNote(temps: 0, texte: "")]
     public private(set) var niveauxMoi: [Float] = Array(repeating: 0, count: 24)
@@ -244,19 +305,19 @@ public final class SessionReunion {
 
     public var temps: Double { debut.map { Date().timeIntervalSince($0) } ?? 0 }
 
-    func demarrer(entree: EntreeAudio?) async throws {
+    func demarrer(entree: EntreeAudio?, vocabulaire: [String] = []) async throws {
         let locale = try await Parole.preparer()
 
         let surFinal: @MainActor (Segment) -> Void = { [weak self] segment in self?.ajouter(segment) }
         let surProvisoire: @MainActor (Piste, String) -> Void = { [weak self] piste, texte in self?.provisoires[piste] = texte }
 
         // Tout se prépare d'abord, pour que les pistes démarrent au plus près l'une de l'autre.
-        let micro = try await TranscripteurDirect.demarrer(locale: locale, piste: .micro, surFinal: surFinal, surProvisoire: surProvisoire)
+        let micro = try await TranscripteurDirect.demarrer(locale: locale, piste: .micro, vocabulaire: vocabulaire, surFinal: surFinal, surProvisoire: surProvisoire)
         transcripteurs.append(micro)
         var transcripteurSysteme: TranscripteurDirect?
         if reunion.meta.type == .visio {
             do {
-                let systeme = try await TranscripteurDirect.demarrer(locale: locale, piste: .systeme, surFinal: surFinal, surProvisoire: surProvisoire)
+                let systeme = try await TranscripteurDirect.demarrer(locale: locale, piste: .systeme, vocabulaire: vocabulaire, surFinal: surFinal, surProvisoire: surProvisoire)
                 transcripteurs.append(systeme)
                 transcripteurSysteme = systeme
             } catch {
@@ -354,6 +415,7 @@ public final class SessionReunion {
         segment.fin += reunion.decalage(recu.piste)
         let rang = segments.firstIndex { $0.debut > segment.debut } ?? segments.endIndex
         segments.insert(segment, at: rang)
+        segmentsLisibles = Nettoyage.fusionner(Nettoyage.sansEcho(segments))
         sauvegarder(.transcription)
     }
 
@@ -435,4 +497,56 @@ final class Lecteur {
         lecteurs.forEach { $0.lecteur.stop() }
         enLecture = false
     }
+}
+
+/// La seconde lecture d'une réunion, à partir de ses enregistrements. En visio, le micro, c'est une
+/// seule personne : seul le son du Mac est lu pour ses voix. En présentiel, c'est le micro.
+enum Relecture {
+    struct Resultat {
+        var segments: [Segment]
+        var voixEchouees: String?
+    }
+
+    static func relire(_ reunion: Reunion, vocabulaire: [String], progression: @escaping @Sendable (Double) -> Void) async throws -> Resultat {
+        let visio = reunion.meta.type == .visio
+        let pistes = [(reunion.micro, Piste.micro), (reunion.systeme, Piste.systeme)]
+            .filter { FileManager.default.fileExists(atPath: $0.0.path) }
+        guard !pistes.isEmpty else { throw ErreurRelecture.sansEnregistrement }
+
+        var segments: [Segment] = []
+        var voixEchouees: String?
+        for (rang, (url, piste)) in pistes.enumerated() {
+            let base = Double(rang) / Double(pistes.count)
+            let avancer: @Sendable (Double) -> Void = { progression(base + $0 * 0.8 / Double(pistes.count)) }
+            var lus: [Segment]
+            if visio && piste == .micro {
+                lus = try await TranscripteurFichier.transcrire(url: url, piste: piste, vocabulaire: vocabulaire, progression: avancer)
+            } else {
+                let phrases = try await TranscripteurFichier.phrases(url: url, vocabulaire: vocabulaire, progression: avancer)
+                var tours: [TourDeVoix] = []
+                do {
+                    tours = try await Voix.trouver(dans: url)
+                } catch {
+                    voixEchouees = error.localizedDescription
+                }
+                lus = Attribution.attribuer(phrases, a: tours, piste: piste)
+                for i in lus.indices { lus[i].texte = Nettoyage.corrigerNoms(lus[i].texte, noms: vocabulaire) }
+            }
+            // Le fichier compte depuis le premier son de sa piste : on revient à l'horloge de la réunion.
+            let decalage = reunion.decalage(piste)
+            for i in lus.indices {
+                lus[i].debut += decalage
+                lus[i].fin += decalage
+            }
+            segments += lus
+        }
+        progression(1)
+        return Resultat(segments: Nettoyage.fusionner(Nettoyage.sansEcho(segments)), voixEchouees: voixEchouees)
+    }
+}
+
+enum ErreurRelecture: LocalizedError {
+    case sansEnregistrement
+
+    var errorDescription: String? { "Aucun enregistrement n'a été trouvé pour cette réunion." }
 }
