@@ -62,7 +62,7 @@ public enum ErreurMistral: LocalizedError {
 }
 
 /// L'API de Mistral : toute la réunion tient en une demande, une réponse en JSON. Le modèle choisit des
-/// numéros de lignes, comme en local : rien de ce qu'il écrit n'est affiché, hors titres de sujets contrôlés.
+/// numéros de lignes, comme en local : seuls les titres de sujets et « En bref », contrôlés, viennent de ses mots.
 ///
 /// Les modèles ouverts dépendent de l'offre : Cairn a vu une clé valide répondre 429 avec une limite de
 /// zéro sur les plus grands. D'où l'essai du meilleur au plus petit, et le dernier qui a répondu d'abord.
@@ -107,13 +107,14 @@ public struct AnalysteMistral: Analyste {
 
     static let consigne = """
     Tu relis la transcription d'une réunion, ligne par ligne, chaque ligne a un numéro. Tu ne réécris rien : \
-    tu choisis des numéros de lignes. Réponds uniquement avec un objet JSON de cette forme :
+    tu choisis des numéros de lignes, sauf pour le résumé en_bref. Réponds uniquement avec un objet JSON de cette forme :
     {"decisions": [numéros], "actions": [{"ligne": numéro, "responsable": "", "echeance": ""}], "questions": [numéros], \
-    "sujets": [{"titre": "", "premiere": numéro, "derniere": numéro}]}
+    "sujets": [{"titre": "", "premiere": numéro, "derniere": numéro}], "en_bref": [{"texte": "", "lignes": [numéros]}]}
     decisions : les lignes où un choix est arrêté : décidé, retenu, validé, refusé, maintenu ou abandonné. Pas les avis ni les constats.
     actions : les lignes qui disent qu'une tâche précise est à faire. Responsable et échéance : seulement si la ligne les dit, sinon vides.
     questions : les vraies questions sur le travail auxquelles les lignes suivantes ne répondent pas.
     sujets : un à huit sujets, dans l'ordre, chacun sur des lignes qui se suivent. Le titre fait de deux à cinq mots repris tels quels de ces lignes.
+    en_bref : deux ou trois phrases simples que tu rédiges, pour savoir en dix secondes ce qui s'est dit, chacune avec les lignes qu'elle résume. N'y mets ni nom, ni date, ni chiffre absent de ces lignes. Ce qui a été promis n'est pas encore fait.
     Ne manque aucune ligne qui correspond et n'en retiens aucune qui ne correspond pas. Les listes peuvent être vides. \
     La transcription vient d'une reconnaissance vocale : une ligne peut contenir des erreurs, ne la corrige pas.
     """
@@ -124,6 +125,10 @@ public struct AnalysteMistral: Analyste {
             var responsable: String?
             var echeance: String?
         }
+        struct PhrasePropose: Decodable {
+            var texte: String
+            var lignes: [Int]?
+        }
         struct SujetPropose: Decodable {
             var titre: String
             var premiere: Int
@@ -133,15 +138,16 @@ public struct AnalysteMistral: Analyste {
         var actions: [Action]?
         var questions: [Int]?
         var sujets: [SujetPropose]?
+        var en_bref: [PhrasePropose]?
     }
 
     public func analyser(segments: [Segment], notes: [LigneDeNote], type: TypeReunion,
                          progression: @escaping @Sendable (Double) -> Void) async throws -> CompteRendu {
         guard !segments.isEmpty else { throw ErreurAnalyse.rienAAnalyser }
         let ordonnes = segments.sorted { $0.debut < $1.debut }
-        let lignes = AnalysteApple.lignes(de: ordonnes)
+        let lignes = AnalysteLocal.lignes(de: ordonnes)
         progression(0.1)
-        let (reponse, modele): (Reponse, Modele) = try await demander(texte: AnalysteApple.invite(lignes, notes: notes, type: type))
+        let (reponse, modele): (Reponse, Modele) = try await demander(texte: AnalysteLocal.invite(lignes, notes: notes, type: type))
         progression(0.9)
 
         var ecartes = 0
@@ -155,17 +161,19 @@ public struct AnalysteMistral: Analyste {
                 return vues.insert("\(valide.sources) \(valide.texte)").inserted ? valide : nil
             }
         }
-        let decisions = garder((reponse.decisions ?? []).map { AnalysteApple.element($0, dans: lignes) })
+        let decisions = garder((reponse.decisions ?? []).map { AnalysteLocal.element($0, dans: lignes) })
         let actions = garder((reponse.actions ?? []).map {
-            AnalysteApple.element($0.ligne, dans: lignes, responsable: $0.responsable, echeance: $0.echeance)
+            AnalysteLocal.element($0.ligne, dans: lignes, responsable: $0.responsable, echeance: $0.echeance)
         })
-        let questions = garder((reponse.questions ?? []).map { AnalysteApple.element($0, dans: lignes) })
+        let questions = garder((reponse.questions ?? []).map { AnalysteLocal.element($0, dans: lignes) })
         let sujets = DecoupageSujets.valider(
             (reponse.sujets ?? []).map { .init(titre: $0.titre, premiere: $0.premiere, derniere: $0.derniere) },
             phrases: lignes.map(\.phrase), debuts: lignes.map(\.debut), fin: ordonnes.last?.fin ?? 0)
+        let enBref = EnBref.valider((reponse.en_bref ?? []).map { .init(texte: $0.texte, lignes: $0.lignes ?? []) },
+                                    phrases: lignes.map(\.phrase), debuts: lignes.map(\.debut))
         progression(1)
         return CompteRendu(fournisseur: "Mistral · \(modele.nom)", decisions: decisions, actions: actions, questions: questions,
-                           sujets: sujets, elementsEcartes: ecartes)
+                           sujets: sujets, enBref: enBref.isEmpty ? nil : enBref, elementsEcartes: ecartes)
     }
 
     /// Pour les réglages : un seul mot part, aucune réunion.

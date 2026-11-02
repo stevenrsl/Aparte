@@ -106,7 +106,6 @@ struct BarreLaterale: View {
             LogoApparte()
             VStack(alignment: .leading, spacing: 2) {
                 EntreeLaterale(titre: "Accueil", active: modele.ecran == .accueil) { modele.ecran = .accueil }
-                EntreeLaterale(titre: "Toutes les réunions", active: false) { modele.ecran = .accueil }
                 if let session = modele.session {
                     EntreeLaterale(titre: session.reunion.meta.titre, active: modele.ecran == .enReunion, enCours: true) { modele.ecran = .enReunion }
                 }
@@ -347,6 +346,7 @@ struct Bulles: View {
 struct LigneReunion: View {
     let modele: ModeleApp
     let reunion: Reunion
+    var montrerDossier = true
 
     private var date: String {
         reunion.meta.date.formatted(.dateTime.locale(Locale(identifier: "fr_FR")).weekday(.abbreviated).day().month(.abbreviated))
@@ -365,13 +365,13 @@ struct LigneReunion: View {
                 .frame(width: 92, alignment: .leading)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(reunion.meta.titre).font(Typo.titreListe)
-                    Text(compteRendu?.resume ?? "Pas encore analysée.")
+                    Text(compteRendu?.apercu ?? "Pas encore analysée.")
                         .foregroundStyle(Color.encreDouce)
                         .lineLimit(1)
                 }
                 Spacer(minLength: 0)
                 VStack(alignment: .trailing, spacing: 6) {
-                    if let dossier = reunion.dossier {
+                    if montrerDossier, let dossier = reunion.dossier {
                         Text(dossier.lowercased()).font(Typo.horodatage)
                             .padding(.horizontal, 9).padding(.vertical, 3)
                             .background(Color.surface)
@@ -468,7 +468,6 @@ struct EcranAccueil: View {
                         ListeActions(modele: modele, actions: actions)
                     }
                 }
-                Libelle("chaque action renvoie au moment où elle a été dite", surColonne: true)
             }
             .padding(.horizontal, 28)
             .padding(.vertical, 22)
@@ -539,10 +538,6 @@ struct EcranNouvelle: View {
                             ForEach(entrees) { Text($0.nom).tag(EntreeAudio?.some($0)) }
                         }
                         .labelsHidden()
-                    }
-                    VStack(alignment: .leading, spacing: 8) {
-                        Libelle("analyse à la fin")
-                        Text("Locale · Apple Intelligence")
                     }
                 }
                 Spacer(minLength: 0)
@@ -725,7 +720,6 @@ struct EcranCompteRendu: View {
     @State private var segments: [Segment] = []
     @State private var notes: [LigneDeNote] = []
     @State private var selection: ElementSource?
-    @State private var confirmerPCC = false
     @State private var confirmerMistral = false
     @State private var lecteur = Lecteur()
     @State private var copie = false
@@ -758,6 +752,10 @@ struct EcranCompteRendu: View {
                                 }
                             }
                         }
+                    }
+                    voixANommer
+                    if let compteRendu, compteRendu.passagesNonAnalyses > 0 || compteRendu.elementsEcartes > 0 {
+                        Libelle("\(accord(compteRendu.passagesNonAnalyses, "passage non analysé", "passages non analysés")) · \(accord(compteRendu.elementsEcartes, "élément écarté", "éléments écartés")) faute de source")
                     }
                 }
                 .padding(.horizontal, 36)
@@ -806,10 +804,10 @@ struct EcranCompteRendu: View {
             Text(segments.isEmpty ? "Aucune phrase n'a été transcrite." : "\(segments.count) phrases transcrites. Pas encore d'analyse.")
                 .foregroundStyle(Color.encreDouce)
             relecture
-            boutonAnalyser("Analyser sur ce Mac", style: BoutonPrincipal())
-            Libelle("rien ne quitte ce mac pour cette analyse")
-            boutonPCC
-            boutonMistral
+            HStack(spacing: 10) {
+                boutonAnalyser("Analyser sur ce Mac", style: BoutonPrincipal())
+                boutonMistral
+            }
             incidentsAudio
         }
     }
@@ -818,7 +816,7 @@ struct EcranCompteRendu: View {
 
     private func boutonAnalyser<Style: ButtonStyle>(_ titre: String, style: Style) -> some View {
         Button(modele.analyses[reunion.id].map { "Analyse en cours · \(Int($0 * 100)) %" } ?? titre) {
-            modele.analyser(reunion, avec: AnalysteApple.local)
+            modele.analyser(reunion, avec: AnalysteLocal())
         }
         .buttonStyle(style)
         .disabled(occupee || segments.isEmpty)
@@ -830,48 +828,32 @@ struct EcranCompteRendu: View {
             .buttonStyle(BoutonSecondaire())
             .disabled(occupee || segments.isEmpty || !modele.cleMistralPresente)
             .help(modele.cleMistralPresente ? "" : "Ajoute ta clé Mistral dans les réglages.")
-            .alert("Envoyer cette réunion à Mistral ?", isPresented: $confirmerMistral) {
-                Button("Envoyer cette réunion") { modele.analyserAvecMistral(reunion) }
-                Button("Annuler", role: .cancel) {}
-            } message: {
-                Text("La transcription et tes notes partent chez Mistral pour cette analyse. L'audio reste sur ce Mac.")
-            }
+            .confirmationMistral(presente: $confirmerMistral) { modele.analyserAvecMistral(reunion) }
     }
 
-    /// PCC : un envoi hors du Mac, donc une confirmation à chaque fois, pour cette réunion seule (règle 2).
-    private var boutonPCC: some View {
-        Button("Analyser avec Private Cloud Compute…") { confirmerPCC = true }
-            .buttonStyle(BoutonSecondaire())
-            .disabled(occupee || segments.isEmpty || !AnalysteApple.pccAutorise)
-            .help(AnalysteApple.pccAutorise ? "" : "Apple doit d'abord autoriser Aparté à utiliser Private Cloud Compute.")
-            .alert("Envoyer cette réunion à Private Cloud Compute ?", isPresented: $confirmerPCC) {
-                Button("Envoyer cette réunion") { modele.analyser(reunion, avec: AnalysteApple.pcc) }
-                Button("Annuler", role: .cancel) {}
-            } message: {
-                Text("La transcription et tes notes partent chez Apple pour cette analyse. L'audio reste sur ce Mac.")
-            }
-    }
-
-    /// La relecture en cours, puis les voix à nommer.
     @ViewBuilder private var relecture: some View {
         if let avancee = modele.relectures[reunion.id] {
             Libelle("relecture de l'enregistrement · \(Int(avancee * 100)) %")
         }
+    }
+
+    /// Les voix à nommer, en bas : on y vient une fois, après avoir lu.
+    @ViewBuilder private var voixANommer: some View {
         let voix = Array(Set(segments.compactMap(\.voix))).sorted()
         if !voix.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 6) {
                 Libelle("les voix")
                 ForEach(voix, id: \.self) { uneVoix in
                     HStack(spacing: 12) {
-                        Text(uneVoix).font(Typo.horodatage).frame(width: 60, alignment: .leading)
+                        Text(uneVoix).font(Typo.horodatage).foregroundStyle(Color.encreDouce).frame(width: 60, alignment: .leading)
                         TextField("Nom de cette personne", text: Binding(
                             get: { reunion.meta.nomsDesVoix?[uneVoix] ?? "" },
                             set: { modele.nommer(uneVoix, $0, dans: reunion) }))
                         .textFieldStyle(.plain)
-                        .padding(6)
-                        .background(Color.surface)
                         .accessibilityLabel("Nom de \(uneVoix)")
                     }
+                    .padding(.vertical, 4)
+                    .overlay(alignment: .bottom) { Color.filet.frame(height: 1) }
                 }
             }
         }
@@ -885,11 +867,24 @@ struct EcranCompteRendu: View {
     }
 
     @ViewBuilder private func analyse(_ compteRendu: CompteRendu) -> some View {
-        HStack(alignment: .top, spacing: 14) {
-            Color.terracotta.frame(width: 3)
-            Text(compteRendu.resume).font(Typo.resume).textSelection(.enabled)
+        relecture
+        VStack(alignment: .leading, spacing: 8) {
+            if let enBref = compteRendu.enBref, !enBref.isEmpty {
+                Libelle("en bref · rédigé par \(compteRendu.fournisseur)")
+            }
+            HStack(alignment: .top, spacing: 14) {
+                Color.terracotta.frame(width: 3)
+                Text(compteRendu.apercu).font(Typo.resume).textSelection(.enabled)
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            if let enBref = compteRendu.enBref, !enBref.isEmpty {
+                HStack(spacing: 4) {
+                    ForEach(Array(Set(enBref.flatMap(\.sources))).sorted(), id: \.self) { temps in
+                        PuceSource(temps: temps) { choisir(ElementSource(texte: "", sources: [temps])) }
+                    }
+                }
+            }
         }
-        .fixedSize(horizontal: false, vertical: true)
         HStack(spacing: 10) {
             Button(copie ? "Copié" : "Copier le compte rendu") {
                 NSPasteboard.general.clearContents()
@@ -897,19 +892,29 @@ struct EcranCompteRendu: View {
                 copie = true
             }
             .buttonStyle(BoutonPrincipal())
-            boutonAnalyser("Relancer l'analyse", style: BoutonSecondaire())
-            boutonPCC
-            boutonMistral
-        }
-        if compteRendu.passagesNonAnalyses > 0 || compteRendu.elementsEcartes > 0 {
-            Libelle("\(accord(compteRendu.passagesNonAnalyses, "passage non analysé", "passages non analysés")) · \(accord(compteRendu.elementsEcartes, "élément écarté", "éléments écartés")) faute de source")
+            menuRefaire
         }
         incidentsAudio
-        relecture
-        sectionSujets(compteRendu.sujets ?? [])
         section("décisions", compteRendu.decisions)
         section("actions", compteRendu.actions)
         section("questions ouvertes", compteRendu.questions)
+        sectionSujets(compteRendu.sujets ?? [])
+    }
+
+    /// Refaire l'analyse : sur ce Mac, ou chez Mistral après confirmation.
+    private var menuRefaire: some View {
+        Menu(modele.analyses[reunion.id].map { "Analyse en cours · \(Int($0 * 100)) %" } ?? "Refaire l'analyse") {
+            Button("Sur ce Mac") { modele.analyser(reunion, avec: AnalysteLocal()) }
+            Button("Avec Mistral…") { confirmerMistral = true }
+                .disabled(!modele.cleMistralPresente)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .font(Typo.texte)
+        .foregroundStyle(Color.encre)
+        .disabled(occupee || segments.isEmpty)
+        .confirmationMistral(presente: $confirmerMistral) { modele.analyserAvecMistral(reunion) }
     }
 
     /// Choisir un sujet montre son passage et le fait écouter.
@@ -925,12 +930,14 @@ struct EcranCompteRendu: View {
                             Spacer(minLength: 0)
                             Text(horodatage(sujet.debut)).font(Typo.horodatage)
                         }
-                        .padding(10)
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 10)
                         .background(choisi ? Color.encreColonne : Color.clear)
                         .foregroundStyle(choisi ? Color.colonneTexte : Color.encre)
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .padding(.horizontal, -10)
                     .accessibilityLabel("\(sujet.titre), à \(tempsParle(sujet.debut))")
                     .accessibilityHint("Affiche le passage de la transcription")
                     .accessibilityAddTraits(choisi ? [.isSelected, .isButton] : .isButton)
@@ -947,7 +954,6 @@ struct EcranCompteRendu: View {
                     let choisi = selection?.id == element.id
                     Button { choisir(element) } label: {
                         HStack(alignment: .top, spacing: 10) {
-                            Rectangle().fill(choisi ? Color.argile : Color.clear).frame(width: 7, height: 7).padding(.top, 6)
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(element.texte).multilineTextAlignment(.leading)
                                 let details = [element.responsable, element.echeance].compactMap { $0 }
@@ -965,12 +971,14 @@ struct EcranCompteRendu: View {
                                 }
                             }
                         }
-                        .padding(10)
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 10)
                         .background(choisi ? Color.encreColonne : Color.clear)
                         .foregroundStyle(choisi ? Color.colonneTexte : Color.encre)
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .padding(.horizontal, -10)
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel(([element.texte] + [element.responsable, element.echeance].compactMap { $0 }
                         + element.sources.map { "à \(tempsParle($0))" }).joined(separator: ", "))
@@ -1111,7 +1119,7 @@ struct EcranDossier: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     Libelle("le fil").padding(.bottom, 10)
-                    ForEach(reunions) { LigneReunion(modele: modele, reunion: $0) }
+                    ForEach(reunions) { LigneReunion(modele: modele, reunion: $0, montrerDossier: false) }
                 }
                 .padding(.horizontal, 36)
                 .padding(.vertical, 22)
@@ -1180,41 +1188,42 @@ struct EcranReglages: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Libelle("analyste par défaut")
                     Text("Local · Apple Intelligence")
-                    Text("Une réunion ne part chez Private Cloud Compute ou Mistral que si tu le demandes, une par une.").foregroundStyle(Color.encreDouce)
+                    Text("Une réunion ne part chez Mistral que si tu le demandes, une par une.").foregroundStyle(Color.encreDouce)
                 }
                 VStack(alignment: .leading, spacing: 8) {
                     Libelle("clé mistral")
-                    Text(modele.cleMistralPresente ? "Une clé est rangée dans le trousseau." : "Aucune clé pour l'instant.")
-                        .foregroundStyle(Color.encreDouce)
-                    SecureField("Colle ta clé d'API", text: $cle)
-                        .textFieldStyle(.plain)
-                        .padding(6)
-                        .background(Color.surface)
-                        .accessibilityLabel("Clé d'API Mistral")
-                    HStack(spacing: 10) {
-                        if !modele.cleMistralPresente {
+                    if modele.cleMistralPresente {
+                        Text("Une clé est rangée dans le trousseau.").foregroundStyle(Color.encreDouce)
+                        HStack(spacing: 10) {
+                            Button(enTest ? "Test en cours…" : "Tester la clé") { tester() }
+                                .buttonStyle(BoutonSecondaire())
+                                .disabled(enTest)
+                            Button("Retirer la clé") {
+                                modele.enregistrerCleMistral(nil)
+                                resultatTest = nil
+                            }
+                            .buttonStyle(BoutonSecondaire())
+                        }
+                    } else {
+                        SecureField("Colle ta clé d'API", text: $cle)
+                            .textFieldStyle(.plain)
+                            .padding(6)
+                            .background(Color.surface)
+                            .accessibilityLabel("Clé d'API Mistral")
+                        HStack(spacing: 10) {
+                            Button("Enregistrer la clé") {
+                                modele.enregistrerCleMistral(cle)
+                                cle = ""
+                                resultatTest = nil
+                            }
+                            .buttonStyle(BoutonPrincipal())
+                            .disabled(cle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                             Button("Reprendre la clé de Cairn") {
                                 let reprise = modele.reprendreCleDeCairn()
                                 resultatTest = reprise ? "La clé de Cairn est reprise. Tu peux la tester." : "Aucune clé de Cairn n'a pu être lue."
                             }
                             .buttonStyle(BoutonSecondaire())
                         }
-                        Button("Enregistrer la clé") {
-                            modele.enregistrerCleMistral(cle)
-                            cle = ""
-                            resultatTest = nil
-                        }
-                        .buttonStyle(BoutonPrincipal())
-                        .disabled(cle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                        Button(enTest ? "Test en cours…" : "Tester la clé") { tester() }
-                            .buttonStyle(BoutonSecondaire())
-                            .disabled(enTest || !modele.cleMistralPresente)
-                        Button("Retirer la clé") {
-                            modele.enregistrerCleMistral(nil)
-                            resultatTest = nil
-                        }
-                        .buttonStyle(BoutonSecondaire())
-                        .disabled(!modele.cleMistralPresente)
                     }
                     if let resultatTest { Text(resultatTest).foregroundStyle(Color.encreDouce) }
                 }
@@ -1228,18 +1237,29 @@ struct EcranReglages: View {
             .padding(.horizontal, 36)
             .padding(.vertical, 26)
         } enteteEncre: {
-            Libelle("ce qui quitte le mac", surColonne: true)
+            Libelle("réunions envoyées hors du mac", surColonne: true)
             Spacer(minLength: 0)
             Text("\(modele.reunionsEnvoyees)").font(Typo.grandChiffre)
                 .accessibilityLabel("\(accord(modele.reunionsEnvoyees, "réunion envoyée", "réunions envoyées")) hors du Mac")
         } contenuEncre: {
             VStack(alignment: .leading, spacing: 14) {
                 Text("L'audio : jamais.")
-                Text("La transcription et tes notes : seulement si tu lances toi-même une analyse avec Private Cloud Compute ou Mistral, pour cette réunion.")
+                Text("La transcription et tes notes : seulement si tu lances toi-même une analyse avec Mistral, pour cette réunion.")
                 Text("Aucune télémétrie, aucun compte.")
             }
             .padding(.horizontal, 28)
             .padding(.vertical, 26)
+        }
+    }
+}
+
+private extension View {
+    func confirmationMistral(presente: Binding<Bool>, envoyer: @escaping () -> Void) -> some View {
+        alert("Envoyer cette réunion à Mistral ?", isPresented: presente) {
+            Button("Envoyer cette réunion", action: envoyer)
+            Button("Annuler", role: .cancel) {}
+        } message: {
+            Text("La transcription et tes notes partent chez Mistral pour cette analyse. L'audio reste sur ce Mac.")
         }
     }
 }

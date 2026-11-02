@@ -19,3 +19,4 @@ dans le [plan des agents](plan-agents.md).
 | Analyse automatique et PCC | Claude Code | `analyse-auto-pcc` | en relecture | `Sources/Analyse/`, `Sources/Interface/`, `Sources/Stockage/`, `Tests/` |
 | Sujets et répartition d'une réunion | Claude Code | `sujets-repartir` | en relecture | `Sources/Analyse/`, `Sources/Interface/`, `Sources/Stockage/`, `Tests/` |
 | Fournisseur externe : Mistral | Claude Code | `fournisseur-mistral` | en relecture | `Sources/Analyse/`, `Sources/Interface/`, `Tests/`, `docs/`, `README.md` |
+| V0.2 : PCC retiré, En bref, écrans allégés | Claude Code | `v0-2` | en relecture | `Sources/`, `Support/Info.plist`, `Tests/`, `docs/`, `README.md` |
