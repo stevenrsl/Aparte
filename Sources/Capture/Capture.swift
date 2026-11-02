@@ -15,6 +15,7 @@ public enum ErreurCapture: LocalizedError {
     case aucunMicro
     case sonDuMac(String, OSStatus)
     case enregistrementIllisible(String)
+    case enregistrementEnDouble(String, String)
 
     public var errorDescription: String? {
         switch self {
@@ -26,6 +27,8 @@ public enum ErreurCapture: LocalizedError {
             return "Le son du Mac n'a pas pu être capté (\(etape), code \(code))."
         case let .enregistrementIllisible(fichier):
             return "L'enregistrement \(fichier) n'a pas pu être terminé. Le fichier reste dans son dossier."
+        case let .enregistrementEnDouble(enCours, termine):
+            return "\(enCours) et \(termine) existent tous les deux, avec des durées différentes. Aparté garde les deux dans le dossier de la réunion."
         }
     }
 }
@@ -197,11 +200,20 @@ public final class TestMicro: @unchecked Sendable {
 
 /// Termine un enregistrement : le `.aac` passe en `.m4a` sans réencodage. Il ne part à la corbeille
 /// qu'une fois le `.m4a` relu. S'il est illisible, il reste à sa place et l'erreur remonte.
+/// Un `.m4a` déjà là n'est jamais remplacé : de même durée, c'est la conversion d'un essai coupé avant
+/// la corbeille, et le `.aac` peut y partir. Sinon, les deux fichiers restent et l'erreur remonte.
 public func terminerEnregistrement(_ aac: URL) throws {
     guard let duree = Recording.seconds(of: aac), duree > 0 else {
         throw ErreurCapture.enregistrementIllisible(aac.lastPathComponent)
     }
     let m4a = aac.deletingPathExtension().appendingPathExtension("m4a")
+    if FileManager.default.fileExists(atPath: m4a.path) {
+        guard let existant = Recording.seconds(of: m4a), abs(existant - duree) < 0.5 else {
+            throw ErreurCapture.enregistrementEnDouble(aac.lastPathComponent, m4a.lastPathComponent)
+        }
+        try FileManager.default.trashItem(at: aac, resultingItemURL: nil)
+        return
+    }
     try Recording.remux(aac, to: m4a)
     guard let relu = Recording.seconds(of: m4a), relu > 0 else {
         throw ErreurCapture.enregistrementIllisible(aac.lastPathComponent)
