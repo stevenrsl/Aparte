@@ -65,6 +65,7 @@ public final class ModeleApp {
         reunions = bibliotheque.reunions()
         dossiers = bibliotheque.dossiers()
         compteRendus = [:]
+        var echecs: [String] = []
         for reunion in reunions {
             // Un enregistrement coupé par un plantage se termine ici.
             if session?.reunion.id != reunion.id {
@@ -73,12 +74,13 @@ public final class ModeleApp {
                     do {
                         try terminerEnregistrement(aac)
                     } catch where echecsSignales.insert(aac.path).inserted {
-                        erreur = "« \(reunion.meta.titre) » : \(error.localizedDescription)"
+                        echecs.append("« \(reunion.meta.titre) » : \(error.localizedDescription)")
                     } catch {}
                 }
             }
             if let compteRendu = compteRendu(de: reunion) { compteRendus[reunion.id] = compteRendu }
         }
+        if !echecs.isEmpty { erreur = ([erreur].compactMap { $0 } + echecs).joined(separator: "\n") }
     }
 
     func compteRendu(de reunion: Reunion) -> CompteRendu? {
