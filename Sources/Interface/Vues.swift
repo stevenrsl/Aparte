@@ -637,7 +637,10 @@ struct EcranEnReunion: View {
                 Spacer()
                 Button(fin ? "Fin…" : "Terminer") {
                     fin = true
-                    Task { await modele.terminer() }
+                    Task {
+                        await modele.terminer()
+                        fin = false
+                    }
                 }
                 .buttonStyle(BoutonSignal())
                 .disabled(fin || session.debut == nil)

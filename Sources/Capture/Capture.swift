@@ -14,6 +14,7 @@ public enum ErreurCapture: LocalizedError {
     case microRefuse
     case aucunMicro
     case sonDuMac(String, OSStatus)
+    case enregistrementIllisible(String)
 
     public var errorDescription: String? {
         switch self {
@@ -23,6 +24,8 @@ public enum ErreurCapture: LocalizedError {
             return "Aucun micro n'est disponible sur ce Mac."
         case let .sonDuMac(etape, code):
             return "Le son du Mac n'a pas pu être capté (\(etape), code \(code))."
+        case let .enregistrementIllisible(fichier):
+            return "L'enregistrement \(fichier) n'a pas pu être terminé. Le fichier reste dans son dossier."
         }
     }
 }
@@ -120,22 +123,25 @@ public final class PisteAudio: @unchecked Sendable {
     private let surConverti: @Sendable (AVAudioPCMBuffer) -> Void
     private let surNiveau: @Sendable (Float) -> Void
     private let surPremierSon: @Sendable (Date) -> Void
+    private let surErreur: @Sendable (Error) -> Void
     private var premierSonVu = false
+    private var erreurSignalee = false
     private let file = DispatchQueue(label: "eu.stevenrsl.aparte.piste", qos: .userInitiated)
     private var fichier: AVAudioFile?
     private var convertisseur: StreamConverter?
-    public private(set) var erreurEcriture: Error?
 
     public init(source: AudioSource, fichier: URL, formatCible: AVAudioFormat,
                 surConverti: @escaping @Sendable (AVAudioPCMBuffer) -> Void,
                 surNiveau: @escaping @Sendable (Float) -> Void,
-                surPremierSon: @escaping @Sendable (Date) -> Void) {
+                surPremierSon: @escaping @Sendable (Date) -> Void,
+                surErreur: @escaping @Sendable (Error) -> Void) {
         self.source = source
         self.fichierURL = fichier
         self.formatCible = formatCible
         self.surConverti = surConverti
         self.surNiveau = surNiveau
         self.surPremierSon = surPremierSon
+        self.surErreur = surErreur
     }
 
     public func demarrer() throws {
@@ -157,7 +163,10 @@ public final class PisteAudio: @unchecked Sendable {
             if fichier == nil { fichier = try Recording.open(fichierURL, sampleRate: mono.format.sampleRate) }
             try fichier?.write(from: mono)
         } catch {
-            erreurEcriture = error
+            if !erreurSignalee {
+                erreurSignalee = true
+                surErreur(error)
+            }
         }
         if convertisseur == nil { convertisseur = StreamConverter(from: mono.format, to: formatCible) }
         if let converti = convertisseur?.convert(mono) { surConverti(converti) }
@@ -186,11 +195,16 @@ public final class TestMicro: @unchecked Sendable {
     public func arreter() { source.stop() }
 }
 
-/// Termine un enregistrement : le `.aac` passe en `.m4a` sans réencodage, puis va à la corbeille.
+/// Termine un enregistrement : le `.aac` passe en `.m4a` sans réencodage. Il ne part à la corbeille
+/// qu'une fois le `.m4a` relu. S'il est illisible, il reste à sa place et l'erreur remonte.
 public func terminerEnregistrement(_ aac: URL) throws {
+    guard let duree = Recording.seconds(of: aac), duree > 0 else {
+        throw ErreurCapture.enregistrementIllisible(aac.lastPathComponent)
+    }
     let m4a = aac.deletingPathExtension().appendingPathExtension("m4a")
-    if let duree = Recording.seconds(of: aac), duree > 0 {
-        try Recording.remux(aac, to: m4a)
+    try Recording.remux(aac, to: m4a)
+    guard let relu = Recording.seconds(of: m4a), relu > 0 else {
+        throw ErreurCapture.enregistrementIllisible(aac.lastPathComponent)
     }
     try FileManager.default.trashItem(at: aac, resultingItemURL: nil)
 }

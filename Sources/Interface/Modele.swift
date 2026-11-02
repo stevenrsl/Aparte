@@ -34,6 +34,7 @@ public final class ModeleApp {
     public var erreur: String?
     @ObservationIgnored private var compteRendus: [String: CompteRendu] = [:]
     @ObservationIgnored private var faites: [String: Set<UUID>] = [:]
+    @ObservationIgnored private var echecsSignales: Set<String> = []
     @ObservationIgnored private static let cleRacine = "racine"
 
     public init() {
@@ -69,7 +70,11 @@ public final class ModeleApp {
             if session?.reunion.id != reunion.id {
                 for aac in [reunion.microEnCours, reunion.systemeEnCours]
                 where FileManager.default.fileExists(atPath: aac.path) {
-                    try? terminerEnregistrement(aac)
+                    do {
+                        try terminerEnregistrement(aac)
+                    } catch where echecsSignales.insert(aac.path).inserted {
+                        erreur = "« \(reunion.meta.titre) » : \(error.localizedDescription)"
+                    } catch {}
                 }
             }
             if let compteRendu = compteRendu(de: reunion) { compteRendus[reunion.id] = compteRendu }
@@ -147,10 +152,15 @@ public final class ModeleApp {
 
     public func terminer() async {
         guard let session else { return }
-        let reunion = await session.terminer()
-        self.session = nil
-        recharger()
-        ecran = .compteRendu(reunions.first { $0.id == reunion.id } ?? reunion)
+        do {
+            let reunion = try await session.terminer()
+            self.session = nil
+            recharger()
+            ecran = .compteRendu(reunions.first { $0.id == reunion.id } ?? reunion)
+        } catch {
+            // La session reste ouverte : rien de ce qui est en mémoire n'est abandonné.
+            erreur = "Ta réunion n'a pas pu être écrite sur le disque : \(error.localizedDescription) Vérifie le dossier, puis clique de nouveau sur Terminer."
+        }
     }
 }
 
@@ -166,12 +176,21 @@ public final class SessionReunion {
     public private(set) var niveauxEux: [Float] = Array(repeating: 0, count: 24)
     public private(set) var debut: Date?
     public private(set) var etat = "Préparation de la transcription…"
-    public private(set) var alerte: String?
+    private var alerteSysteme: String?
+    private var alerteAudio: String?
+    private var alerteSauvegarde: String?
+    @ObservationIgnored private var arretee = false
+    @ObservationIgnored private var duree = 0.0
     @ObservationIgnored private var pistes: [PisteAudio] = []
     @ObservationIgnored private var transcripteurs: [TranscripteurDirect] = []
 
     init(reunion: Reunion) {
         self.reunion = reunion
+    }
+
+    public var alerte: String? {
+        let alertes = [alerteAudio, alerteSauvegarde, alerteSysteme].compactMap { $0 }
+        return alertes.isEmpty ? nil : alertes.joined(separator: " ")
     }
 
     public var temps: Double { debut.map { Date().timeIntervalSince($0) } ?? 0 }
@@ -192,7 +211,7 @@ public final class SessionReunion {
                 transcripteurs.append(systeme)
                 transcripteurSysteme = systeme
             } catch {
-                alerte = "\(error.localizedDescription) Le micro continue d'enregistrer."
+                alerteSysteme = "\(error.localizedDescription) Le micro continue d'enregistrer."
             }
         }
 
@@ -204,7 +223,8 @@ public final class SessionReunion {
                                     formatCible: micro.formatAttendu,
                                     surConverti: { micro.alimenter($0) },
                                     surNiveau: { [weak self] niveau in Task { @MainActor in self?.pousser(niveau, moi: true) } },
-                                    surPremierSon: { [weak self] date in Task { @MainActor in self?.noter(.micro, date.timeIntervalSince(origine)) } })
+                                    surPremierSon: { [weak self] date in Task { @MainActor in self?.noter(.micro, date.timeIntervalSince(origine)) } },
+                                    surErreur: { [weak self] _ in Task { @MainActor in self?.signalerAudio("micro") } })
         try pisteMicro.demarrer()
         pistes.append(pisteMicro)
 
@@ -214,19 +234,33 @@ public final class SessionReunion {
                                           formatCible: transcripteurSysteme.formatAttendu,
                                           surConverti: { transcripteurSysteme.alimenter($0) },
                                           surNiveau: { [weak self] niveau in Task { @MainActor in self?.pousser(niveau, moi: false) } },
-                                          surPremierSon: { [weak self] date in Task { @MainActor in self?.noter(.systeme, date.timeIntervalSince(origine)) } })
+                                          surPremierSon: { [weak self] date in Task { @MainActor in self?.noter(.systeme, date.timeIntervalSince(origine)) } },
+                                          surErreur: { [weak self] _ in Task { @MainActor in self?.signalerAudio("son du Mac") } })
             try pisteSysteme.demarrer()
             pistes.append(pisteSysteme)
         } catch {
             // Le micro continue : mieux vaut une piste qu'aucune, et Steven le voit.
-            alerte = "\(error.localizedDescription) Le micro continue d'enregistrer."
+            alerteSysteme = "\(error.localizedDescription) Le micro continue d'enregistrer."
+        }
+    }
+
+    private func signalerAudio(_ piste: String) {
+        alerteAudio = "Attention : l'audio (\(piste)) n'est plus enregistré. Vérifie l'espace disque et le dossier des réunions."
+    }
+
+    private func sauvegarder(_ ecriture: () throws -> Void) {
+        do {
+            try ecriture()
+            alerteSauvegarde = nil
+        } catch {
+            alerteSauvegarde = "Attention : tes notes et la transcription ne s'écrivent plus sur le disque. Elles restent ici : ne quitte pas Aparté."
         }
     }
 
     /// Le décalage d'une piste part sur le disque dès qu'il est connu, pour survivre à un plantage.
     private func noter(_ piste: Piste, _ decalage: Double) {
         reunion.meta.decalages = (reunion.meta.decalages ?? [:]).merging([piste.rawValue: decalage]) { _, nouveau in nouveau }
-        try? reunion.enregistrerMeta()
+        sauvegarder { try reunion.enregistrerMeta() }
     }
 
     private func ajouter(_ recu: Segment) {
@@ -236,7 +270,7 @@ public final class SessionReunion {
         segment.fin += reunion.decalage(recu.piste)
         let rang = segments.firstIndex { $0.debut > segment.debut } ?? segments.endIndex
         segments.insert(segment, at: rang)
-        try? reunion.enregistrer(segments: segments)
+        sauvegarder { try reunion.enregistrer(segments: segments) }
     }
 
     private func pousser(_ niveau: Float, moi: Bool) {
@@ -254,7 +288,7 @@ public final class SessionReunion {
         guard let rang = lignes.firstIndex(where: { $0.id == id }) else { return }
         if lignes[rang].texte.isEmpty, !texte.isEmpty { lignes[rang].temps = temps }
         lignes[rang].texte = texte
-        try? reunion.enregistrer(notes: lignes)
+        sauvegarder { try reunion.enregistrer(notes: lignes) }
     }
 
     public func ligneSuivante() -> UUID {
@@ -264,18 +298,21 @@ public final class SessionReunion {
         return nouvelle.id
     }
 
-    func terminer() async -> Reunion {
-        etat = "Derniers mots en cours de transcription…"
-        let duree = temps
-        for piste in pistes { piste.arreter() }
-        for transcripteur in transcripteurs { await transcripteur.terminer() }
-        for aac in [reunion.microEnCours, reunion.systemeEnCours] where FileManager.default.fileExists(atPath: aac.path) {
-            try? terminerEnregistrement(aac)
+    /// Arrête l'audio une seule fois, puis écrit tout. Si l'écriture échoue, l'erreur remonte et
+    /// tout reste en mémoire : un nouvel appel réessaie sans rien réenregistrer.
+    func terminer() async throws -> Reunion {
+        if !arretee {
+            arretee = true
+            etat = "Derniers mots en cours de transcription…"
+            duree = temps
+            for piste in pistes { piste.arreter() }
+            for transcripteur in transcripteurs { await transcripteur.terminer() }
+            etat = ""
         }
         reunion.meta.duree = duree
-        try? reunion.enregistrerMeta()
-        try? reunion.enregistrer(segments: segments)
-        try? reunion.enregistrer(notes: lignes)
+        try reunion.enregistrerMeta()
+        try reunion.enregistrer(segments: segments)
+        try reunion.enregistrer(notes: lignes)
         return reunion
     }
 }
