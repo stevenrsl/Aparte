@@ -13,3 +13,4 @@ dans le [plan des agents](plan-agents.md).
 | Vérifier le mode sombre et l'accessibilité | Claude Code | `accessibilite` | à faire | `Sources/DA/`, `docs/accessibilite.md` |
 | Embarquer les polices du brief | Claude Code | `polices` | à faire | `Sources/DA/`, `Package.swift`, `build.sh` |
 | Fiabiliser l'enregistrement | Claude Code | `fiabilite-audio` | en relecture | `Sources/Capture/`, `Sources/Interface/`, `Sources/Stockage/`, `Tests/` |
+| Protéger la réunion en cours | Claude Code | `reunion-protegee` | en cours | `Sources/AparteApp/`, `Sources/Interface/`, `Sources/Analyse/`, `Tests/` |

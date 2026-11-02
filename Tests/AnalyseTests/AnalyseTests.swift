@@ -1,5 +1,6 @@
 import Analyse
 import Foundation
+import Stockage
 import Testing
 import Transcription
 
@@ -133,4 +134,12 @@ func analyseLeFichierDeReference() async throws {
     let elements = compteRendu.decisions + compteRendu.actions + compteRendu.questions
     #expect(elements.allSatisfy { ValidationSources.valider($0, dans: segments) != nil })
     print("resume: \(compteRendu.resume.count) car., decisions: \(compteRendu.decisions.count), actions: \(compteRendu.actions.count), questions: \(compteRendu.questions.count), ecartes: \(compteRendu.elementsEcartes), passages non analyses: \(compteRendu.passagesNonAnalyses)")
+}
+
+@Test func unBlancAudioSeDitDansCeQuiSeCopie() {
+    let compteRendu = CompteRendu(fournisseur: "Test", decisions: [], actions: [], questions: [])
+    let incidents = [IncidentAudio(piste: "micro", debut: 40, fin: 52)]
+    #expect(compteRendu.texteACopier(incidents: incidents).contains("Audio incomplet : micro coupé de 00:40 à 00:52."))
+    #expect(compteRendu.markdown(incidents: incidents).contains("Audio incomplet"))
+    #expect(!compteRendu.texteACopier().contains("Audio incomplet"))
 }
