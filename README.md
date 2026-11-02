@@ -46,8 +46,8 @@ l'écho d'une visio sans casque et corrige les noms qu'il connaît. Pour une ré
 puis « Relire l'enregistrement ». La première relecture télécharge 21 Mo de modèles depuis Hugging Face, sans
 rien envoyer de l'enregistrement.
 
-Le compte rendu s'écrit ensuite tout seul, sur ce Mac. Private Cloud Compute ne part jamais tout seul : c'est un
-bouton, avec une confirmation, et il reste inactif tant qu'Apple n'a pas autorisé l'app.
+Le compte rendu s'écrit ensuite tout seul, sur ce Mac. Mistral ne part jamais tout seul : « Refaire l'analyse »,
+puis « Avec Mistral… », avec une confirmation.
 
 ## Gérer une réunion
 
@@ -58,7 +58,8 @@ disque suit. Une réunion en cours d'enregistrement ne peut pas être modifiée.
 
 - L'analyse locale peut manquer des éléments, en retenir de trop ou mal les ranger : voir `docs/mesure-analyse.md`.
   Les éléments cités sont toujours exacts, leur classement reste à relire.
-- Le résumé est construit depuis les éléments validés. Il est sec, c'est voulu.
+- « En bref » est rédigé par le modèle : il peut se tromper, ses sources sont juste en dessous. Les décisions, actions et
+  questions restent des citations exactes.
 - Chaque élément est la phrase exacte de la transcription, sans reformulation : elle garde ses hésitations et ses erreurs de transcription.
 - Une analyse avec Mistral envoie la transcription et les notes de cette réunion, après confirmation. Ta clé se saisit
   dans les réglages et va dans le trousseau, ou se reprend de Cairn d'un clic.

@@ -133,28 +133,26 @@ de ce qu'elle contient n'est réécrit, sauf le titre dans `meta.json`.
   - **Local** (Foundation Models sur l'appareil) : la fenêtre de 4 096 tokens est partagée entre
     l'entrée et la sortie. On découpe la transcription en segments d'environ cinq minutes, on
     produit une structure `@Generable` par segment, puis une synthèse des segments.
-  - **PCC** : environ 32K tokens, de quoi passer une réunion d'une heure en une fois.
-    Vérifié le 2 novembre 2026 : il faut l'autorisation `com.apple.developer.private-cloud-compute`,
-    qu'Apple accorde sur demande au compte développeur. Tant qu'elle manque, le bouton reste inactif.
+  - **PCC** : retiré de l'app (décidé par Steven le 2 novembre 2026), car il faut une autorisation
+    `com.apple.developer.private-cloud-compute` qu'Apple accorde sur demande. À reprendre une fois accordée.
   - **Externe** : l'API du fournisseur choisi, en une fois. La clé est rangée dans le trousseau,
     jamais dans le repo ni dans un fichier.
   - **Analyse automatique** (demandée par Steven le 2 novembre 2026) : après la relecture, une réunion sans
-    analyse est analysée toute seule, en local seulement. PCC et l'externe restent toujours lancés
+    analyse est analysée toute seule, en local seulement. L'externe reste toujours lancé
     par Steven, réunion par réunion, après confirmation.
   - Vérifié le 2 novembre 2026 : le framework Foundation Models accepte d'autres modèles par le
     protocole `LanguageModel`, à partir de macOS 27. Chaque fournisseur peut livrer un package
     Swift. Apple cite Anthropic et Google ; rien de trouvé pour ChatGPT ou Mistral, où il faudrait
     sans doute écrire l'adaptation nous-mêmes. Vérifier ce qui existe vraiment au moment du
     chantier, avant d'écrire nos propres clients HTTP.
-  - PCC a une limite quotidienne par utilisateur, plus haute avec iCloud+. Vérifier qu'elle tient
-    pour plusieurs longues réunions dans la journée.
 - **Une sortie commune** quel que soit le fournisseur : résumé, décisions, actions, questions
   ouvertes. Chaque élément porte ses horodatages sources et, si possible, la phrase exacte.
 - **Une validation après coup** : un élément dont les horodatages n'existent pas ou dont la phrase
   est introuvable dans la transcription est écarté (règle 1).
-- **Le résumé n'est pas écrit par un modèle** (décidé par Steven le 2 novembre 2026) : il est construit
-  à partir des seuls éléments validés, chacun avec son horodatage. Plus sec, mais rien n'échappe à la
-  règle 1.
+- **« En bref » est rédigé par le modèle** (décidé par Steven le 2 novembre 2026, à la place du seul résumé construit) :
+  deux ou trois phrases, comme dans Cairn. Une reformulation peut se tromper : l'écran dit qui l'a rédigée,
+  chaque phrase garde ses sources, et une phrase qui nomme une personne, un chiffre ou un moment absent de
+  ses lignes est retirée. Sans phrase valide, le résumé construit revient.
 - **Chaque élément est une citation exacte** (décidé par Steven le 2 novembre 2026) : la phrase entière
   de la transcription, jamais une reformulation, car aucun contrôle ne prouve qu'une reformulation dit
   vrai. Plus sec, et les erreurs de transcription restent visibles.
