@@ -96,7 +96,7 @@ public final class ModeleApp {
         let encodeur = JSONEncoder()
         encodeur.outputFormatting = [.prettyPrinted, .sortedKeys]
         encodeur.dateEncodingStrategy = .iso8601
-        try reunion.enregistrer(analyseJSON: encodeur.encode(compteRendu), markdown: compteRendu.markdown)
+        try reunion.enregistrer(analyseJSON: encodeur.encode(compteRendu), markdown: compteRendu.markdown(incidents: reunion.meta.incidentsAudio ?? []))
         var meta = reunion
         if !meta.meta.fournisseurs.contains(compteRendu.fournisseur) {
             meta.meta.fournisseurs.append(compteRendu.fournisseur)
@@ -184,6 +184,7 @@ public final class SessionReunion {
     private enum Ecriture { case meta, transcription, notes }
     @ObservationIgnored private var enAttente: Set<Ecriture> = []
     @ObservationIgnored private var arretee = false
+    @ObservationIgnored private var activite: NSObjectProtocol?
     @ObservationIgnored private var duree = 0.0
     @ObservationIgnored private var pistes: [PisteAudio] = []
     @ObservationIgnored private var transcripteurs: [TranscripteurDirect] = []
@@ -232,6 +233,9 @@ public final class SessionReunion {
                                     surCoupure: { [weak self] coupee, date in Task { @MainActor in self?.noterCoupure("micro", coupee: coupee, a: date) } })
         try pisteMicro.demarrer()
         pistes.append(pisteMicro)
+        // Le Mac ne s'endort pas seul pendant une réunion. Fermer le capot reste possible : l'alerte le dira.
+        activite = ProcessInfo.processInfo.beginActivity(options: [.userInitiated, .idleSystemSleepDisabled],
+                                                         reason: "Réunion en cours d'enregistrement")
 
         guard let transcripteurSysteme else { return }
         do {
@@ -342,6 +346,8 @@ public final class SessionReunion {
             etat = "Derniers mots en cours de transcription…"
             duree = temps
             for piste in pistes { piste.arreter() }
+            if let activite { ProcessInfo.processInfo.endActivity(activite) }
+            activite = nil
             for transcripteur in transcripteurs { await transcripteur.terminer() }
             etat = ""
         }

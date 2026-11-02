@@ -86,14 +86,20 @@ public struct CompteRendu: Codable, Sendable, Hashable {
     }
 
     /// Résumé, décisions et actions, sans la transcription : prêt à coller.
-    public var texteACopier: String {
+    public func texteACopier(incidents: [IncidentAudio] = []) -> String {
         var parties = [resume]
+        if let audio = Self.audioIncomplet(incidents) { parties.append(audio) }
         if !decisions.isEmpty { parties.append("Décisions\n" + decisions.map { "- \($0.texte)" }.joined(separator: "\n")) }
         if !actions.isEmpty { parties.append("Actions\n" + actions.map { "- \($0.texte)" }.joined(separator: "\n")) }
         return parties.joined(separator: "\n\n")
     }
 
-    public var markdown: String {
+    /// Il manque un moment de la réunion : ce qui en est tiré ne peut pas le cacher.
+    private static func audioIncomplet(_ incidents: [IncidentAudio]) -> String? {
+        incidents.isEmpty ? nil : "Audio incomplet : " + incidents.map(\.description).joined(separator: ", ") + "."
+    }
+
+    public func markdown(incidents: [IncidentAudio] = []) -> String {
         func bloc(_ titre: String, _ elements: [ElementSource]) -> String {
             guard !elements.isEmpty else { return "" }
             let lignes = elements.map { element in
@@ -102,6 +108,7 @@ public struct CompteRendu: Codable, Sendable, Hashable {
             return "\n## \(titre)\n\n" + lignes.joined(separator: "\n") + "\n"
         }
         return "# Compte rendu\n\nProduit par : \(fournisseur)\n\n\(resume)\n"
+            + (Self.audioIncomplet(incidents).map { "\n\($0)\n" } ?? "")
             + bloc("Décisions", decisions) + bloc("Actions", actions) + bloc("Questions ouvertes", questions)
     }
 }

@@ -8,6 +8,28 @@ import Transcription
 
 // MARK: - La charpente
 
+/// Quitter pendant une réunion demande confirmation, et termine la réunion proprement.
+@MainActor
+public final class DelegueAparte: NSObject, NSApplicationDelegate {
+    public var modele: ModeleApp?
+
+    public func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard let modele, modele.session != nil else { return .terminateNow }
+        let alerte = NSAlert()
+        alerte.messageText = "Une réunion est en cours"
+        alerte.informativeText = "Si tu quittes, Aparté termine la réunion d'abord et écrit les derniers mots."
+        alerte.addButton(withTitle: "Continuer la réunion")
+        alerte.addButton(withTitle: "Terminer la réunion et quitter")
+        guard alerte.runModal() == .alertSecondButtonReturn else { return .terminateCancel }
+        Task {
+            await modele.terminer()
+            // Si l'écriture a échoué, la session reste : on ne quitte pas, l'erreur est affichée.
+            sender.reply(toApplicationShouldTerminate: modele.session == nil)
+        }
+        return .terminateLater
+    }
+}
+
 public struct FenetreAparte: View {
     @Bindable var modele: ModeleApp
 
@@ -796,7 +818,7 @@ struct EcranCompteRendu: View {
         HStack(spacing: 10) {
             Button(copie ? "Copié" : "Copier le compte rendu") {
                 NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(compteRendu.texteACopier, forType: .string)
+                NSPasteboard.general.setString(compteRendu.texteACopier(incidents: reunion.meta.incidentsAudio ?? []), forType: .string)
                 copie = true
             }
             .buttonStyle(BoutonPrincipal())
