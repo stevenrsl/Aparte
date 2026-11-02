@@ -181,6 +181,8 @@ public final class SessionReunion {
     private var alerteSysteme: String?
     private var alerteAudio: String?
     private var alerteSauvegarde: String?
+    private enum Ecriture { case meta, transcription, notes }
+    @ObservationIgnored private var enAttente: Set<Ecriture> = []
     @ObservationIgnored private var arretee = false
     @ObservationIgnored private var duree = 0.0
     @ObservationIgnored private var pistes: [PisteAudio] = []
@@ -250,29 +252,37 @@ public final class SessionReunion {
         alerteAudio = "Attention : l'audio (\(piste)) n'est plus enregistré. Vérifie l'espace disque et le dossier des réunions."
     }
 
-    private func sauvegarder(_ ecriture: () throws -> Void) {
-        do {
-            try ecriture()
-            alerteSauvegarde = nil
-        } catch {
-            alerteSauvegarde = "Attention : tes notes et la transcription ne s'écrivent plus sur le disque. Elles restent ici : ne quitte pas Aparté."
+    /// Une écriture ratée reste en attente et se réessaie à chaque sauvegarde. L'alerte ne part que
+    /// lorsque plus rien n'attend : le succès d'une autre écriture ne suffit pas.
+    private func sauvegarder(_ ecriture: Ecriture) {
+        enAttente.insert(ecriture)
+        for attente in enAttente {
+            do {
+                switch attente {
+                case .meta: try reunion.enregistrerMeta()
+                case .transcription: try reunion.enregistrer(segments: segments)
+                case .notes: try reunion.enregistrer(notes: lignes)
+                }
+                enAttente.remove(attente)
+            } catch {}
         }
+        alerteSauvegarde = enAttente.isEmpty ? nil : "Attention : tes notes et la transcription ne s'écrivent plus sur le disque. Elles restent ici : ne quitte pas Aparté."
     }
 
     /// Le décalage d'une piste part sur le disque dès qu'il est connu, pour survivre à un plantage.
     private func noter(_ piste: Piste, _ decalage: Double) {
         reunion.meta.decalages = (reunion.meta.decalages ?? [:]).merging([piste.rawValue: decalage]) { _, nouveau in nouveau }
-        sauvegarder { try reunion.enregistrerMeta() }
+        sauvegarder(.meta)
     }
 
-    private func ajouter(_ recu: Segment) {
+    func ajouter(_ recu: Segment) {
         // Le transcripteur compte depuis le premier son de sa piste : on revient à l'horloge de la réunion.
         var segment = recu
         segment.debut += reunion.decalage(recu.piste)
         segment.fin += reunion.decalage(recu.piste)
         let rang = segments.firstIndex { $0.debut > segment.debut } ?? segments.endIndex
         segments.insert(segment, at: rang)
-        sauvegarder { try reunion.enregistrer(segments: segments) }
+        sauvegarder(.transcription)
     }
 
     private func pousser(_ niveau: Float, moi: Bool) {
@@ -290,7 +300,7 @@ public final class SessionReunion {
         guard let rang = lignes.firstIndex(where: { $0.id == id }) else { return }
         if lignes[rang].texte.isEmpty, !texte.isEmpty { lignes[rang].temps = temps }
         lignes[rang].texte = texte
-        sauvegarder { try reunion.enregistrer(notes: lignes) }
+        sauvegarder(.notes)
     }
 
     public func ligneSuivante() -> UUID {
