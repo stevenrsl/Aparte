@@ -61,7 +61,13 @@ public struct CompteRendu: Codable, Sendable, Hashable {
             phrase("Action", "Actions", actions, maximum: 2),
             phrase("Question ouverte", "Questions ouvertes", questions, maximum: 1),
         ].compactMap { $0 }
-        return phrases.isEmpty ? "Aucune décision, action ou question vérifiable dans cette réunion." : phrases.joined(separator: " ")
+        guard phrases.isEmpty else { return phrases.joined(separator: " ") }
+        // Ne dit que ce qui a été obtenu : le modèle peut avoir manqué un élément, ou un passage échoué.
+        switch passagesNonAnalyses {
+        case 0: return "Aucun élément vérifié obtenu."
+        case 1: return "Aucun élément vérifié obtenu. 1 passage non analysé."
+        default: return "Aucun élément vérifié obtenu. \(passagesNonAnalyses) passages non analysés."
+        }
     }
 
     /// Résumé, décisions et actions, sans la transcription : prêt à coller.

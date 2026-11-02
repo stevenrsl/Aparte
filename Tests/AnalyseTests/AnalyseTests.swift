@@ -87,7 +87,9 @@ private let citationMarie = "Marie envoie la musique avant vendredi."
 
 @Test func unResumeSansElementValideNInventeRien() {
     let compteRendu = CompteRendu(fournisseur: "Test", decisions: [], actions: [], questions: [])
-    #expect(compteRendu.resume == "Aucune décision, action ou question vérifiable dans cette réunion.")
+    #expect(compteRendu.resume == "Aucun élément vérifié obtenu.")
+    let partiel = CompteRendu(fournisseur: "Test", decisions: [], actions: [], questions: [], passagesNonAnalyses: 2)
+    #expect(partiel.resume == "Aucun élément vérifié obtenu. 2 passages non analysés.")
 }
 
 @Test func uneAncienneAnalyseSeRelitSansSonResumeLibre() throws {
