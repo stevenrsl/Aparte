@@ -479,19 +479,25 @@ public struct AnalysteLocal: Analyste {
         var debut: Double
         var piste: Piste
         var voix: String?
+        /// Vrai si la ligne est sans doute l'écho du haut-parleur plutôt qu'une vraie réponse.
+        var echoProbable: Bool = false
     }
 
     static func lignes(de passage: [Segment]) -> [Ligne] {
         passage.flatMap { segment in
-            ValidationSources.phrases(de: segment.texte).map { Ligne(phrase: $0, debut: segment.debut, piste: segment.piste, voix: segment.voix) }
+            ValidationSources.phrases(de: segment.texte).map {
+                Ligne(phrase: $0, debut: segment.debut, piste: segment.piste, voix: segment.voix, echoProbable: segment.echoProbable ?? false)
+            }
         }
     }
 
     static func invite(_ lignes: [Ligne], notes: [LigneDeNote], type: TypeReunion) -> String {
+        // Une ligne marquée reste une preuve citable, mais elle n'est pas forcément dite par moi avec
+        // certitude : c'est peut-être l'écho du haut-parleur.
         func qui(_ ligne: Ligne) -> String {
-            if let voix = ligne.voix { return "\(voix) : " }
-            guard type == .visio else { return "" }
-            return ligne.piste == .micro ? "moi : " : "eux : "
+            var qui = ligne.voix ?? (type == .visio ? (ligne.piste == .micro ? "moi" : "eux") : "")
+            if ligne.echoProbable { qui += qui.isEmpty ? "écho probable, pas sûr que ce soit moi" : ", écho probable" }
+            return qui.isEmpty ? "" : "\(qui) : "
         }
         let debut = (lignes.first?.debut ?? 0) - 15
         let fin = (lignes.last?.debut ?? 0) + 15

@@ -506,7 +506,7 @@ public final class SessionReunion {
         segment.fin += reunion.decalage(recu.piste)
         let rang = segments.firstIndex { $0.debut > segment.debut } ?? segments.endIndex
         segments.insert(segment, at: rang)
-        segmentsLisibles = Nettoyage.fusionner(Nettoyage.sansEcho(segments))
+        segmentsLisibles = Nettoyage.fusionner(Nettoyage.marquerEcho(segments))
         sauvegarder(.transcription)
     }
 
@@ -632,7 +632,7 @@ enum Relecture {
             segments += lus
         }
         progression(1)
-        return Resultat(segments: Nettoyage.fusionner(Nettoyage.sansEcho(segments)), voixEchouees: voixEchouees)
+        return Resultat(segments: Nettoyage.fusionner(Nettoyage.marquerEcho(segments)), voixEchouees: voixEchouees)
     }
 }
 
