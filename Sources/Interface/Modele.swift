@@ -99,17 +99,22 @@ public final class ModeleApp {
 
     func resumeEnregistre(de reunion: Reunion) -> CompteRendu? { compteRendus[reunion.id] }
 
+    /// Le JSON et l'empreinte d'origine ne changent jamais ici : seul le Markdown lisible, et le cache
+    /// affiché, sortent de la version revalidée face à la transcription actuelle. Une analyse qui finit
+    /// après une relecture (son empreinte, prise avant, ne correspond plus) s'enregistre donc déjà périmée,
+    /// sans attendre un prochain `recharger()`.
     func enregistrer(_ compteRendu: CompteRendu, pour reunion: Reunion) throws {
         let encodeur = JSONEncoder()
         encodeur.outputFormatting = [.prettyPrinted, .sortedKeys]
         encodeur.dateEncodingStrategy = .iso8601
-        try reunion.enregistrer(analyseJSON: encodeur.encode(compteRendu), markdown: compteRendu.markdown(incidents: reunion.meta.incidentsAudio ?? []))
+        let revalidee = compteRendu.revalide(dans: reunion.segments())
+        try reunion.enregistrer(analyseJSON: encodeur.encode(compteRendu), markdown: revalidee.markdown(incidents: reunion.meta.incidentsAudio ?? []))
         var meta = reunion
         if !meta.meta.fournisseurs.contains(compteRendu.fournisseur) {
             meta.meta.fournisseurs.append(compteRendu.fournisseur)
             try? meta.enregistrerMeta()
         }
-        compteRendus[reunion.id] = compteRendu
+        compteRendus[reunion.id] = revalidee
     }
 
     // MARK: Les actions à cocher
@@ -212,11 +217,12 @@ public final class ModeleApp {
         guard let donnees = reunion.analyseJSON() else { return }
         let decodeur = JSONDecoder()
         decodeur.dateDecodingStrategy = .iso8601
-        guard var brute = try? decodeur.decode(CompteRendu.self, from: donnees) else { return }
-        guard brute.etat(selon: reunion.segments()) == .perimee else { return }
-        brute.fraicheur = .perimee
+        guard let brute = try? decodeur.decode(CompteRendu.self, from: donnees) else { return }
+        let segments = reunion.segments()
+        guard brute.etat(selon: segments) == .perimee else { return }
+        let revalidee = brute.revalide(dans: segments)
         do {
-            try reunion.enregistrer(analyseJSON: donnees, markdown: brute.markdown(incidents: reunion.meta.incidentsAudio ?? []))
+            try reunion.enregistrer(analyseJSON: donnees, markdown: revalidee.markdown(incidents: reunion.meta.incidentsAudio ?? []))
         } catch {
             erreur = "Le compte rendu de « \(reunion.meta.titre) » n'a pas pu être marqué périmé : \(error.localizedDescription)"
         }
