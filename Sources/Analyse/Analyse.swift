@@ -433,7 +433,7 @@ public struct AnalysteLocal: Analyste {
     /// `AnalysteMistral.consigne`), pour n'écrire qu'une fois ce que signifie la mention.
     static let consigneEcho = """
      Une ligne « écho probable » est peut-être ce que le micro a capté du haut-parleur plutôt qu'une vraie réponse : \
-    elle peut servir de preuve, mais ne conclus pas qu'elle a été dite avec certitude, et ne la compte pas comme \
+    elle peut servir de preuve, mais ne conclus pas que c'est « moi » qui l'a dite, et ne la compte pas comme \
     une deuxième occurrence de ce qu'elle répète.
     """
     /// Le modèle ne recopie ni n'écrit rien : il choisit des numéros de lignes, une catégorie à la fois.
@@ -577,12 +577,18 @@ public struct AnalysteLocal: Analyste {
         }
     }
 
+    /// La phrase d'une ligne, avec sa mention d'écho probable si elle est marquée : la seconde lecture
+    /// doit la voir, comme la première passe la voit dans `invite`.
+    static func contexte(_ ligne: Ligne) -> String {
+        ligne.echoProbable ? "\(ligne.phrase) (écho probable)" : ligne.phrase
+    }
+
     /// Seconde lecture de chaque ligne retenue, avec ses voisines : la première passe en retient trop.
     /// Si le modèle refuse de répondre, la ligne reste : le passage entier ne doit pas tomber pour autant.
     private func confirmer(_ numero: Int, dans lignes: [Ligne], consigne: String, options: GenerationOptions) async -> Bool {
         guard lignes.indices.contains(numero - 1) else { return true }
         let voisines = max(0, numero - 3)...min(lignes.count - 1, numero + 1)
-        let contexte = voisines.map { ($0 == numero - 1 ? ">>> " : "") + lignes[$0].phrase }.joined(separator: "\n")
+        let contexte = voisines.map { ($0 == numero - 1 ? ">>> " : "") + Self.contexte(lignes[$0]) }.joined(separator: "\n")
         let reponse = try? await session(consigne + " La ligne à juger est marquée >>>.")
             .respond(to: contexte, generating: Confirmation.self, options: options)
         return reponse?.content.correspond ?? true
@@ -594,6 +600,16 @@ public struct AnalysteLocal: Analyste {
         var actions: [ElementSource?]
         var questions: [ElementSource?]
         var sujets: [Sujet] = []
+    }
+
+    /// Les lignes numérotées envoyées au modèle pour « En bref », chacune marquée « (écho probable) »
+    /// si son moment source vient d'une ligne marquée : la validation qui suit (`EnBref.valider`)
+    /// reçoit elle le texte brut, sans la mention, pour ne pas la prendre pour un mot dit.
+    static func retenusEnBref(_ retenus: [(texte: String, debut: Double)], marques: Set<Double>) -> String {
+        retenus.enumerated().map { offset, retenu in
+            let texte = marques.contains(retenu.debut) ? "\(retenu.texte) (écho probable)" : retenu.texte
+            return "\(offset + 1). \(texte)"
+        }.joined(separator: "\n")
     }
 
     public func analyser(segments: [Segment], notes: [LigneDeNote], type: TypeReunion,
@@ -640,11 +656,13 @@ public struct AnalysteLocal: Analyste {
         guard echecs < passages.count else { throw ErreurAnalyse.aucunPassage }
 
         // « En bref » se rédige à partir de ce qui a été retenu : une longue réunion tient ainsi dans la fenêtre.
-        let retenus = (decisions + actions + questions).compactMap { element in element.sources.first.map { (element.texte, $0) } }
-            + sujets.map { ($0.titre, $0.debut) }
+        let retenus: [(texte: String, debut: Double)] = (decisions + actions + questions)
+            .compactMap { element in element.sources.first.map { (texte: element.texte, debut: $0) } }
+            + sujets.map { (texte: $0.titre, debut: $0.debut) }
         var enBref: [PhraseSourcee]?
         if !retenus.isEmpty {
-            let liste = retenus.enumerated().map { "\($0.offset + 1). \($0.element.0)" }.joined(separator: "\n")
+            let marques = Set(segments.filter { $0.echoProbable ?? false }.map(\.debut))
+            let liste = Self.retenusEnBref(retenus, marques: marques)
             if let genere = try? await session(Self.consigneEnBref).respond(to: liste, generating: EnBrefGenere.self, options: GenerationOptions(sampling: .greedy)).content {
                 let valides = EnBref.valider(genere.phrases.map { .init(texte: $0.texte, lignes: $0.lignes) },
                                              phrases: retenus.map(\.0), debuts: retenus.map(\.1))
