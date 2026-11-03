@@ -182,13 +182,25 @@ public final class MicrophoneSource: AudioSource {
             guard !engine.isRunning else { return true }
             relances += 1
             arreterMoteur()
-            for essai in [entree, nil] {
+            return Self.repartir(sur: entree) { essai in
                 engine = AVAudioEngine()
-                if (try? lancer(sur: essai)) != nil { return true }
+                try lancer(sur: essai)
             }
-            return false
         }
         if !finie { relancerPlusTard() }
+    }
+
+    /// Un micro en transition est encore là : on le réessaiera, sans basculer sur celui du système.
+    static func repartir(sur entree: AudioDeviceID?, lancer: (AudioDeviceID?) throws -> Void) -> Bool {
+        for essai in [entree, nil] {
+            do {
+                try lancer(essai)
+                return true
+            } catch ErreurCapture.microEnTransition {
+                return false
+            } catch {}
+        }
+        return false
     }
 
     private func relancerPlusTard() {
@@ -302,7 +314,7 @@ public final class PisteAudio: @unchecked Sendable {
             guard FileManager.default.fileExists(atPath: fichierURL.path) else {
                 throw ErreurCapture.fichierDisparu(fichierURL.lastPathComponent)
             }
-            try fichier?.write(from: pourFichier(mono))
+            if let tampon = pourFichier(mono) { try fichier?.write(from: tampon) }
         } catch {
             if !erreurSignalee {
                 erreurSignalee = true
@@ -316,10 +328,11 @@ public final class PisteAudio: @unchecked Sendable {
         if let converti = convertisseur?.convert(mono) { surConverti(converti) }
     }
 
-    private func pourFichier(_ mono: AVAudioPCMBuffer) -> AVAudioPCMBuffer {
+    /// `nil` quand le convertisseur garde encore ce tampon : l'écrire tel quel le mettrait à la mauvaise fréquence.
+    private func pourFichier(_ mono: AVAudioPCMBuffer) -> AVAudioPCMBuffer? {
         guard let cible = fichier?.processingFormat, cible != mono.format else { return mono }
         if convertisseurFichier?.source != mono.format { convertisseurFichier = StreamConverter(from: mono.format, to: cible) }
-        return convertisseurFichier?.convert(mono) ?? mono
+        return convertisseurFichier?.convert(mono)
     }
 
     /// Arrête la source, puis ferme le fichier une fois tout écrit.

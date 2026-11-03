@@ -77,3 +77,24 @@ func unMicroSEnregistreAToutesLesFrequences(frequence: Double) throws {
     try await Task.sleep(for: .seconds(2.5))
     #expect(source.relances == apresArret)
 }
+
+/// Un casque en transition ne doit pas faire passer la réunion sur un autre micro sans le dire.
+@Test func unMicroEnTransitionNeBasculePasSurCeluiDuSysteme() {
+    var essais: [AudioDeviceID?] = []
+    let reparti = MicrophoneSource.repartir(sur: 42) { essai in
+        essais.append(essai)
+        throw ErreurCapture.microEnTransition
+    }
+    #expect(!reparti)
+    #expect(essais == [42])
+}
+
+@Test func unMicroDisparuBasculeSurCeluiDuSysteme() {
+    var essais: [AudioDeviceID?] = []
+    let reparti = MicrophoneSource.repartir(sur: 42) { essai in
+        essais.append(essai)
+        if essai != nil { throw ErreurCapture.entreeIndisponible }
+    }
+    #expect(reparti)
+    #expect(essais == [42, nil])
+}
