@@ -176,8 +176,23 @@ public struct CompteRendu: Codable, Sendable, Hashable {
         copie.actions = garder(actions)
         copie.questions = garder(questions)
 
+        // Un sujet n'est retiré que si ses bornes ne tombent plus sur un segment. Son titre, lui, doit
+        // encore être fait de mots dits dans ce moment (comme DecoupageSujets.valider à l'analyse) :
+        // sinon il revient aux six premiers mots dits du passage, bornes et id conservés.
+        // Un sujet n'est retiré que si ses bornes ne tombent plus sur un segment. Son titre, lui, doit
+        // encore être fait de mots dits dans ce moment (comme DecoupageSujets.valider à l'analyse) :
+        // sinon il revient aux six premiers mots dits du passage, bornes et id conservés.
         func sujetsValides() -> [Sujet]? {
-            sujets?.filter { !ValidationSources.segmentsSources(de: $0.debut, dans: segments).isEmpty }
+            sujets?.compactMap { sujet -> Sujet? in
+                guard !ValidationSources.segmentsSources(de: sujet.debut, dans: segments).isEmpty else { return nil }
+                let couverts = segments.filter { sujet.contient($0.debut) || sujet.contient($0.fin) }
+                let texteCouverts = couverts.map(\.texte).joined(separator: " ")
+                let lu = Set(ValidationSources.normaliser(texteCouverts).split(separator: " "))
+                guard !DecoupageSujets.titreDit(sujet.titre, lu: lu) else { return sujet }
+                var repli = sujet
+                repli.titre = ValidationSources.phrases(de: texteCouverts).first.map { $0.split(separator: " ").prefix(6).joined(separator: " ") } ?? sujet.titre
+                return repli
+            }
         }
         func enBrefControle() -> [PhraseSourcee]? {
             // Une seule instance pour toutes les phrases : son instanciation coûte plus que son usage,

@@ -116,6 +116,38 @@ private let horsTranscription = Sujet(titre: "Hors transcription", debut: 100, f
     #expect(!relue.texteACopier().contains("n'est plus à jour"))
 }
 
+// Le titre d'un sujet périmé ou à vérifier doit encore être fait de mots dits dans ce moment
+// (DecoupageSujets.titreDit) : sinon il revient aux six premiers mots dits du passage. Les bornes
+// et l'id restent, seul le titre change ; le sujet n'est retiré que si ses bornes ne tombent plus
+// sur un segment (couvert par uneAnalysePerimeeCacheEnBrefEtAvertitDansLaCopie, qui retire « Hors
+// transcription »).
+@Test func unSujetPerimeAvecUnTitreInventeRevientAuxMotsDitsDuPassage() {
+    let inventeAuDepart = Sujet(titre: "TV à 999 €", debut: 0, fin: 10)
+    let empreinteOriginale = CompteRendu.empreinte(de: segmentsOriginaux)
+    let compteRendu = CompteRendu(fournisseur: "Test", decisions: [], actions: [], questions: [],
+                                  sujets: [inventeAuDepart], empreinte: empreinteOriginale)
+    let segmentsApresRelecture = [
+        Segment(debut: 0, fin: 5, piste: .micro, texte: "On refuse le budget total."),
+        Segment(debut: 20, fin: 25, piste: .systeme, texte: "Marie envoie la musique avant vendredi."),
+    ]
+
+    let relue = compteRendu.revalide(dans: segmentsApresRelecture)
+    #expect(relue.fraicheur == .perimee)
+    #expect(relue.sujets?.first?.id == inventeAuDepart.id)
+    #expect(relue.sujets?.first?.debut == 0)
+    #expect(relue.sujets?.first?.titre == "On refuse le budget total.")
+}
+
+@Test func unSujetAVerifierAvecUnTitreDitResteInchange() {
+    let titreDit = Sujet(titre: "Budget", debut: 0, fin: 10)
+    let compteRendu = CompteRendu(fournisseur: "Test", decisions: [], actions: [], questions: [], sujets: [titreDit])
+    #expect(compteRendu.empreinte == nil)
+
+    let relue = compteRendu.revalide(dans: segmentsOriginaux)
+    #expect(relue.fraicheur == .aVerifier)
+    #expect(relue.sujets?.first?.titre == "Budget")
+}
+
 @Test func unExtraitDUneAnalyseAJourRecoitUneEmpreinteFraicheAutrementAucune() {
     let segmentsExtrait = [segmentsOriginaux[0]]
     let compteRenduAJour = CompteRendu(fournisseur: "Test", decisions: [], actions: [], questions: [], sujets: [budget])
