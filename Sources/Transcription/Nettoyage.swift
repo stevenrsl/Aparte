@@ -1,6 +1,6 @@
 import Foundation
 
-/// Rend une transcription lisible : l'écho retiré, les noms corrigés, les phrases d'une même
+/// Rend une transcription lisible : l'écho marqué, les noms corrigés, les phrases d'une même
 /// personne réunies. Repris de Cairn, y compris ses seuils.
 public enum Nettoyage {
     private static let francais = Locale(identifier: "fr_FR")
