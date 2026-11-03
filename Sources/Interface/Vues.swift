@@ -871,6 +871,7 @@ struct EcranCompteRendu: View {
 
     @ViewBuilder private func analyse(_ compteRendu: CompteRendu) -> some View {
         relecture
+        bandeauFraicheur(compteRendu)
         VStack(alignment: .leading, spacing: 8) {
             if let enBref = compteRendu.enBref, !enBref.isEmpty {
                 Libelle("en bref · rédigé par \(compteRendu.fournisseur)")
@@ -902,6 +903,21 @@ struct EcranCompteRendu: View {
         section("actions", compteRendu.actions)
         section("questions ouvertes", compteRendu.questions)
         sectionSujets(compteRendu.sujets ?? [])
+    }
+
+    /// La transcription a pu changer depuis cette analyse (relecture) ou n'avoir jamais été comparée
+    /// (analyse écrite avant ce contrôle) : le bouton « Refaire l'analyse » existant reste la seule issue.
+    @ViewBuilder private func bandeauFraicheur(_ compteRendu: CompteRendu) -> some View {
+        switch compteRendu.fraicheur {
+        case .perimee:
+            Libelle("la transcription a changé depuis cette analyse")
+                .accessibilityLabel("La transcription a changé depuis cette analyse. Utilise « Refaire l'analyse » pour la mettre à jour.")
+        case .aVerifier:
+            Libelle("analyse faite avant ce contrôle : à vérifier")
+                .accessibilityLabel("Analyse faite avant ce contrôle de fraîcheur : à vérifier. Utilise « Refaire l'analyse » si besoin.")
+        case .aJour:
+            EmptyView()
+        }
     }
 
     /// Refaire l'analyse : sur ce Mac, ou chez Mistral après confirmation.
