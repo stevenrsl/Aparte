@@ -6,4 +6,4 @@ dans le [plan des agents](plan-agents.md).
 
 | Tâche | Agent | Branche | État | Fichiers touchés |
 |---|---|---|---|---|
-| Micro Bluetooth : plantage au démarrage et audio vide | Pickle | `micro-bluetooth` | en cours | `Package.swift`, `Sources/CaptureObjC/`, `Sources/Capture/Capture.swift`, `Sources/Capture/Recording.swift`, `Tests/CaptureTests/MicroBluetoothTests.swift` |
+| Micro Bluetooth : plantage au démarrage et audio vide | Pickle | `micro-bluetooth` | en relecture | `Package.swift`, `Sources/CaptureObjC/`, `Sources/Capture/Capture.swift`, `Sources/Capture/Recording.swift`, `Tests/CaptureTests/MicroBluetoothTests.swift`, `Tests/CaptureTests/PannesEnregistrementTests.swift` |
