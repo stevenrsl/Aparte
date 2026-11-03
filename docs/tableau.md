@@ -8,3 +8,4 @@ dans le [plan des agents](plan-agents.md).
 |---|---|---|---|---|
 | Nettoyage après la V0.2 | Claude Code | `apres-v0-2` | en relecture | `docs/tableau.md`, `docs/pannes-enregistrement.md`, `Tests/CaptureTests/` |
 | Garder l'écho comme preuve (issue #16, défaut grave n°1) | Dev | `garder-echo` | en relecture | `Sources/Transcription/Nettoyage.swift`, `Sources/Transcription/Transcription.swift`, `Sources/Interface/Modele.swift`, `Sources/Interface/Vues.swift`, `Sources/Analyse/Analyse.swift`, `Sources/Analyse/Mistral.swift`, `Tests/TranscriptionTests/`, `Tests/AnalyseTests/`, `Tests/InterfaceTests/`, `README.md`, `docs/fiche-reunions-2026-11.md` |
+| Comptes rendus périmés après une relecture (issue #16, défaut grave n°2) | Dev | `analyse-perimee` | en cours | `Sources/Analyse/Analyse.swift`, `Sources/Interface/Modele.swift`, `Sources/Interface/Vues.swift`, `Tests/AnalyseTests/`, `Tests/InterfaceTests/` |
