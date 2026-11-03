@@ -180,12 +180,15 @@ public struct CompteRendu: Codable, Sendable, Hashable {
             sujets?.filter { !ValidationSources.segmentsSources(de: $0.debut, dans: segments).isEmpty }
         }
         func enBrefControle() -> [PhraseSourcee]? {
-            enBref?.filter { phrase in
+            // Une seule instance pour toutes les phrases : son instanciation coûte plus que son usage,
+            // et un ancien compte rendu sans empreinte repasse par ici à chaque recharger().
+            let etiquettes = NLTagger(tagSchemes: [.nameType])
+            return enBref?.filter { phrase in
                 guard !phrase.sources.isEmpty else { return false }
                 let dits = phrase.sources.flatMap { ValidationSources.segmentsSources(de: $0, dans: segments) }
                 guard !dits.isEmpty else { return false }
                 let lu = Set(ValidationSources.normaliser(dits.map(\.texte).joined(separator: " ")).split(separator: " ").map(String.init))
-                return EnBref.motsNonDits(phrase.texte, lu: lu).isEmpty
+                return EnBref.motsNonDits(phrase.texte, lu: lu, etiquettes: etiquettes).isEmpty
             }
         }
 
@@ -343,12 +346,13 @@ public enum EnBref {
         "demain", "hier", "matin", "soir", "midi", "semaine", "mois", "annee",
     ]
 
-    /// Les noms, chiffres et mots de temps du texte qui ne sont pas dans ce qui a été dit.
-    static func motsNonDits(_ texte: String, lu: Set<String>) -> [String] {
+    /// Les noms, chiffres et mots de temps du texte qui ne sont pas dans ce qui a été dit. `etiquettes`
+    /// peut être réutilisé sur plusieurs phrases : son instanciation coûte plus que son usage, et
+    /// `revalide` le fait pour chaque phrase d'« En bref » à chaque recharger().
+    static func motsNonDits(_ texte: String, lu: Set<String>, etiquettes: NLTagger = NLTagger(tagSchemes: [.nameType])) -> [String] {
         var suspects = ValidationSources.normaliser(texte).split(separator: " ").map(String.init).filter { mot in
             motsDeTemps.contains(mot) || mot.contains(where: \.isNumber)
         }
-        let etiquettes = NLTagger(tagSchemes: [.nameType])
         etiquettes.string = texte
         etiquettes.setLanguage(.french, range: texte.startIndex..<texte.endIndex)
         etiquettes.enumerateTags(in: texte.startIndex..<texte.endIndex, unit: .word, scheme: .nameType,

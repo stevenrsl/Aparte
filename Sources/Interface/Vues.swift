@@ -1089,7 +1089,7 @@ struct GestionReunion: View {
                 }
             }
             Button("Répartir entre dossiers…") { repartition = true }
-                .disabled((modele.compteRendu(de: reunion)?.sujets ?? []).isEmpty)
+                .disabled((modele.resumeEnregistre(de: reunion)?.sujets ?? []).isEmpty)
             Button("Relire l'enregistrement") { modele.relire(reunion) }
                 .disabled(!FileManager.default.fileExists(atPath: reunion.micro.path))
             Divider()
