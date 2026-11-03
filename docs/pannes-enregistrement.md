@@ -3,6 +3,12 @@
 Essais du 2 novembre 2026, base `origin/v1-utilisable` (`f798b9f`).
 macOS 27, Swift 6.4, arm64. Aucun changement du code de production.
 
+## État au 2 novembre 2026, après la V0.2
+
+Ce rapport décrit les essais d'origine. Depuis, les défauts qu'il cite sont corrigés et testés : un M4A présent
+n'est plus remplacé, la suppression du dossier déclenche une alerte audio, et un son coupé est signalé. Le
+débranchement physique du micro reste à essayer.
+
 ## Reproduit par les tests
 
 Commande depuis la racine du dépôt :

@@ -36,15 +36,15 @@ xattr -dr com.apple.quarantine "/Applications/Aparté.app"
 2. Note quelques lignes, parle, puis termine. Aparté relit l'enregistrement et écrit le compte rendu tout seul.
 3. Clique sur une décision : l'app affiche et relit le passage source.
 
-En visio, un casque reste préférable. Sans casque, Aparté retire ce que le micro répète des haut-parleurs, mais ce
-que tu dis par-dessus peut être moins bien transcrit.
+En visio, un casque reste préférable. Sans casque, ce que le micro capte des haut-parleurs reste dans la
+transcription, marqué « écho probable », et ce que tu dis par-dessus peut être moins bien transcrit.
 
 Chaque réunion est un dossier lisible sans l'app : `meta.json`, `micro.m4a`, `systeme.m4a`,
 `transcription.json`, `notes.md`, `analyse.json`, `analyse.md`.
 
 ## Après une réunion
 
-Aparté relit l'enregistrement sur le Mac : il sépare les voix, que tu peux nommer dans le compte rendu, retire
+Aparté relit l'enregistrement sur le Mac : il sépare les voix, que tu peux nommer dans le compte rendu, marque
 l'écho d'une visio sans casque et corrige les noms qu'il connaît. Pour une réunion plus ancienne, « // gérer »,
 puis « Relire l'enregistrement ». La première relecture télécharge 21 Mo de modèles depuis Hugging Face, sans
 rien envoyer de l'enregistrement.

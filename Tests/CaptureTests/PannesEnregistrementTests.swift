@@ -161,12 +161,8 @@ private func attendre(_ fichier: URL, processus: Process) throws {
     try Recording.remux(aac, to: m4a)
     let avant = try Data(contentsOf: m4a)
     try ecrire(aac, secondes: 2)
-    try Recording.remux(aac, to: m4a)
-    let apres = try Data(contentsOf: m4a)
-    withKnownIssue("Défaut connu : remux remplace un M4A existant, même plus long (rapport pannes).") {
-        #expect(apres == avant)
-    }
-    #expect(try #require(Recording.seconds(of: m4a)) < 3)
+    #expect(throws: ErreurCapture.self) { try terminerEnregistrement(aac) }
+    #expect(try Data(contentsOf: m4a) == avant)
     #expect(FileManager.default.fileExists(atPath: aac.path))
 }
 

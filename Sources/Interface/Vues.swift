@@ -288,9 +288,12 @@ struct Bulles: View {
     var reunion: Reunion?
 
     private func etiquette(_ segment: Segment) -> String {
-        if let voix = segment.voix { return " · " + (reunion?.nom(de: voix) ?? voix) }
-        if estMoi(segment.piste) { return " · moi" }
-        return type == .visio ? " · eux" : ""
+        var etiquette: String
+        if let voix = segment.voix { etiquette = " · " + (reunion?.nom(de: voix) ?? voix) }
+        else if estMoi(segment.piste) { etiquette = " · moi" }
+        else { etiquette = type == .visio ? " · eux" : "" }
+        if segment.echoProbable == true { etiquette += " · écho probable" }
+        return etiquette
     }
 
     private func estMoi(_ piste: Piste) -> Bool { type == .visio && piste == .micro }

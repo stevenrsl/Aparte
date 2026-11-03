@@ -18,14 +18,21 @@ public struct Segment: Codable, Sendable, Identifiable, Hashable {
     public var texte: String
     /// « Voix 1 », « Voix 2 » : la personne, si la relecture a pu la distinguer sur sa piste.
     public var voix: String?
+    /// Vrai si la ligne reprend ce que dit l'autre piste au même moment : sans doute l'écho du
+    /// haut-parleur plutôt qu'une vraie réponse. La ligne reste entière, comme preuve.
+    public var echoProbable: Bool?
 
-    public init(id: UUID = UUID(), debut: Double, fin: Double, piste: Piste, texte: String, voix: String? = nil) {
+    public init(
+        id: UUID = UUID(), debut: Double, fin: Double, piste: Piste, texte: String, voix: String? = nil,
+        echoProbable: Bool? = nil
+    ) {
         self.id = id
         self.debut = debut
         self.fin = fin
         self.piste = piste
         self.texte = texte
         self.voix = voix
+        self.echoProbable = echoProbable
     }
 }
 
