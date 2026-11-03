@@ -311,8 +311,18 @@ public enum DecoupageSujets {
         }
     }
 
-    /// Les mots trop courts (« de », « la ») ne prouvent rien : ils ne sont pas contrôlés.
-    private static let longueurControlee = 4
+    /// Exceptions grammaticales explicites, écrites comme après normalisation (accents retirés).
+    private static let motsGrammaticaux: Set<Substring> = [
+        "a", "au", "aux", "de", "des", "du", "en", "et", "l", "la", "le", "les", "un", "une"
+    ]
+
+    /// Tous les mots porteurs de sens doivent avoir été dits, même un nom ou un nombre court.
+    /// Un titre sans aucun mot porteur de sens ne décrit pas un sujet.
+    static func titreDit(_ titre: String, lu: Set<Substring>) -> Bool {
+        let mots = ValidationSources.normaliser(titre).split(separator: " ")
+        return mots.contains { !motsGrammaticaux.contains($0) }
+            && mots.allSatisfy { motsGrammaticaux.contains($0) || lu.contains($0) }
+    }
 
     public static func valider(_ proposes: [Propose], phrases: [String], debuts: [Double], fin: Double) -> [Sujet] {
         guard phrases.count == debuts.count, !phrases.isEmpty else { return [] }
@@ -325,8 +335,7 @@ public enum DecoupageSujets {
             let dites = phrases[(premiere - 1)..<derniere]
             let lu = Set(ValidationSources.normaliser(dites.joined(separator: " ")).split(separator: " "))
             let titre = propose.titre.trimmingCharacters(in: .whitespacesAndNewlines)
-            let mots = ValidationSources.normaliser(titre).split(separator: " ")
-            let dit = !mots.isEmpty && mots.allSatisfy { $0.count < longueurControlee || lu.contains($0) }
+            let dit = titreDit(titre, lu: lu)
             let debutPhrase = dites.first.map { $0.split(separator: " ").prefix(6).joined(separator: " ") } ?? ""
             sujets.append(Sujet(titre: dit ? titre : debutPhrase, debut: debuts[premiere - 1],
                                 fin: derniere < debuts.count ? debuts[derniere] : fin))
