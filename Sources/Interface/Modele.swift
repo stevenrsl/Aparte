@@ -170,7 +170,7 @@ public final class ModeleApp {
         return ([reunion.meta.titre, reunion.dossier].compactMap { $0 } + noms).filter { !$0.isEmpty && vus.insert($0).inserted }
     }
 
-    /// Relit l'enregistrement : les voix séparées, l'écho retiré, les noms corrigés. Si les voix
+    /// Relit l'enregistrement : les voix séparées, l'écho marqué, les noms corrigés. Si les voix
     /// échouent, les mots restent : ils valent plus que de savoir qui les a dits.
     public func relire(_ reunion: Reunion) {
         guard relectures[reunion.id] == nil, session?.reunion.id != reunion.id else { return }
@@ -506,7 +506,9 @@ public final class SessionReunion {
         segment.fin += reunion.decalage(recu.piste)
         let rang = segments.firstIndex { $0.debut > segment.debut } ?? segments.endIndex
         segments.insert(segment, at: rang)
-        segmentsLisibles = Nettoyage.fusionner(Nettoyage.marquerEcho(segments))
+        let marques = Nettoyage.marquerEcho(segments)
+        segments = marques
+        segmentsLisibles = Nettoyage.fusionner(marques)
         sauvegarder(.transcription)
     }
 
