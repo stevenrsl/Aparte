@@ -429,13 +429,20 @@ public struct AnalysteLocal: Analyste {
         LanguageModelSession(model: SystemLanguageModel(guardrails: .permissiveContentTransformations), instructions: consigne)
     }
 
+    /// Partagée par les quatre consignes qui lisent une transcription marquée (ici et dans
+    /// `AnalysteMistral.consigne`), pour n'écrire qu'une fois ce que signifie la mention.
+    static let consigneEcho = """
+     Une ligne « écho probable » est peut-être ce que le micro a capté du haut-parleur plutôt qu'une vraie réponse : \
+    elle peut servir de preuve, mais ne conclus pas que c'est « moi » qui l'a dite, et ne la compte pas comme \
+    une deuxième occurrence de ce qu'elle répète.
+    """
     /// Le modèle ne recopie ni n'écrit rien : il choisit des numéros de lignes, une catégorie à la fois.
     /// Le texte rendu est donc toujours celui de la transcription.
     private static let consigneCommune = """
     Tu relis la transcription d'une réunion, ligne par ligne. Chaque ligne a un numéro. \
     Renvoie seulement les numéros demandés. Sois attentif : ne manque aucune ligne qui correspond, \
     et n'en retiens aucune qui ne correspond pas.
-    """
+    """ + consigneEcho
     static let consigneDecisions = consigneCommune + """
      Retiens les lignes où un choix est arrêté : ce qui est décidé, retenu, validé, refusé, maintenu ou abandonné. \
     Pas les avis, les préférences, les constats, les questions ni les tâches à faire.
@@ -448,12 +455,12 @@ public struct AnalysteLocal: Analyste {
     Tu résumes une réunion en français, en deux ou trois phrases simples, pour quelqu'un qui veut savoir \
     en dix secondes ce qui s'est dit. Tu ne t'appuies que sur les lignes numérotées qu'on te donne, et tu indiques \
     celles que chaque phrase résume. Tu n'inventes ni nom, ni date, ni chiffre. Ce qui a été promis n'est pas encore fait.
-    """
+    """ + consigneEcho
     static let consigneSujets = """
     Tu relis la transcription d'une réunion, ligne par ligne. Chaque ligne a un numéro. \
     Découpe-la en sujets abordés, un à six, dans l'ordre. Un sujet réunit des lignes qui se suivent. \
     Ne compte pas les politesses comme un sujet. Son titre reprend des mots de ces lignes, tels quels.
-    """
+    """ + consigneEcho
     static let consigneQuestions = consigneCommune + """
      Retiens les lignes qui posent une vraie question sur le travail, à laquelle les lignes suivantes ne répondent pas. \
     Pas les questions de politesse, ni celles qui reçoivent une réponse.
@@ -479,19 +486,27 @@ public struct AnalysteLocal: Analyste {
         var debut: Double
         var piste: Piste
         var voix: String?
+        /// Vrai si la ligne est sans doute l'écho du haut-parleur plutôt qu'une vraie réponse.
+        var echoProbable: Bool = false
     }
 
     static func lignes(de passage: [Segment]) -> [Ligne] {
         passage.flatMap { segment in
-            ValidationSources.phrases(de: segment.texte).map { Ligne(phrase: $0, debut: segment.debut, piste: segment.piste, voix: segment.voix) }
+            ValidationSources.phrases(de: segment.texte).map {
+                Ligne(phrase: $0, debut: segment.debut, piste: segment.piste, voix: segment.voix, echoProbable: segment.echoProbable ?? false)
+            }
         }
     }
 
     static func invite(_ lignes: [Ligne], notes: [LigneDeNote], type: TypeReunion) -> String {
+        // Une ligne marquée reste une preuve citable, mais elle n'est pas forcément dite par moi avec
+        // certitude : c'est peut-être l'écho du haut-parleur.
+        // Une ligne marquée vient forcément du micro pendant une visio (`marquerEcho` a besoin
+        // de la piste système, qui n'existe que là) : `qui` n'est donc jamais vide ici.
         func qui(_ ligne: Ligne) -> String {
-            if let voix = ligne.voix { return "\(voix) : " }
-            guard type == .visio else { return "" }
-            return ligne.piste == .micro ? "moi : " : "eux : "
+            var qui = ligne.voix ?? (type == .visio ? (ligne.piste == .micro ? "moi" : "eux") : "")
+            if ligne.echoProbable { qui += ", écho probable" }
+            return qui.isEmpty ? "" : "\(qui) : "
         }
         let debut = (lignes.first?.debut ?? 0) - 15
         let fin = (lignes.last?.debut ?? 0) + 15
@@ -562,12 +577,18 @@ public struct AnalysteLocal: Analyste {
         }
     }
 
+    /// La phrase d'une ligne, avec sa mention d'écho probable si elle est marquée : la seconde lecture
+    /// doit la voir, comme la première passe la voit dans `invite`.
+    static func contexte(_ ligne: Ligne) -> String {
+        ligne.echoProbable ? "\(ligne.phrase) (écho probable)" : ligne.phrase
+    }
+
     /// Seconde lecture de chaque ligne retenue, avec ses voisines : la première passe en retient trop.
     /// Si le modèle refuse de répondre, la ligne reste : le passage entier ne doit pas tomber pour autant.
     private func confirmer(_ numero: Int, dans lignes: [Ligne], consigne: String, options: GenerationOptions) async -> Bool {
         guard lignes.indices.contains(numero - 1) else { return true }
         let voisines = max(0, numero - 3)...min(lignes.count - 1, numero + 1)
-        let contexte = voisines.map { ($0 == numero - 1 ? ">>> " : "") + lignes[$0].phrase }.joined(separator: "\n")
+        let contexte = voisines.map { ($0 == numero - 1 ? ">>> " : "") + Self.contexte(lignes[$0]) }.joined(separator: "\n")
         let reponse = try? await session(consigne + " La ligne à juger est marquée >>>.")
             .respond(to: contexte, generating: Confirmation.self, options: options)
         return reponse?.content.correspond ?? true
@@ -579,6 +600,16 @@ public struct AnalysteLocal: Analyste {
         var actions: [ElementSource?]
         var questions: [ElementSource?]
         var sujets: [Sujet] = []
+    }
+
+    /// Les lignes numérotées envoyées au modèle pour « En bref », chacune marquée « (écho probable) »
+    /// si son moment source vient d'une ligne marquée : la validation qui suit (`EnBref.valider`)
+    /// reçoit elle le texte brut, sans la mention, pour ne pas la prendre pour un mot dit.
+    static func retenusEnBref(_ retenus: [(texte: String, debut: Double)], marques: Set<Double>) -> String {
+        retenus.enumerated().map { offset, retenu in
+            let texte = marques.contains(retenu.debut) ? "\(retenu.texte) (écho probable)" : retenu.texte
+            return "\(offset + 1). \(texte)"
+        }.joined(separator: "\n")
     }
 
     public func analyser(segments: [Segment], notes: [LigneDeNote], type: TypeReunion,
@@ -625,11 +656,13 @@ public struct AnalysteLocal: Analyste {
         guard echecs < passages.count else { throw ErreurAnalyse.aucunPassage }
 
         // « En bref » se rédige à partir de ce qui a été retenu : une longue réunion tient ainsi dans la fenêtre.
-        let retenus = (decisions + actions + questions).compactMap { element in element.sources.first.map { (element.texte, $0) } }
-            + sujets.map { ($0.titre, $0.debut) }
+        let retenus: [(texte: String, debut: Double)] = (decisions + actions + questions)
+            .compactMap { element in element.sources.first.map { (texte: element.texte, debut: $0) } }
+            + sujets.map { (texte: $0.titre, debut: $0.debut) }
         var enBref: [PhraseSourcee]?
         if !retenus.isEmpty {
-            let liste = retenus.enumerated().map { "\($0.offset + 1). \($0.element.0)" }.joined(separator: "\n")
+            let marques = Set(segments.filter { $0.echoProbable ?? false }.map(\.debut))
+            let liste = Self.retenusEnBref(retenus, marques: marques)
             if let genere = try? await session(Self.consigneEnBref).respond(to: liste, generating: EnBrefGenere.self, options: GenerationOptions(sampling: .greedy)).content {
                 let valides = EnBref.valider(genere.phrases.map { .init(texte: $0.texte, lignes: $0.lignes) },
                                              phrases: retenus.map(\.0), debuts: retenus.map(\.1))

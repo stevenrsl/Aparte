@@ -170,7 +170,7 @@ public final class ModeleApp {
         return ([reunion.meta.titre, reunion.dossier].compactMap { $0 } + noms).filter { !$0.isEmpty && vus.insert($0).inserted }
     }
 
-    /// Relit l'enregistrement : les voix séparées, l'écho retiré, les noms corrigés. Si les voix
+    /// Relit l'enregistrement : les voix séparées, l'écho marqué, les noms corrigés. Si les voix
     /// échouent, les mots restent : ils valent plus que de savoir qui les a dits.
     public func relire(_ reunion: Reunion) {
         guard relectures[reunion.id] == nil, session?.reunion.id != reunion.id else { return }
@@ -366,7 +366,7 @@ public final class ModeleApp {
 public final class SessionReunion {
     public private(set) var reunion: Reunion
     public private(set) var segments: [Segment] = []
-    /// Ce qui s'affiche : sans l'écho du haut-parleur, les phrases réunies. `segments` reste brut.
+    /// Ce qui s'affiche : l'écho marqué, les phrases réunies. `segments` garde les phrases séparées.
     public private(set) var segmentsLisibles: [Segment] = []
     public private(set) var provisoires: [Piste: String] = [:]
     public var lignes: [LigneDeNote] = [LigneDeNote(temps: 0, texte: "")]
@@ -506,7 +506,9 @@ public final class SessionReunion {
         segment.fin += reunion.decalage(recu.piste)
         let rang = segments.firstIndex { $0.debut > segment.debut } ?? segments.endIndex
         segments.insert(segment, at: rang)
-        segmentsLisibles = Nettoyage.fusionner(Nettoyage.sansEcho(segments))
+        let marques = Nettoyage.marquerEcho(segments)
+        segments = marques
+        segmentsLisibles = Nettoyage.fusionner(marques)
         sauvegarder(.transcription)
     }
 
@@ -598,6 +600,12 @@ enum Relecture {
         var voixEchouees: String?
     }
 
+    /// Marque l'écho puis réunit les phrases proches : la relecture doit garder la marque après
+    /// la fusion, comme le direct (`SessionReunion.ajouter`).
+    static func nettoyer(_ segments: [Segment]) -> [Segment] {
+        Nettoyage.fusionner(Nettoyage.marquerEcho(segments))
+    }
+
     static func relire(_ reunion: Reunion, vocabulaire: [String], progression: @escaping @Sendable (Double) -> Void) async throws -> Resultat {
         let visio = reunion.meta.type == .visio
         let pistes = [(reunion.micro, Piste.micro), (reunion.systeme, Piste.systeme)]
@@ -632,7 +640,7 @@ enum Relecture {
             segments += lus
         }
         progression(1)
-        return Resultat(segments: Nettoyage.fusionner(Nettoyage.sansEcho(segments)), voixEchouees: voixEchouees)
+        return Resultat(segments: Self.nettoyer(segments), voixEchouees: voixEchouees)
     }
 }
 

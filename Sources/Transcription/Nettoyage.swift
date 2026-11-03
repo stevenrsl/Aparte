@@ -1,6 +1,6 @@
 import Foundation
 
-/// Rend une transcription lisible : l'écho retiré, les noms corrigés, les phrases d'une même
+/// Rend une transcription lisible : l'écho marqué, les noms corrigés, les phrases d'une même
 /// personne réunies. Repris de Cairn, y compris ses seuils.
 public enum Nettoyage {
     private static let francais = Locale(identifier: "fr_FR")
@@ -13,6 +13,7 @@ public enum Nettoyage {
             let texte = segment.texte.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !texte.isEmpty else { continue }
             if var dernier = sortie.last, dernier.piste == segment.piste, dernier.voix == segment.voix,
+               (dernier.echoProbable ?? false) == (segment.echoProbable ?? false),
                segment.debut - dernier.fin <= ecart, dernier.texte.count + texte.count <= maximum {
                 dernier.texte += " " + texte
                 dernier.fin = max(dernier.fin, segment.fin)
@@ -32,77 +33,46 @@ public enum Nettoyage {
     static let fenetreEcho = 8.0
     /// La plus courte suite de mots communs prise pour de l'écho plutôt que pour une coïncidence.
     static let suiteEcho = 3
-    /// Un morceau resté entre deux échos n'est gardé qu'à partir de cette longueur : plus court, c'est
-    /// le transcripteur qui déforme les mêmes mots.
-    static let morceauGarde = 4
 
     /// Sans casque, les haut-parleurs du Mac jouent la visio et le micro la capte : presque tout ce que
-    /// disent les autres revient sous « moi », une seconde ou deux plus tard, en d'autres mots. Ce que
-    /// le micro partage avec le son du Mac au même moment est retiré de sa piste. L'audio n'est pas touché.
-    public static func sansEcho(_ segments: [Segment]) -> [Segment] {
+    /// disent les autres revient sous « moi », une seconde ou deux plus tard, en d'autres mots. Une ligne
+    /// du micro qui partage une suite de mots avec le son du Mac au même moment est marquée comme un
+    /// écho probable, sur toute la ligne : aucun mot n'est retiré, car un vrai « non » dans cette ligne
+    /// doit rester visible. L'audio n'est pas touché.
+    public static func marquerEcho(_ segments: [Segment]) -> [Segment] {
         let eux = segments.filter { $0.piste == .systeme }
         guard !eux.isEmpty else { return segments }
-        return segments.compactMap { segment in
+        return segments.map { segment in
             guard segment.piste == .micro else { return segment }
             let proches = eux.filter { $0.debut <= segment.fin + fenetreEcho && $0.fin >= segment.debut - fenetreEcho }
             guard !proches.isEmpty else { return segment }
-            let entendus = Set(suites(proches.flatMap { mots($0.texte).map(\.plie) }))
+            let entendus = Set(suites(proches.flatMap { mots($0.texte) }))
             let miens = mots(segment.texte)
             guard miens.count >= suiteEcho else { return segment }
 
-            var echo = Array(repeating: false, count: miens.count)
+            var echo = false
             for i in 0...(miens.count - suiteEcho) {
-                let suite = miens[i..<(i + suiteEcho)].map(\.plie).joined(separator: " ")
-                if entendus.contains(suite) { for j in i..<(i + suiteEcho) { echo[j] = true } }
+                let suite = miens[i..<(i + suiteEcho)].joined(separator: " ")
+                if entendus.contains(suite) { echo = true; break }
             }
-            guard echo.contains(true) else { return segment }
-
-            var morceaux: [[String]] = []
-            var courant: [String] = []
-            for (i, mot) in miens.enumerated() {
-                if echo[i] {
-                    if !courant.isEmpty { morceaux.append(courant) }
-                    courant = []
-                } else {
-                    courant.append(mot.original)
-                }
-            }
-            if !courant.isEmpty { morceaux.append(courant) }
-            let gardes = morceaux.filter { $0.count >= morceauGarde }.flatMap { $0 }
-            // Une ligne presque entièrement faite d'écho est retirée.
-            guard gardes.count > morceauGarde else { return nil }
-            var nettoye = segment
-            nettoye.texte = phrase(gardes.joined(separator: " "))
-            return nettoye
+            guard echo else { return segment }
+            var marque = segment
+            marque.echoProbable = true
+            return marque
         }
     }
 
-    private static func phrase(_ texte: String) -> String {
-        guard let premiere = texte.first else { return texte }
-        return premiere.uppercased() + texte.dropFirst()
-    }
-
-    private struct MotPlie {
-        let original: String
-        let plie: String
-    }
-
-    private static func mots(_ texte: String) -> [MotPlie] {
-        var sortie: [MotPlie] = []
+    /// Les mots d'un texte, pliés pour la comparaison (accents et casse ignorés, pluriel simplifié).
+    private static func mots(_ texte: String) -> [String] {
+        var sortie: [String] = []
         for morceau in texte.split(whereSeparator: \.isWhitespace) {
-            let original = String(morceau)
-            var plie = original.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: francais)
+            var plie = String(morceau).folding(options: [.caseInsensitive, .diacriticInsensitive], locale: francais)
                 .trimmingCharacters(in: .punctuationCharacters)
-            // Un « ? » ou un « : » isolé, à la française, reste avec le mot d'avant.
-            guard !plie.isEmpty else {
-                if let dernier = sortie.popLast() {
-                    sortie.append(MotPlie(original: dernier.original + " " + original, plie: dernier.plie))
-                }
-                continue
-            }
+            // Un « ? » ou un « : » isolé, à la française, n'est pas un mot : il ne décale pas la suite.
+            guard !plie.isEmpty else { continue }
             // L'un entend « photographes », l'autre « photographe » : c'est le même mot ici.
             if plie.count > 3, plie.hasSuffix("s") || plie.hasSuffix("x") { plie.removeLast() }
-            sortie.append(MotPlie(original: original, plie: plie))
+            sortie.append(plie)
         }
         return sortie
     }
