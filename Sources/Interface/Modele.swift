@@ -193,10 +193,32 @@ public final class ModeleApp {
             }
             relectures[reunion.id] = nil
             actualiser(reunion)
-            // Le compte rendu est prêt sans clic, mais seulement sur ce Mac : rien ne part jamais tout seul.
-            if let relue = reunions.first(where: { $0.id == reunion.id }), compteRendu(de: relue) == nil {
-                analyser(relue, avec: AnalysteLocal(), signaler: false)
+            if let relue = reunions.first(where: { $0.id == reunion.id }) {
+                // Le compte rendu est prêt sans clic, mais seulement sur ce Mac : rien ne part jamais tout seul.
+                if compteRendu(de: relue) == nil {
+                    analyser(relue, avec: AnalysteLocal(), signaler: false)
+                } else {
+                    marquerSiPerimee(relue)
+                }
             }
+        }
+    }
+
+    /// Si la relecture a changé la transcription, l'analyse déjà là ne la montre plus : son fichier
+    /// lisible le dit aussi, sans toucher à son contenu ni à son empreinte. Pas de ré-analyse automatique
+    /// sur une réunion déjà analysée : elle partirait sur un fournisseur que Steven n'a pas forcément
+    /// choisi cette fois.
+    private func marquerSiPerimee(_ reunion: Reunion) {
+        guard let donnees = reunion.analyseJSON() else { return }
+        let decodeur = JSONDecoder()
+        decodeur.dateDecodingStrategy = .iso8601
+        guard var brute = try? decodeur.decode(CompteRendu.self, from: donnees) else { return }
+        guard brute.etat(selon: reunion.segments()) == .perimee else { return }
+        brute.fraicheur = .perimee
+        do {
+            try reunion.enregistrer(analyseJSON: donnees, markdown: brute.markdown(incidents: reunion.meta.incidentsAudio ?? []))
+        } catch {
+            erreur = "Le compte rendu de « \(reunion.meta.titre) » n'a pas pu être marqué périmé : \(error.localizedDescription)"
         }
     }
 
@@ -207,15 +229,19 @@ public final class ModeleApp {
         // Le modèle lit les noms donnés aux voix. Les temps et les mots ne changent pas.
         var segments = reunion.segments()
         guard !segments.isEmpty else { return }
+        // Prise avant le remplacement des voix par leurs noms : une relecture qui finit pendant cette
+        // analyse encore en cours changera cette empreinte, et l'analyse apparaîtra périmée dès sa fin.
+        let empreinte = CompteRendu.empreinte(de: segments)
         for i in segments.indices { segments[i].voix = segments[i].voix.map { reunion.nom(de: $0) } }
         analyses[reunion.id] = 0
         let notes = reunion.notes()
         let type = reunion.meta.type
         Task {
             do {
-                let resultat = try await analyste.analyser(segments: segments, notes: notes, type: type) { [weak self] avancee in
+                var resultat = try await analyste.analyser(segments: segments, notes: notes, type: type) { [weak self] avancee in
                     Task { @MainActor in if self?.analyses[reunion.id] != nil { self?.analyses[reunion.id] = avancee } }
                 }
+                resultat.empreinte = empreinte
                 try enregistrer(resultat, pour: reunion)
             } catch {
                 if signaler { erreur = error.localizedDescription }
@@ -272,9 +298,12 @@ public final class ModeleApp {
                 extrait.meta.decalages = reunion.meta.decalages
                 extrait.meta.nomsDesVoix = reunion.meta.nomsDesVoix
                 try extrait.enregistrerMeta()
-                try extrait.enregistrer(segments: reunion.segments().filter { garder($0.debut) || garder($0.fin) })
+                let segmentsExtrait = reunion.segments().filter { garder($0.debut) || garder($0.fin) }
+                try extrait.enregistrer(segments: segmentsExtrait)
                 try extrait.enregistrer(notes: reunion.notes().filter { garder($0.temps) })
-                try enregistrer(compteRendu.extrait(choisis), pour: extrait)
+                // L'extrait d'une analyse qui n'était déjà plus à jour ne peut pas se déclarer à jour lui-même.
+                let empreinteExtrait = compteRendu.fraicheur == .aJour ? CompteRendu.empreinte(de: segmentsExtrait) : nil
+                try enregistrer(compteRendu.extrait(choisis, empreinte: empreinteExtrait), pour: extrait)
             }
             recharger()
         } catch {
