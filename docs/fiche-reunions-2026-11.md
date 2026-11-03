@@ -82,9 +82,12 @@ Le conseil de Rushes s'applique aussi ici : pas de base de données, pas de comp
 - **Les voix, l'écho et les noms, repris de Cairn** (décidé par Steven le 2 novembre 2026, ce qui lève
   le « hors v1 » sur les voix, et accorde la dépendance FluidAudio). Après la réunion, Aparté relit
   l'enregistrement sur le Mac : voix séparées en présentiel et sur le son du Mac, que Steven nomme, écho du
-  haut-parleur retiré de la piste du micro, noms connus corrigés. La transcription du direct reste dans
+  haut-parleur marqué sur la piste du micro, noms connus corrigés. La transcription du direct reste dans
   `transcription-direct.json`. Les modèles (21 Mo) se téléchargent une fois depuis Hugging Face, sans rien
   envoyer de l'enregistrement.
+  **Décidé par Steven le 3 novembre 2026 :** dans le doute, l'écho reste dans la transcription qui sert de
+  preuve plutôt que d'être retiré, quitte à voir parfois des doublons dans le compte rendu. Il est marqué
+  « écho probable », sur toute la ligne, pour qu'un vrai « non » ne disparaisse jamais.
 - Un indicateur d'enregistrement toujours visible. Les permissions (micro, capture audio)
   demandées au premier enregistrement, avec une phrase claire.
 - **Le consentement** : une ligne discrète dans la vue d'enregistrement rappelle de prévenir les
