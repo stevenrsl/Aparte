@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import FoundationModels
 import NaturalLanguage
@@ -49,6 +50,14 @@ public struct PhraseSourcee: Codable, Sendable, Hashable {
     }
 }
 
+/// À jour : l'empreinte correspond à la transcription actuelle. Périmée : elle a changé depuis
+/// l'analyse. À vérifier : l'analyse a été écrite avant ce contrôle, elle n'a pas d'empreinte.
+public enum Fraicheur: String, Codable, Sendable, Hashable {
+    case aJour
+    case perimee
+    case aVerifier
+}
+
 /// La sortie commune, quel que soit le fournisseur.
 public struct CompteRendu: Codable, Sendable, Hashable {
     public var fournisseur: String
@@ -62,9 +71,18 @@ public struct CompteRendu: Codable, Sendable, Hashable {
     public var enBref: [PhraseSourcee]?
     public var passagesNonAnalyses: Int
     public var elementsEcartes: Int
+    /// L'empreinte de la transcription lue par l'analyse. Absente avant ce contrôle : l'analyse reste « à vérifier ».
+    public var empreinte: String?
+    /// Calculée à chaque lecture face à la transcription actuelle (`revalide`) : jamais lue ni écrite sur disque.
+    public var fraicheur: Fraicheur = .aJour
+
+    private enum CodingKeys: String, CodingKey {
+        case fournisseur, date, decisions, actions, questions, sujets, enBref, passagesNonAnalyses, elementsEcartes, empreinte
+    }
 
     public init(fournisseur: String, date: Date = Date(), decisions: [ElementSource], actions: [ElementSource],
-                questions: [ElementSource], sujets: [Sujet]? = nil, enBref: [PhraseSourcee]? = nil, passagesNonAnalyses: Int = 0, elementsEcartes: Int = 0) {
+                questions: [ElementSource], sujets: [Sujet]? = nil, enBref: [PhraseSourcee]? = nil, empreinte: String? = nil,
+                passagesNonAnalyses: Int = 0, elementsEcartes: Int = 0) {
         self.fournisseur = fournisseur
         self.date = date
         self.decisions = decisions
@@ -74,6 +92,37 @@ public struct CompteRendu: Codable, Sendable, Hashable {
         self.sujets = sujets
         self.enBref = enBref
         self.elementsEcartes = elementsEcartes
+        self.empreinte = empreinte
+    }
+
+    /// Le flux ignore les bornes des segments : un découpage différent au même contenu rend la même empreinte.
+    /// Seuls un mot, une voix ou une marque d'écho différents la changent. Le nom donné à une voix n'y entre pas.
+    public static func empreinte(de segments: [Segment]) -> String {
+        var flux = ""
+        var derniereVoix: String?
+        var dernierEcho = false
+        var premier = true
+        for segment in segments {
+            if premier || segment.voix != derniereVoix {
+                flux += "§\(segment.voix ?? "")§"
+                derniereVoix = segment.voix
+            }
+            let echo = segment.echoProbable == true
+            if premier || echo != dernierEcho {
+                flux += echo ? "¤echo¤" : "¤¤"
+                dernierEcho = echo
+            }
+            flux += ValidationSources.normaliser(segment.texte) + " "
+            premier = false
+        }
+        let empreinte = SHA256.hash(data: Data(flux.utf8))
+        return empreinte.compactMap { String(format: "%02x", $0) }.joined()
+    }
+
+    /// L'état de cette analyse face à la transcription actuelle, sans filtrer ses éléments.
+    public func etat(selon segments: [Segment]) -> Fraicheur {
+        guard let empreinte else { return .aVerifier }
+        return empreinte == Self.empreinte(de: segments) ? .aJour : .perimee
     }
 
     /// Le résumé ne dit que ce qui a été validé, chaque élément avec son horodatage. Il n'est jamais
@@ -103,17 +152,19 @@ public struct CompteRendu: Codable, Sendable, Hashable {
         }
     }
 
-    /// Ce qui revient à ces sujets, pour un extrait : le reste de la réunion n'y figure pas.
-    public func extrait(_ choisis: [Sujet]) -> CompteRendu {
+    /// Ce qui revient à ces sujets, pour un extrait : le reste de la réunion n'y figure pas. L'extrait
+    /// ne reçoit une empreinte que si l'original était à jour : sinon, il reste « à vérifier ».
+    public func extrait(_ choisis: [Sujet], empreinte: String? = nil) -> CompteRendu {
         func garder(_ elements: [ElementSource]) -> [ElementSource] {
             elements.filter { element in element.sources.contains { temps in choisis.contains { $0.contient(temps) } } }
         }
         return CompteRendu(fournisseur: fournisseur, date: date, decisions: garder(decisions), actions: garder(actions),
-                           questions: garder(questions), sujets: choisis)
+                           questions: garder(questions), sujets: choisis, empreinte: empreinte)
     }
 
     /// Une analyse relue depuis le disque repasse la validation : une ancienne reformulation laisse
-    /// place à la transcription, et ce qui n'est plus prouvé est écarté.
+    /// place à la transcription, et ce qui n'est plus prouvé est écarté. Son état face à la transcription
+    /// actuelle décide ensuite du sort d'« En bref » et des sujets (règle 1 : rien n'est affiché sans preuve).
     public func revalide(dans segments: [Segment]) -> CompteRendu {
         var copie = self
         func garder(_ elements: [ElementSource]) -> [ElementSource] {
@@ -124,8 +175,34 @@ public struct CompteRendu: Codable, Sendable, Hashable {
         copie.decisions = garder(decisions)
         copie.actions = garder(actions)
         copie.questions = garder(questions)
-        copie.enBref = enBref?.filter { phrase in
-            !phrase.sources.isEmpty && phrase.sources.allSatisfy { !ValidationSources.segmentsSources(de: $0, dans: segments).isEmpty }
+
+        func sujetsValides() -> [Sujet]? {
+            sujets?.filter { !ValidationSources.segmentsSources(de: $0.debut, dans: segments).isEmpty }
+        }
+        func enBrefControle() -> [PhraseSourcee]? {
+            enBref?.filter { phrase in
+                guard !phrase.sources.isEmpty else { return false }
+                let dits = phrase.sources.flatMap { ValidationSources.segmentsSources(de: $0, dans: segments) }
+                guard !dits.isEmpty else { return false }
+                let lu = Set(ValidationSources.normaliser(dits.map(\.texte).joined(separator: " ")).split(separator: " ").map(String.init))
+                return EnBref.motsNonDits(phrase.texte, lu: lu).isEmpty
+            }
+        }
+
+        copie.fraicheur = etat(selon: segments)
+        switch copie.fraicheur {
+        case .aJour:
+            copie.enBref = enBref?.filter { phrase in
+                !phrase.sources.isEmpty && phrase.sources.allSatisfy { !ValidationSources.segmentsSources(de: $0, dans: segments).isEmpty }
+            }
+            copie.sujets = sujets
+        case .perimee:
+            // Une reformulation plus vieille que la transcription ne peut plus être garantie : le résumé construit prend sa place.
+            copie.enBref = nil
+            copie.sujets = sujetsValides()
+        case .aVerifier:
+            copie.enBref = enBrefControle()
+            copie.sujets = sujetsValides()
         }
         return copie
     }
@@ -139,6 +216,7 @@ public struct CompteRendu: Codable, Sendable, Hashable {
     /// Résumé, décisions et actions, sans la transcription : prêt à coller.
     public func texteACopier(incidents: [IncidentAudio] = []) -> String {
         var parties = [apercu]
+        if let avertissement = Self.perimee(fraicheur) { parties.append(avertissement) }
         if let audio = Self.audioIncomplet(incidents) { parties.append(audio) }
         if !decisions.isEmpty { parties.append("Décisions\n" + decisions.map { "- \($0.texte)" }.joined(separator: "\n")) }
         if !actions.isEmpty { parties.append("Actions\n" + actions.map { "- \($0.texte)" }.joined(separator: "\n")) }
@@ -150,6 +228,11 @@ public struct CompteRendu: Codable, Sendable, Hashable {
         incidents.isEmpty ? nil : "Audio incomplet : " + incidents.map(\.description).joined(separator: ", ") + "."
     }
 
+    /// La transcription a changé depuis cette analyse : la copie et le Markdown le disent aussi.
+    private static func perimee(_ fraicheur: Fraicheur) -> String? {
+        fraicheur == .perimee ? "La transcription a changé depuis cette analyse : ce compte rendu n'est plus à jour." : nil
+    }
+
     public func markdown(incidents: [IncidentAudio] = []) -> String {
         func bloc(_ titre: String, _ elements: [ElementSource]) -> String {
             guard !elements.isEmpty else { return "" }
@@ -159,6 +242,7 @@ public struct CompteRendu: Codable, Sendable, Hashable {
             return "\n## \(titre)\n\n" + lignes.joined(separator: "\n") + "\n"
         }
         return "# Compte rendu\n\nProduit par : \(fournisseur)\n\n\(apercu)\n"
+            + (Self.perimee(fraicheur).map { "\n\($0)\n" } ?? "")
             + (Self.audioIncomplet(incidents).map { "\n\($0)\n" } ?? "")
             + ((sujets ?? []).isEmpty ? "" : "\n## Sujets\n\n" + (sujets ?? []).map { "- \($0.titre) (\(horodatage($0.debut)))" }.joined(separator: "\n") + "\n")
             + bloc("Décisions", decisions) + bloc("Actions", actions) + bloc("Questions ouvertes", questions)
