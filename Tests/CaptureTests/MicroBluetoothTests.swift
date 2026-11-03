@@ -1,5 +1,6 @@
 import AVFoundation
-import Capture
+@testable import Capture
+import CaptureObjC
 import Foundation
 import Testing
 
@@ -51,4 +52,28 @@ private func enregistreUneSeconde(a frequence: Double) throws {
 @Test(arguments: [8_000.0, 16_000, 24_000, 44_100, 48_000, 96_000])
 func unMicroSEnregistreAToutesLesFrequences(frequence: Double) throws {
     try enregistreUneSeconde(a: frequence)
+}
+
+@Test func uneExceptionObjectiveCEstAttrapee() {
+    #expect(attraperException { NSException(name: .genericException, reason: "panne", userInfo: nil).raise() } == "panne")
+    #expect(attraperException {} == nil)
+}
+
+/// Le plantage du 3 novembre 2026 : pendant qu'un casque change de profil, le format du micro n'est
+/// plus celui du matériel. Le démarrage doit survivre et réessayer. Le moteur ne démarre jamais ici :
+/// rien n'est capté.
+@Test func unFormatRefuseParLeMicroNePlantePasEtSeraReessaye() async throws {
+    let source = MicrophoneSource()
+    let moteur = AVAudioEngine()
+    let materiel = moteur.inputNode.outputFormat(forBus: 0)
+    try #require(materiel.sampleRate > 0)
+    source.formatImpose = AVAudioFormat(standardFormatWithSampleRate: materiel.sampleRate == 16_000 ? 48_000 : 16_000, channels: 1)
+
+    try source.start()
+    try await Task.sleep(for: .seconds(2.5))
+    #expect(source.relances >= 1)
+    source.stop()
+    let apresArret = source.relances
+    try await Task.sleep(for: .seconds(2.5))
+    #expect(source.relances == apresArret)
 }

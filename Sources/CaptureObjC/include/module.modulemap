@@ -1,0 +1,4 @@
+module CaptureObjC {
+    header "Exceptions.h"
+    export *
+}

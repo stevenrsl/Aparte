@@ -23,7 +23,8 @@ let package = Package(
     ],
     targets: [
         .target(name: "Transcription", swiftSettings: swift5),
-        .target(name: "Capture", swiftSettings: swift5),
+        .target(name: "CaptureObjC"),
+        .target(name: "Capture", dependencies: ["CaptureObjC"], swiftSettings: swift5),
         .target(name: "Voix", dependencies: ["Transcription", .product(name: "FluidAudio", package: "FluidAudio")], swiftSettings: swift5),
         .target(name: "Stockage", dependencies: ["Transcription"]),
         .target(name: "Analyse", dependencies: ["Transcription", "Stockage"]),
@@ -31,7 +32,7 @@ let package = Package(
         .target(name: "Interface", dependencies: ["Transcription", "Capture", "Stockage", "Analyse", "DA", "Voix"]),
         .executableTarget(name: "AparteApp", dependencies: ["Interface"]),
         .testTarget(name: "TranscriptionTests", dependencies: ["Transcription"]),
-        .testTarget(name: "CaptureTests", dependencies: ["Capture"]),
+        .testTarget(name: "CaptureTests", dependencies: ["Capture", "CaptureObjC"]),
         .testTarget(name: "StockageTests", dependencies: ["Stockage"]),
         .testTarget(name: "AnalyseTests", dependencies: ["Analyse"]),
         .testTarget(name: "DATests", dependencies: ["DA"]),

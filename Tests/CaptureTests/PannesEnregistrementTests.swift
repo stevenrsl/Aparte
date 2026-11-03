@@ -38,7 +38,12 @@ private func producteur(dans dossier: URL, disquePlein: Bool) throws -> Process 
     let repo = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
     let support = repo.appendingPathComponent("Tests/Support/Pannes")
     let binaire = dossier.appendingPathComponent("producteur")
+    let objc = repo.appendingPathComponent("Sources/CaptureObjC")
+    let exceptions = dossier.appendingPathComponent("Exceptions.o")
+    try commande("/usr/bin/xcrun", ["clang", "-c", "-fobjc-arc", "-I", objc.appendingPathComponent("include").path,
+        objc.appendingPathComponent("Exceptions.m").path, "-o", exceptions.path])
     try commande("/usr/bin/xcrun", ["swiftc", "-swift-version", "5", "-module-cache-path", dossier.appendingPathComponent("cache").path,
+        "-I", objc.appendingPathComponent("include").path, exceptions.path,
         repo.appendingPathComponent("Sources/Capture/Recording.swift").path,
         repo.appendingPathComponent("Sources/Capture/Capture.swift").path,
         repo.appendingPathComponent("Sources/Capture/AudioBuffers.swift").path,

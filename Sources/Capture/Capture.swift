@@ -1,5 +1,6 @@
 import AVFoundation
 import AudioToolbox
+import CaptureObjC
 import CoreAudio
 import Foundation
 import os
@@ -17,6 +18,7 @@ public enum ErreurCapture: LocalizedError {
     case sonDuMac(String, OSStatus)
     case enregistrementIllisible(String)
     case enregistrementEnDouble(String, String)
+    case microEnTransition
     case entreeIndisponible
     case fichierDisparu(String)
 
@@ -30,6 +32,8 @@ public enum ErreurCapture: LocalizedError {
             return "Le son du Mac n'a pas pu être capté (\(etape), code \(code))."
         case let .enregistrementIllisible(fichier):
             return "L'enregistrement \(fichier) n'a pas pu être terminé. Le fichier reste dans son dossier."
+        case .microEnTransition:
+            return "Le micro change de réglage. Réessaie dans quelques secondes."
         case .entreeIndisponible:
             return "Le micro choisi n'est plus disponible. Choisis-en un autre."
         case let .fichierDisparu(fichier):
@@ -86,6 +90,9 @@ public final class MicrophoneSource: AudioSource {
     private var running = false
     private var observateur: NSObjectProtocol?
     private let verrou = NSLock()
+    /// Pour les tests : un format que le micro refuse, comme pendant le changement de profil d'un casque.
+    var formatImpose: AVAudioFormat?
+    private(set) var relances = 0
 
     public init(entree: AudioDeviceID? = nil) {
         self.entree = entree
@@ -105,7 +112,12 @@ public final class MicrophoneSource: AudioSource {
 
     public func start() throws {
         try verrou.withLock {
-            try lancer(sur: entree)
+            do {
+                try lancer(sur: entree)
+            } catch ErreurCapture.microEnTransition {
+                // Le casque change de profil : on réessaie. `PisteAudio` signale le blanc s'il dure.
+                relancerPlusTard()
+            }
             running = true
         }
     }
@@ -125,18 +137,30 @@ public final class MicrophoneSource: AudioSource {
                                               &entree, UInt32(MemoryLayout<AudioDeviceID>.size))
             guard statut == noErr else { throw ErreurCapture.entreeIndisponible }
         }
-        let format = input.outputFormat(forBus: 0)
+        let format = formatImpose ?? input.outputFormat(forBus: 0)
         guard format.sampleRate > 0, format.channelCount > 0 else { throw ErreurCapture.aucunMicro }
-        input.installTap(onBus: 0, bufferSize: 4096, format: format) { [weak self] buffer, _ in
-            self?.onBuffer?(buffer)
+        // Pendant qu'un casque Bluetooth change de profil, ce format n'est plus celui du matériel et
+        // AVAudioEngine lance une exception Objective-C, que Swift ne sait pas attraper.
+        var erreurDemarrage: Error?
+        let exception = attraperException {
+            input.installTap(onBus: 0, bufferSize: 4096, format: format) { [weak self] buffer, _ in
+                self?.onBuffer?(buffer)
+            }
+            self.engine.prepare()
+            do {
+                try self.engine.start()
+            } catch {
+                erreurDemarrage = error
+            }
         }
-        engine.prepare()
-        do {
-            try engine.start()
-        } catch {
-            input.removeTap(onBus: 0)
-            throw error
+        if exception != nil || erreurDemarrage != nil {
+            _ = attraperException { input.removeTap(onBus: 0) }
         }
+        if let exception {
+            Logger(subsystem: "eu.stevenrsl.aparte", category: "capture").error("Micro : \(exception, privacy: .public)")
+            throw ErreurCapture.microEnTransition
+        }
+        if let erreurDemarrage { throw erreurDemarrage }
         observateur = NotificationCenter.default.addObserver(forName: .AVAudioEngineConfigurationChange, object: engine, queue: nil) { [weak self] _ in
             self?.relancer()
         }
@@ -156,6 +180,7 @@ public final class MicrophoneSource: AudioSource {
         let finie = verrou.withLock { () -> Bool in
             guard running else { return true }
             guard !engine.isRunning else { return true }
+            relances += 1
             arreterMoteur()
             for essai in [entree, nil] {
                 engine = AVAudioEngine()
@@ -163,9 +188,11 @@ public final class MicrophoneSource: AudioSource {
             }
             return false
         }
-        if !finie {
-            DispatchQueue.global().asyncAfter(deadline: .now() + 2) { [weak self] in self?.relancer() }
-        }
+        if !finie { relancerPlusTard() }
+    }
+
+    private func relancerPlusTard() {
+        DispatchQueue.global().asyncAfter(deadline: .now() + 2) { [weak self] in self?.relancer() }
     }
 }
 
