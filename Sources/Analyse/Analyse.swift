@@ -429,13 +429,20 @@ public struct AnalysteLocal: Analyste {
         LanguageModelSession(model: SystemLanguageModel(guardrails: .permissiveContentTransformations), instructions: consigne)
     }
 
+    /// Partagée par les quatre consignes qui lisent une transcription marquée (ici et dans
+    /// `AnalysteMistral.consigne`), pour n'écrire qu'une fois ce que signifie la mention.
+    static let consigneEcho = """
+     Une ligne « écho probable » est peut-être ce que le micro a capté du haut-parleur plutôt qu'une vraie réponse : \
+    elle peut servir de preuve, mais ne conclus pas qu'elle a été dite avec certitude, et ne la compte pas comme \
+    une deuxième occurrence de ce qu'elle répète.
+    """
     /// Le modèle ne recopie ni n'écrit rien : il choisit des numéros de lignes, une catégorie à la fois.
     /// Le texte rendu est donc toujours celui de la transcription.
     private static let consigneCommune = """
     Tu relis la transcription d'une réunion, ligne par ligne. Chaque ligne a un numéro. \
     Renvoie seulement les numéros demandés. Sois attentif : ne manque aucune ligne qui correspond, \
     et n'en retiens aucune qui ne correspond pas.
-    """
+    """ + consigneEcho
     static let consigneDecisions = consigneCommune + """
      Retiens les lignes où un choix est arrêté : ce qui est décidé, retenu, validé, refusé, maintenu ou abandonné. \
     Pas les avis, les préférences, les constats, les questions ni les tâches à faire.
@@ -448,12 +455,12 @@ public struct AnalysteLocal: Analyste {
     Tu résumes une réunion en français, en deux ou trois phrases simples, pour quelqu'un qui veut savoir \
     en dix secondes ce qui s'est dit. Tu ne t'appuies que sur les lignes numérotées qu'on te donne, et tu indiques \
     celles que chaque phrase résume. Tu n'inventes ni nom, ni date, ni chiffre. Ce qui a été promis n'est pas encore fait.
-    """
+    """ + consigneEcho
     static let consigneSujets = """
     Tu relis la transcription d'une réunion, ligne par ligne. Chaque ligne a un numéro. \
     Découpe-la en sujets abordés, un à six, dans l'ordre. Un sujet réunit des lignes qui se suivent. \
     Ne compte pas les politesses comme un sujet. Son titre reprend des mots de ces lignes, tels quels.
-    """
+    """ + consigneEcho
     static let consigneQuestions = consigneCommune + """
      Retiens les lignes qui posent une vraie question sur le travail, à laquelle les lignes suivantes ne répondent pas. \
     Pas les questions de politesse, ni celles qui reçoivent une réponse.
@@ -494,9 +501,11 @@ public struct AnalysteLocal: Analyste {
     static func invite(_ lignes: [Ligne], notes: [LigneDeNote], type: TypeReunion) -> String {
         // Une ligne marquée reste une preuve citable, mais elle n'est pas forcément dite par moi avec
         // certitude : c'est peut-être l'écho du haut-parleur.
+        // Une ligne marquée vient forcément du micro pendant une visio (`marquerEcho` a besoin
+        // de la piste système, qui n'existe que là) : `qui` n'est donc jamais vide ici.
         func qui(_ ligne: Ligne) -> String {
             var qui = ligne.voix ?? (type == .visio ? (ligne.piste == .micro ? "moi" : "eux") : "")
-            if ligne.echoProbable { qui += qui.isEmpty ? "écho probable, pas sûr que ce soit moi" : ", écho probable" }
+            if ligne.echoProbable { qui += ", écho probable" }
             return qui.isEmpty ? "" : "\(qui) : "
         }
         let debut = (lignes.first?.debut ?? 0) - 15

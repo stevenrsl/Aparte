@@ -117,7 +117,7 @@ public struct AnalysteMistral: Analyste {
     en_bref : deux ou trois phrases simples que tu rédiges, pour savoir en dix secondes ce qui s'est dit, chacune avec les lignes qu'elle résume. N'y mets ni nom, ni date, ni chiffre absent de ces lignes. Ce qui a été promis n'est pas encore fait.
     Ne manque aucune ligne qui correspond et n'en retiens aucune qui ne correspond pas. Les listes peuvent être vides. \
     La transcription vient d'une reconnaissance vocale : une ligne peut contenir des erreurs, ne la corrige pas.
-    """
+    """ + AnalysteLocal.consigneEcho
 
     private struct Reponse: Decodable {
         struct Action: Decodable {
