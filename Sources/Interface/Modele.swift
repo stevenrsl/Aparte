@@ -366,7 +366,7 @@ public final class ModeleApp {
 public final class SessionReunion {
     public private(set) var reunion: Reunion
     public private(set) var segments: [Segment] = []
-    /// Ce qui s'affiche : sans l'écho du haut-parleur, les phrases réunies. `segments` reste brut.
+    /// Ce qui s'affiche : l'écho marqué, les phrases réunies. `segments` garde les phrases séparées.
     public private(set) var segmentsLisibles: [Segment] = []
     public private(set) var provisoires: [Piste: String] = [:]
     public var lignes: [LigneDeNote] = [LigneDeNote(temps: 0, texte: "")]
@@ -600,6 +600,12 @@ enum Relecture {
         var voixEchouees: String?
     }
 
+    /// Marque l'écho puis réunit les phrases proches : la relecture doit garder la marque après
+    /// la fusion, comme le direct (`SessionReunion.ajouter`).
+    static func nettoyer(_ segments: [Segment]) -> [Segment] {
+        Nettoyage.fusionner(Nettoyage.marquerEcho(segments))
+    }
+
     static func relire(_ reunion: Reunion, vocabulaire: [String], progression: @escaping @Sendable (Double) -> Void) async throws -> Resultat {
         let visio = reunion.meta.type == .visio
         let pistes = [(reunion.micro, Piste.micro), (reunion.systeme, Piste.systeme)]
@@ -634,7 +640,7 @@ enum Relecture {
             segments += lus
         }
         progression(1)
-        return Resultat(segments: Nettoyage.fusionner(Nettoyage.marquerEcho(segments)), voixEchouees: voixEchouees)
+        return Resultat(segments: Self.nettoyer(segments), voixEchouees: voixEchouees)
     }
 }
 
