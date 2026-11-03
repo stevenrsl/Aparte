@@ -45,6 +45,13 @@ public enum Recording {
                         commonFormat: .pcmFormatFloat32, interleaved: false)
     }
 
+    /// The rate a side's file is written at. AAC at 64 kbit/s refuses a Bluetooth
+    /// headset's 16 kHz, and Core Audio's encoder refuses 96 kHz: outside what it
+    /// takes, the sound is resampled, rather than lost.
+    public static func fileSampleRate(for sampleRate: Double) -> Double {
+        (22_050...48_000).contains(sampleRate) ? sampleRate : 48_000
+    }
+
     /// Seconds of sound a file holds, or nil when it cannot be read.
     public static func seconds(of url: URL) -> Double? {
         guard let file = try? AVAudioFile(forReading: url), file.processingFormat.sampleRate > 0 else { return nil }

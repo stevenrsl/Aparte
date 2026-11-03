@@ -2,6 +2,7 @@ import AVFoundation
 import AudioToolbox
 import CoreAudio
 import Foundation
+import os
 
 public protocol AudioSource: AnyObject {
     /// Appelé sur un fil audio, avec un tampon valable seulement pendant l'appel.
@@ -269,7 +270,7 @@ public final class PisteAudio: @unchecked Sendable {
 
     private func ecrireEtTranscrire(_ mono: AVAudioPCMBuffer) {
         do {
-            if fichier == nil { fichier = try Recording.open(fichierURL, sampleRate: mono.format.sampleRate) }
+            if fichier == nil { fichier = try Recording.open(fichierURL, sampleRate: Recording.fileSampleRate(for: mono.format.sampleRate)) }
             // Un fichier supprimé mais ouvert accepte encore les écritures : seul son chemin le dit.
             guard FileManager.default.fileExists(atPath: fichierURL.path) else {
                 throw ErreurCapture.fichierDisparu(fichierURL.lastPathComponent)
@@ -278,6 +279,8 @@ public final class PisteAudio: @unchecked Sendable {
         } catch {
             if !erreurSignalee {
                 erreurSignalee = true
+                Logger(subsystem: "eu.stevenrsl.aparte", category: "capture")
+                    .error("Écriture de \(self.fichierURL.lastPathComponent, privacy: .public) : \(String(describing: error), privacy: .public)")
                 surErreur(error)
             }
         }
