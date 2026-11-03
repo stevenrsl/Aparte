@@ -20,35 +20,83 @@ func transcritLeFichierDeReference() async throws {
     #expect(relu == segment)
 }
 
+@Test func unAncienJsonSansEchoProbableSeDecode() throws {
+    let ancien = """
+    {"id":"00000000-0000-0000-0000-000000000000","debut":1.5,"fin":3,"piste":"systeme","texte":"Bonjour"}
+    """
+    let segment = try JSONDecoder().decode(Segment.self, from: Data(ancien.utf8))
+    #expect(segment.texte == "Bonjour")
+    #expect(segment.echoProbable == nil)
+}
+
 private func seg(_ debut: Double, _ piste: Piste, _ texte: String, fin: Double? = nil, voix: String? = nil) -> Segment {
     Segment(debut: debut, fin: fin ?? debut + 4, piste: piste, texte: texte, voix: voix)
 }
 
-@Test func lEchoDuHautParleurQuitteLaPisteDuMicro() {
+@Test func lEchoDuHautParleurEstMarqueSansQuAucunMotSoitRetire() {
     let segments = [
         seg(10, .systeme, "On décide de garder la version longue pour le festival."),
         seg(12, .micro, "On décide de garder la version longue pour le festival."),
         seg(30, .micro, "Je ne suis pas du tout d'accord avec cette idée."),
     ]
-    #expect(Nettoyage.sansEcho(segments).map(\.texte) == [
+    let marques = Nettoyage.marquerEcho(segments)
+    #expect(marques.map(\.texte) == [
+        "On décide de garder la version longue pour le festival.",
         "On décide de garder la version longue pour le festival.",
         "Je ne suis pas du tout d'accord avec cette idée.",
     ])
+    #expect(marques.map(\.echoProbable) == [nil, true, nil])
 }
 
-@Test func cQueJeDisEntreDeuxEchosResteDansLaPisteDuMicro() throws {
+/// Le contre-exemple de Codex (issue #16) : l'ancien retrait d'écho pouvait effacer une vraie
+/// réponse, y compris une négation. Les mots du micro doivent tous survivre, et la ligne reste
+/// marquée comme preuve à prendre avec doute plutôt que retirée.
+@Test func leContreExempleDeCodexGardeLaNegationEtMarqueLaLigne() throws {
     let segments = [
-        seg(10, .systeme, "On décide de garder la version longue."),
-        seg(12, .micro, "On décide de garder moi je préfère vraiment la courte franchement la version longue."),
+        seg(0, .systeme, "On décide de garder la version longue pour le festival.", fin: 2),
+        seg(3, .micro, "On décide de ne pas garder la version longue pour le festival.", fin: 5),
+        seg(60, .micro, "On passe au point suivant.", fin: 63),
     ]
-    let micro = try #require(Nettoyage.sansEcho(segments).first { $0.piste == .micro })
-    #expect(micro.texte.contains("préfère vraiment la courte"))
-    #expect(!micro.texte.contains("décide"))
+    let marques = Nettoyage.marquerEcho(segments)
+    let reponse = try #require(marques.first { $0.debut == 3 })
+    #expect(reponse.texte == "On décide de ne pas garder la version longue pour le festival.")
+    #expect(reponse.echoProbable == true)
+    let autreMoment = try #require(marques.first { $0.debut == 60 })
+    #expect(autreMoment.texte == "On passe au point suivant.")
+    #expect(autreMoment.echoProbable == nil)
 }
 
-@Test func deuxPersonnesQuiDisentDesChosesLointainesNeSontPasDeLEcho() {
+@Test func uneReponseCourteEtUneRepetitionVolontaireSurvivent() {
+    let segments = [
+        seg(0, .systeme, "On valide le budget.", fin: 2),
+        seg(3, .micro, "Non.", fin: 3.5),
+        seg(20, .systeme, "On valide le budget.", fin: 22),
+        seg(23, .micro, "On valide le budget, je suis d'accord.", fin: 26),
+    ]
+    let marques = Nettoyage.marquerEcho(segments)
+    #expect(marques.first { $0.debut == 3 }?.texte == "Non.")
+    let repetition = marques.first { $0.debut == 23 }
+    #expect(repetition?.texte == "On valide le budget, je suis d'accord.")
+    #expect(repetition?.echoProbable == true)
+}
+
+@Test func unSegmentSansMotCommunNEstPasMarque() {
+    let segments = [seg(0, .systeme, "On parle du budget.", fin: 2), seg(3, .micro, "Le café est prêt.", fin: 5)]
+    #expect(Nettoyage.marquerEcho(segments).map(\.echoProbable) == [nil, nil])
+}
+
+@Test func deuxPersonnesQuiDisentDesChosesLointainesNeSontPasMarquees() {
     let segments = [seg(10, .systeme, "On garde la version longue."), seg(200, .micro, "On garde la version longue.")]
-    #expect(Nettoyage.sansEcho(segments).count == 2)
+    let marques = Nettoyage.marquerEcho(segments)
+    #expect(marques.count == 2)
+    #expect(marques.map(\.echoProbable) == [nil, nil])
+}
+
+@Test func laFusionNeMelangePasUneLigneMarqueeEtUneLigneNonMarquee() {
+    var echo = seg(0, .micro, "On décide de ne pas garder la version.", fin: 2)
+    echo.echoProbable = true
+    let suite = seg(2.5, .micro, "Et on passe au point suivant.", fin: 5)
+    #expect(Nettoyage.fusionner([echo, suite]).count == 2)
 }
 
 @Test func lesPhrasesDUneMemePersonneSeReunissent() {
