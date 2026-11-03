@@ -23,7 +23,12 @@ func rendreLesEcrans() async throws {
         (.systeme, "Voix 2", "On décide de garder la version longue pour le festival."), (.micro, nil, "Marie envoie la musique à Paul avant vendredi."),
         (.systeme, "Voix 1", "Est-ce qu'on sait qui prend les photos de plateau ?"), (.micro, nil, "Non, personne ne s'est proposé."),
     ]
-    let segments = phrases.enumerated().map { Segment(debut: Double($0.offset) * 40, fin: Double($0.offset) * 40 + 30, piste: $0.element.0, texte: $0.element.2, voix: $0.element.1) }
+    // Une ligne marquée (ici le « non » du micro) doit apparaître dans le rendu : c'est ce que ce
+    // test d'écran vérifie, sans lancer l'app.
+    let segments = phrases.enumerated().map {
+        Segment(debut: Double($0.offset) * 40, fin: Double($0.offset) * 40 + 30, piste: $0.element.0, texte: $0.element.2,
+                voix: $0.element.1, echoProbable: $0.offset == 5 ? true : nil)
+    }
     try reunion.enregistrer(segments: segments)
     try reunion.enregistrer(notes: [LigneDeNote(temps: 85, texte: "Vérifier la musique avec Paul")])
     var meta = reunion
