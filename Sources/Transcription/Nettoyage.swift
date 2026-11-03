@@ -46,8 +46,8 @@ public enum Nettoyage {
             guard segment.piste == .micro else { return segment }
             let proches = eux.filter { $0.debut <= segment.fin + fenetreEcho && $0.fin >= segment.debut - fenetreEcho }
             guard !proches.isEmpty else { return segment }
-            let entendus = Set(suites(proches.flatMap { mots($0.texte).map(\.plie) }))
-            let miens = mots(segment.texte).map(\.plie)
+            let entendus = Set(suites(proches.flatMap { mots($0.texte) }))
+            let miens = mots(segment.texte)
             guard miens.count >= suiteEcho else { return segment }
 
             var echo = false
@@ -62,27 +62,17 @@ public enum Nettoyage {
         }
     }
 
-    private struct MotPlie {
-        let original: String
-        let plie: String
-    }
-
-    private static func mots(_ texte: String) -> [MotPlie] {
-        var sortie: [MotPlie] = []
+    /// Les mots d'un texte, pliés pour la comparaison (accents et casse ignorés, pluriel simplifié).
+    private static func mots(_ texte: String) -> [String] {
+        var sortie: [String] = []
         for morceau in texte.split(whereSeparator: \.isWhitespace) {
-            let original = String(morceau)
-            var plie = original.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: francais)
+            var plie = String(morceau).folding(options: [.caseInsensitive, .diacriticInsensitive], locale: francais)
                 .trimmingCharacters(in: .punctuationCharacters)
-            // Un « ? » ou un « : » isolé, à la française, reste avec le mot d'avant.
-            guard !plie.isEmpty else {
-                if let dernier = sortie.popLast() {
-                    sortie.append(MotPlie(original: dernier.original + " " + original, plie: dernier.plie))
-                }
-                continue
-            }
+            // Un « ? » ou un « : » isolé, à la française, n'est pas un mot : il ne décale pas la suite.
+            guard !plie.isEmpty else { continue }
             // L'un entend « photographes », l'autre « photographe » : c'est le même mot ici.
             if plie.count > 3, plie.hasSuffix("s") || plie.hasSuffix("x") { plie.removeLast() }
-            sortie.append(MotPlie(original: original, plie: plie))
+            sortie.append(plie)
         }
         return sortie
     }
