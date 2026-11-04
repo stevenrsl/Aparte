@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import FoundationModels
 import NaturalLanguage
@@ -36,6 +37,11 @@ public struct Sujet: Codable, Sendable, Identifiable, Hashable {
     }
 
     public func contient(_ temps: Double) -> Bool { temps >= debut && temps <= fin }
+
+    /// Vrai si une partie de ce segment tombe dans le sujet, même un seul long segment qui l'englobe
+    /// entièrement. Utilisé pour les extraits (`Modele.repartir`) et le contrôle d'un sujet périmé
+    /// (`revalide`) : les deux doivent voir le même chevauchement, sans découper les segments.
+    public func chevauche(_ segment: Segment) -> Bool { segment.fin >= debut && segment.debut <= fin }
 }
 
 /// Une phrase rédigée par le modèle pour « En bref », et les moments qu'elle résume.
@@ -47,6 +53,14 @@ public struct PhraseSourcee: Codable, Sendable, Hashable {
         self.texte = texte
         self.sources = sources
     }
+}
+
+/// À jour : l'empreinte correspond à la transcription actuelle. Périmée : elle a changé depuis
+/// l'analyse. À vérifier : l'analyse a été écrite avant ce contrôle, elle n'a pas d'empreinte.
+public enum Fraicheur: String, Codable, Sendable, Hashable {
+    case aJour
+    case perimee
+    case aVerifier
 }
 
 /// La sortie commune, quel que soit le fournisseur.
@@ -62,9 +76,18 @@ public struct CompteRendu: Codable, Sendable, Hashable {
     public var enBref: [PhraseSourcee]?
     public var passagesNonAnalyses: Int
     public var elementsEcartes: Int
+    /// L'empreinte de la transcription lue par l'analyse. Absente avant ce contrôle : l'analyse reste « à vérifier ».
+    public var empreinte: String?
+    /// Calculée à chaque lecture face à la transcription actuelle (`revalide`) : jamais lue ni écrite sur disque.
+    public var fraicheur: Fraicheur = .aJour
+
+    private enum CodingKeys: String, CodingKey {
+        case fournisseur, date, decisions, actions, questions, sujets, enBref, passagesNonAnalyses, elementsEcartes, empreinte
+    }
 
     public init(fournisseur: String, date: Date = Date(), decisions: [ElementSource], actions: [ElementSource],
-                questions: [ElementSource], sujets: [Sujet]? = nil, enBref: [PhraseSourcee]? = nil, passagesNonAnalyses: Int = 0, elementsEcartes: Int = 0) {
+                questions: [ElementSource], sujets: [Sujet]? = nil, enBref: [PhraseSourcee]? = nil, empreinte: String? = nil,
+                passagesNonAnalyses: Int = 0, elementsEcartes: Int = 0) {
         self.fournisseur = fournisseur
         self.date = date
         self.decisions = decisions
@@ -74,6 +97,52 @@ public struct CompteRendu: Codable, Sendable, Hashable {
         self.sujets = sujets
         self.enBref = enBref
         self.elementsEcartes = elementsEcartes
+        self.empreinte = empreinte
+    }
+
+    /// Le flux ignore les bornes des segments : un découpage différent au même contenu rend la même empreinte.
+    /// Seuls un mot, une voix, une piste ou une marque d'écho différents la changent. Le nom donné à une
+    /// voix n'y entre pas. La piste entre, car une même phrase sans voix renseignée ne dit pas la même
+    /// chose selon qu'elle vient du micro ou du son du Mac (voir `invite`, `qui`).
+    ///
+    /// Un flux par piste, dans un ordre stable (micro, puis système) : le flux d'une piste ne dépend
+    /// ainsi plus de la façon dont les segments des deux pistes s'entrecroisent dans le temps. Limite
+    /// gardée : un même contenu dont seul l'ordre entre les deux pistes change n'est pas détecté.
+    public static func empreinte(de segments: [Segment]) -> String {
+        var flux = ""
+        for piste in [Piste.micro, Piste.systeme] {
+            var sousFlux = ""
+            var derniereVoix: String?
+            var dernierEcho = false
+            var premier = true
+            for segment in segments where segment.piste == piste {
+                // Un segment sans aucun mot (« … » seul) ne doit rien changer, y compris ses marqueurs :
+                // sinon un espace supplémentaire suffirait à rendre une analyse périmée à tort.
+                let texte = ValidationSources.normaliser(segment.texte)
+                guard !texte.isEmpty else { continue }
+                if premier || segment.voix != derniereVoix {
+                    sousFlux += "§\(segment.voix ?? "")§"
+                    derniereVoix = segment.voix
+                }
+                let echo = segment.echoProbable == true
+                if premier || echo != dernierEcho {
+                    sousFlux += echo ? "¤echo¤" : "¤¤"
+                    dernierEcho = echo
+                }
+                sousFlux += texte + " "
+                premier = false
+            }
+            guard !sousFlux.isEmpty else { continue }
+            flux += "#\(piste.rawValue)#" + sousFlux
+        }
+        let empreinte = SHA256.hash(data: Data(flux.utf8))
+        return empreinte.compactMap { String(format: "%02x", $0) }.joined()
+    }
+
+    /// L'état de cette analyse face à la transcription actuelle, sans filtrer ses éléments.
+    public func etat(selon segments: [Segment]) -> Fraicheur {
+        guard let empreinte else { return .aVerifier }
+        return empreinte == Self.empreinte(de: segments) ? .aJour : .perimee
     }
 
     /// Le résumé ne dit que ce qui a été validé, chaque élément avec son horodatage. Il n'est jamais
@@ -103,17 +172,19 @@ public struct CompteRendu: Codable, Sendable, Hashable {
         }
     }
 
-    /// Ce qui revient à ces sujets, pour un extrait : le reste de la réunion n'y figure pas.
-    public func extrait(_ choisis: [Sujet]) -> CompteRendu {
+    /// Ce qui revient à ces sujets, pour un extrait : le reste de la réunion n'y figure pas. L'extrait
+    /// ne reçoit une empreinte que si l'original était à jour : sinon, il reste « à vérifier ».
+    public func extrait(_ choisis: [Sujet], empreinte: String? = nil) -> CompteRendu {
         func garder(_ elements: [ElementSource]) -> [ElementSource] {
             elements.filter { element in element.sources.contains { temps in choisis.contains { $0.contient(temps) } } }
         }
         return CompteRendu(fournisseur: fournisseur, date: date, decisions: garder(decisions), actions: garder(actions),
-                           questions: garder(questions), sujets: choisis)
+                           questions: garder(questions), sujets: choisis, empreinte: empreinte)
     }
 
     /// Une analyse relue depuis le disque repasse la validation : une ancienne reformulation laisse
-    /// place à la transcription, et ce qui n'est plus prouvé est écarté.
+    /// place à la transcription, et ce qui n'est plus prouvé est écarté. Son état face à la transcription
+    /// actuelle décide ensuite du sort d'« En bref » et des sujets (règle 1 : rien n'est affiché sans preuve).
     public func revalide(dans segments: [Segment]) -> CompteRendu {
         var copie = self
         func garder(_ elements: [ElementSource]) -> [ElementSource] {
@@ -124,8 +195,62 @@ public struct CompteRendu: Codable, Sendable, Hashable {
         copie.decisions = garder(decisions)
         copie.actions = garder(actions)
         copie.questions = garder(questions)
-        copie.enBref = enBref?.filter { phrase in
-            !phrase.sources.isEmpty && phrase.sources.allSatisfy { !ValidationSources.segmentsSources(de: $0, dans: segments).isEmpty }
+
+        // Un sujet n'est retiré que si son début ne tombe plus sur un segment. Une fin au-delà de la
+        // transcription (et de la tolérance) est ramenée à sa fin : une relecture qui finit plus tôt, ou
+        // une fin dans un silence entre deux segments, ne doit pas faire perdre un bon sujet.
+        // Son titre, lui, doit encore être fait de mots dits dans ce moment (comme DecoupageSujets.valider
+        // à l'analyse) : sinon il revient aux six premiers mots dits du passage, bornes et id conservés.
+        func sujetsValides() -> [Sujet]? {
+            let finTranscription = segments.map(\.fin).max() ?? 0
+            return sujets?.compactMap { original -> Sujet? in
+                // Un début après la fin de la transcription n'est jamais un bon sujet, même si la
+                // tolérance de segmentsSources le ferait passer : sinon il resterait affiché, ramené
+                // à une durée nulle, après la dernière parole.
+                guard original.debut <= finTranscription else { return nil }
+                let sources = ValidationSources.segmentsSources(de: original.debut, dans: segments)
+                guard !sources.isEmpty else { return nil }
+                var sujet = original
+                if sujet.fin > finTranscription + ValidationSources.marge { sujet.fin = max(sujet.debut, finTranscription) }
+                // Un long segment peut englober tout le sujet : on garde ce qui le chevauche, pas seulement ce qui y commence ou finit.
+                let chevauchants = segments.filter { sujet.chevauche($0) }
+                let texteCouverts = (chevauchants.isEmpty ? sources : chevauchants).map(\.texte).joined(separator: " ")
+                let lu = Set(ValidationSources.normaliser(texteCouverts).split(separator: " "))
+                guard !DecoupageSujets.titreDit(sujet.titre, lu: lu) else { return sujet }
+                // Aucun mot dit à montrer : garder le titre refusé ferait afficher un mot inventé.
+                guard let premiere = ValidationSources.phrases(de: texteCouverts).first else { return nil }
+                var repli = sujet
+                repli.titre = premiere.split(separator: " ").prefix(6).joined(separator: " ")
+                return repli
+            }
+        }
+        func enBrefControle() -> [PhraseSourcee]? {
+            // Une seule instance pour toutes les phrases : son instanciation coûte plus que son usage,
+            // et un ancien compte rendu sans empreinte repasse par ici à chaque recharger().
+            let etiquettes = NLTagger(tagSchemes: [.nameType])
+            return enBref?.filter { phrase in
+                guard !phrase.sources.isEmpty else { return false }
+                let dits = phrase.sources.flatMap { ValidationSources.segmentsSources(de: $0, dans: segments) }
+                guard !dits.isEmpty else { return false }
+                let lu = Set(ValidationSources.normaliser(dits.map(\.texte).joined(separator: " ")).split(separator: " ").map(String.init))
+                return EnBref.motsNonDits(phrase.texte, lu: lu, etiquettes: etiquettes).isEmpty
+            }
+        }
+
+        copie.fraicheur = etat(selon: segments)
+        switch copie.fraicheur {
+        case .aJour:
+            copie.enBref = enBref?.filter { phrase in
+                !phrase.sources.isEmpty && phrase.sources.allSatisfy { !ValidationSources.segmentsSources(de: $0, dans: segments).isEmpty }
+            }
+            copie.sujets = sujets
+        case .perimee:
+            // Une reformulation plus vieille que la transcription ne peut plus être garantie : le résumé construit prend sa place.
+            copie.enBref = nil
+            copie.sujets = sujetsValides()
+        case .aVerifier:
+            copie.enBref = enBrefControle()
+            copie.sujets = sujetsValides()
         }
         return copie
     }
@@ -139,6 +264,7 @@ public struct CompteRendu: Codable, Sendable, Hashable {
     /// Résumé, décisions et actions, sans la transcription : prêt à coller.
     public func texteACopier(incidents: [IncidentAudio] = []) -> String {
         var parties = [apercu]
+        if let avertissement = Self.perimee(fraicheur) { parties.append(avertissement) }
         if let audio = Self.audioIncomplet(incidents) { parties.append(audio) }
         if !decisions.isEmpty { parties.append("Décisions\n" + decisions.map { "- \($0.texte)" }.joined(separator: "\n")) }
         if !actions.isEmpty { parties.append("Actions\n" + actions.map { "- \($0.texte)" }.joined(separator: "\n")) }
@@ -150,6 +276,11 @@ public struct CompteRendu: Codable, Sendable, Hashable {
         incidents.isEmpty ? nil : "Audio incomplet : " + incidents.map(\.description).joined(separator: ", ") + "."
     }
 
+    /// La transcription a changé depuis cette analyse : la copie et le Markdown le disent aussi.
+    private static func perimee(_ fraicheur: Fraicheur) -> String? {
+        fraicheur == .perimee ? "La transcription a changé depuis cette analyse : ce compte rendu n'est plus à jour." : nil
+    }
+
     public func markdown(incidents: [IncidentAudio] = []) -> String {
         func bloc(_ titre: String, _ elements: [ElementSource]) -> String {
             guard !elements.isEmpty else { return "" }
@@ -159,6 +290,7 @@ public struct CompteRendu: Codable, Sendable, Hashable {
             return "\n## \(titre)\n\n" + lignes.joined(separator: "\n") + "\n"
         }
         return "# Compte rendu\n\nProduit par : \(fournisseur)\n\n\(apercu)\n"
+            + (Self.perimee(fraicheur).map { "\n\($0)\n" } ?? "")
             + (Self.audioIncomplet(incidents).map { "\n\($0)\n" } ?? "")
             + ((sujets ?? []).isEmpty ? "" : "\n## Sujets\n\n" + (sujets ?? []).map { "- \($0.titre) (\(horodatage($0.debut)))" }.joined(separator: "\n") + "\n")
             + bloc("Décisions", decisions) + bloc("Actions", actions) + bloc("Questions ouvertes", questions)
@@ -259,12 +391,13 @@ public enum EnBref {
         "demain", "hier", "matin", "soir", "midi", "semaine", "mois", "annee",
     ]
 
-    /// Les noms, chiffres et mots de temps du texte qui ne sont pas dans ce qui a été dit.
-    static func motsNonDits(_ texte: String, lu: Set<String>) -> [String] {
+    /// Les noms, chiffres et mots de temps du texte qui ne sont pas dans ce qui a été dit. `etiquettes`
+    /// peut être réutilisé sur plusieurs phrases : son instanciation coûte plus que son usage, et
+    /// `revalide` le fait pour chaque phrase d'« En bref » à chaque recharger().
+    static func motsNonDits(_ texte: String, lu: Set<String>, etiquettes: NLTagger = NLTagger(tagSchemes: [.nameType])) -> [String] {
         var suspects = ValidationSources.normaliser(texte).split(separator: " ").map(String.init).filter { mot in
             motsDeTemps.contains(mot) || mot.contains(where: \.isNumber)
         }
-        let etiquettes = NLTagger(tagSchemes: [.nameType])
         etiquettes.string = texte
         etiquettes.setLanguage(.french, range: texte.startIndex..<texte.endIndex)
         etiquettes.enumerateTags(in: texte.startIndex..<texte.endIndex, unit: .word, scheme: .nameType,
@@ -311,8 +444,43 @@ public enum DecoupageSujets {
         }
     }
 
-    /// Les mots trop courts (« de », « la ») ne prouvent rien : ils ne sont pas contrôlés.
-    private static let longueurControlee = 4
+    private static let motsGrammaticaux: Set<String> = [
+        "à", "au", "aux", "de", "des", "du", "en", "et", "la", "le", "les"
+    ]
+    private static let caracteresInterdits = try! NSRegularExpression(pattern: #"[^\p{L}\p{N}\p{M}\s'’\-,.:()«»"]"#)
+    private static let nombresAmbigus = try! NSRegularExpression(pattern: #"\d[^\p{L}\p{N}]+\d|-\s*\d"#)
+    private static let motsTitre = try! NSRegularExpression(pattern: #"[\p{L}\p{N}\p{M}]+"#)
+    private static let lettreInitiale = try! NSRegularExpression(pattern: #"^\p{L}"#)
+
+    /// Un titre douteux revient aux mots dits ; l'ordre et la négation ne sont pas contrôlés.
+    static func titreDit(_ titre: String, lu: Set<Substring>) -> Bool {
+        let titre = titre.precomposedStringWithCanonicalMapping
+        let texte = titre as NSString
+        let entier = NSRange(location: 0, length: texte.length)
+        guard caracteresInterdits.firstMatch(in: titre, range: entier) == nil,
+              nombresAmbigus.firstMatch(in: titre, range: entier) == nil else { return false }
+        var porteur = false
+        for correspondance in motsTitre.matches(in: titre, range: entier) {
+            let brut = texte.substring(with: correspondance.range)
+            let minuscule = brut.lowercased()
+            let suite = correspondance.range.location + correspondance.range.length
+            let apostrophe = suite < texte.length && ["'", "’"].contains(texte.substring(with: NSRange(location: suite, length: 1)))
+            let apres = suite + 1
+            let lettreApres = apres < texte.length && lettreInitiale.firstMatch(
+                in: texte.substring(from: apres), range: NSRange(location: 0, length: texte.length - apres)) != nil
+            let elision = ["l", "d"].contains(minuscule) && apostrophe && lettreApres
+            let capitales = brut == brut.uppercased()
+            guard !(brut.count == 1 && brut.first!.isLetter && !["à", "À"].contains(brut) && !elision),
+                  !(capitales && (motsGrammaticaux.contains(minuscule) || ["un", "une"].contains(minuscule)) && brut != "À") else { return false }
+            let grammatical = (brut == "À") || elision || (!capitales && motsGrammaticaux.contains(minuscule))
+            if !grammatical {
+                porteur = true
+                let mots = ValidationSources.normaliser(brut).split(separator: " ")
+                guard !mots.isEmpty, mots.allSatisfy({ lu.contains($0) }) else { return false }
+            }
+        }
+        return porteur
+    }
 
     public static func valider(_ proposes: [Propose], phrases: [String], debuts: [Double], fin: Double) -> [Sujet] {
         guard phrases.count == debuts.count, !phrases.isEmpty else { return [] }
@@ -325,8 +493,7 @@ public enum DecoupageSujets {
             let dites = phrases[(premiere - 1)..<derniere]
             let lu = Set(ValidationSources.normaliser(dites.joined(separator: " ")).split(separator: " "))
             let titre = propose.titre.trimmingCharacters(in: .whitespacesAndNewlines)
-            let mots = ValidationSources.normaliser(titre).split(separator: " ")
-            let dit = !mots.isEmpty && mots.allSatisfy { $0.count < longueurControlee || lu.contains($0) }
+            let dit = titreDit(titre, lu: lu)
             let debutPhrase = dites.first.map { $0.split(separator: " ").prefix(6).joined(separator: " ") } ?? ""
             sujets.append(Sujet(titre: dit ? titre : debutPhrase, debut: debuts[premiere - 1],
                                 fin: derniere < debuts.count ? debuts[derniere] : fin))
