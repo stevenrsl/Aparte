@@ -128,3 +128,23 @@ private func bibliothequeDeGestion() throws -> (Bibliotheque, URL) {
     try bibliotheque.mettreALaCorbeille(reunion)
     #expect(bibliotheque.reunions().isEmpty)
 }
+
+@Test func laSignatureDUneAnalyseChangeAvecSonAnalyseEtSaTranscription() throws {
+    let racine = try racineTemporaire()
+    defer { try? FileManager.default.removeItem(at: racine) }
+    let reunion = try Bibliotheque(racine: racine).creerReunion(titre: "R", type: .visio, dossier: nil)
+    try reunion.enregistrer(segments: [Segment(debut: 1, fin: 2, piste: .micro, texte: "Bonjour")])
+    #expect(reunion.signatureAnalyse() == nil)
+
+    try reunion.enregistrer(analyseJSON: Data("{}".utf8), markdown: "")
+    let signature = try #require(reunion.signatureAnalyse())
+    #expect(reunion.signatureAnalyse() == signature)
+
+    // Même taille : seule la date peut trahir la réécriture.
+    try reunion.enregistrer(segments: [Segment(debut: 1, fin: 2, piste: .micro, texte: "Bonsoir")])
+    let apresRelecture = try #require(reunion.signatureAnalyse())
+    #expect(apresRelecture != signature)
+
+    try reunion.enregistrer(analyseJSON: Data("{}".utf8), markdown: "")
+    #expect(reunion.signatureAnalyse() != apresRelecture)
+}

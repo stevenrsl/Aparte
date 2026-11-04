@@ -182,6 +182,17 @@ public struct Reunion: Identifiable, Sendable, Hashable {
     public func analyseJSON() -> Data? {
         try? Data(contentsOf: url.appendingPathComponent("analyse.json"))
     }
+
+    /// Change dès que l'analyse ou la transcription est réécrite. Absente sans analyse ou sans transcription.
+    public func signatureAnalyse() -> String? {
+        let signatures = [url.appendingPathComponent("analyse.json"), transcriptionURL].map { fichier -> String? in
+            guard let attributs = try? FileManager.default.attributesOfItem(atPath: fichier.path),
+                  let date = attributs[.modificationDate] as? Date, let taille = attributs[.size] as? Int else { return nil }
+            return "\(date.timeIntervalSinceReferenceDate)-\(taille)"
+        }
+        let presentes = signatures.compactMap { $0 }
+        return presentes.count == signatures.count ? presentes.joined(separator: "|") : nil
+    }
 }
 
 /// Le dossier choisi par Steven, avec ses réunions, rangées ou non dans des dossiers.

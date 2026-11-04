@@ -40,6 +40,7 @@ public final class ModeleApp {
     /// Une clé Mistral est dans le trousseau. Elle-même n'est lue qu'au moment d'envoyer.
     public private(set) var cleMistralPresente = Trousseau.mistral.lire() != nil
     @ObservationIgnored private var compteRendus: [String: CompteRendu] = [:]
+    @ObservationIgnored private var comptesRendusLus: [String: (signature: String, compteRendu: CompteRendu)] = [:]
     @ObservationIgnored private var faites: [String: Set<UUID>] = [:]
     @ObservationIgnored private var echecsSignales: Set<String> = []
     @ObservationIgnored private static let cleRacine = "racine"
@@ -85,7 +86,15 @@ public final class ModeleApp {
                     } catch {}
                 }
             }
-            if let compteRendu = compteRendu(de: reunion) { compteRendus[reunion.id] = compteRendu }
+            // Revalider coûte une dizaine de millisecondes pour 2 h de réunion : tant que ni l'analyse
+            // ni la transcription n'ont bougé, le résultat précédent vaut toujours.
+            let signature = reunion.signatureAnalyse()
+            if let signature, let lu = comptesRendusLus[reunion.id], lu.signature == signature {
+                compteRendus[reunion.id] = lu.compteRendu
+            } else if let compteRendu = compteRendu(de: reunion) {
+                compteRendus[reunion.id] = compteRendu
+                if let signature { comptesRendusLus[reunion.id] = (signature, compteRendu) }
+            }
         }
         if !echecs.isEmpty { erreur = ([erreur].compactMap { $0 } + echecs).joined(separator: "\n") }
     }
