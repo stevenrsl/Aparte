@@ -179,18 +179,19 @@ public struct CompteRendu: Codable, Sendable, Hashable {
         // Un sujet n'est retiré que si ses bornes ne tombent plus sur un segment. Son titre, lui, doit
         // encore être fait de mots dits dans ce moment (comme DecoupageSujets.valider à l'analyse) :
         // sinon il revient aux six premiers mots dits du passage, bornes et id conservés.
-        // Un sujet n'est retiré que si ses bornes ne tombent plus sur un segment. Son titre, lui, doit
-        // encore être fait de mots dits dans ce moment (comme DecoupageSujets.valider à l'analyse) :
-        // sinon il revient aux six premiers mots dits du passage, bornes et id conservés.
         func sujetsValides() -> [Sujet]? {
             sujets?.compactMap { sujet -> Sujet? in
-                guard !ValidationSources.segmentsSources(de: sujet.debut, dans: segments).isEmpty else { return nil }
-                let couverts = segments.filter { sujet.contient($0.debut) || sujet.contient($0.fin) }
-                let texteCouverts = couverts.map(\.texte).joined(separator: " ")
+                let sources = ValidationSources.segmentsSources(de: sujet.debut, dans: segments)
+                guard !sources.isEmpty else { return nil }
+                // Un long segment peut englober tout le sujet : on garde ce qui le chevauche, pas seulement ce qui y commence ou finit.
+                let chevauchants = segments.filter { $0.fin >= sujet.debut && $0.debut <= sujet.fin }
+                let texteCouverts = (chevauchants.isEmpty ? sources : chevauchants).map(\.texte).joined(separator: " ")
                 let lu = Set(ValidationSources.normaliser(texteCouverts).split(separator: " "))
                 guard !DecoupageSujets.titreDit(sujet.titre, lu: lu) else { return sujet }
+                // Aucun mot dit à montrer : garder le titre refusé ferait afficher un mot inventé.
+                guard let premiere = ValidationSources.phrases(de: texteCouverts).first else { return nil }
                 var repli = sujet
-                repli.titre = ValidationSources.phrases(de: texteCouverts).first.map { $0.split(separator: " ").prefix(6).joined(separator: " ") } ?? sujet.titre
+                repli.titre = premiere.split(separator: " ").prefix(6).joined(separator: " ")
                 return repli
             }
         }

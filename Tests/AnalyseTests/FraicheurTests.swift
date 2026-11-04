@@ -138,6 +138,43 @@ private let horsTranscription = Sujet(titre: "Hors transcription", debut: 100, f
     #expect(relue.sujets?.first?.titre == "On refuse le budget total.")
 }
 
+// Un seul long segment peut englober tout le sujet : ni son début ni sa fin ne tombent dedans.
+@Test func unSegmentQuiEnglobeLeSujetSertAussiAControlerSonTitre() {
+    let invente = Sujet(titre: "TV à 999 €", debut: 10, fin: 20)
+    let compteRendu = CompteRendu(fournisseur: "Test", decisions: [], actions: [], questions: [], sujets: [invente])
+    let long = [Segment(debut: 0, fin: 60, piste: .micro, texte: "On refuse le budget total.")]
+
+    let relue = compteRendu.revalide(dans: long)
+    #expect(relue.sujets?.first?.id == invente.id)
+    #expect(relue.sujets?.first?.titre == "On refuse le budget total.")
+}
+
+@Test func unSujetAuTitreRefuseSansAucunMotDitEstRetire() {
+    let invente = Sujet(titre: "TV à 999 €", debut: 0, fin: 10)
+    let compteRendu = CompteRendu(fournisseur: "Test", decisions: [], actions: [], questions: [], sujets: [invente])
+    let vide = [Segment(debut: 0, fin: 5, piste: .micro, texte: "   ")]
+
+    #expect(compteRendu.revalide(dans: vide).sujets?.isEmpty == true)
+}
+
+// Ce que `enregistrer` et `marquerSiPerimee` écrivent : le Markdown vient de la version revalidée.
+// Une analyse dont la transcription a changé pendant qu'elle tournait s'écrit donc déjà périmée.
+@Test func leMarkdownDUneAnalyseFinieApresUneRelectureNeGardeRienDePerime() {
+    let avant = [Segment(debut: 0, fin: 5, piste: .micro, texte: "On garde la version longue.")]
+    let apres = [Segment(debut: 0, fin: 5, piste: .micro, texte: "On garde la version courte.")]
+    let decision = ElementSource(texte: "On garde la version longue.", sources: [1], citation: "version longue")
+    var finie = CompteRendu(fournisseur: "Test", decisions: [decision], actions: [], questions: [],
+                            enBref: [PhraseSourcee(texte: "La version longue est gardée.", sources: [1])])
+    finie.empreinte = CompteRendu.empreinte(de: avant)
+
+    let revalidee = finie.revalide(dans: apres)
+    #expect(finie.empreinte == CompteRendu.empreinte(de: avant))
+    #expect(revalidee.empreinte == finie.empreinte)
+    let markdown = revalidee.markdown()
+    #expect(markdown.contains("n'est plus à jour"))
+    #expect(!markdown.contains("version longue"))
+}
+
 @Test func unSujetAVerifierAvecUnTitreDitResteInchange() {
     let titreDit = Sujet(titre: "Budget", debut: 0, fin: 10)
     let compteRendu = CompteRendu(fournisseur: "Test", decisions: [], actions: [], questions: [], sujets: [titreDit])
