@@ -238,7 +238,9 @@ private let horsTranscription = Sujet(titre: "Hors transcription", debut: 100, f
 
 // Un sujet dont la fin dépasse largement la fin de la transcription (relecture qui a raccourci la
 // réunion) s'arrête à cette fin, sans être retiré. Un léger dépassement dans la tolérance, ou une fin
-// qui tombe dans un silence entre deux segments, garde ses bornes.
+// qui tombe dans un silence entre deux segments, garde ses bornes. Un sujet dont le DÉBUT dépasse la
+// fin de la transcription, lui, est retiré : sinon il resterait affiché après la dernière parole,
+// ramené à une durée nulle (voir unSujetDontLeDebutDepasseLaTranscriptionEstRetire).
 @Test func unSujetDontLaFinDepasseLaTranscriptionSArreteASaFinSaufDansLaToleranceOuUnSilence() {
     let segments = [Segment(debut: 0, fin: 5, piste: .micro, texte: "On parle du budget.")]
 
@@ -267,6 +269,16 @@ private let horsTranscription = Sujet(titre: "Hors transcription", debut: 100, f
     let finDansLeSilence = Sujet(titre: "Budget", debut: 0, fin: 20)
     let compteRenduSilence = CompteRendu(fournisseur: "Test", decisions: [], actions: [], questions: [], sujets: [finDansLeSilence])
     #expect(compteRenduSilence.revalide(dans: segmentsAvecSilence).sujets?.first?.fin == 20)
+}
+
+// Même avec la tolérance de segmentsSources (2 secondes), un sujet qui commence après la fin de la
+// transcription n'est pas un bon sujet : il resterait affiché ramené à une durée nulle, après la
+// dernière parole (« Budget (00:06) » alors que la réunion s'arrête à 5 s).
+@Test func unSujetDontLeDebutDepasseLaTranscriptionEstRetire() {
+    let segments = [Segment(debut: 0, fin: 5, piste: .micro, texte: "On parle du budget.")]
+    let apresLaFin = Sujet(titre: "Budget", debut: 6, fin: 900)
+    let compteRendu = CompteRendu(fournisseur: "Test", decisions: [], actions: [], questions: [], sujets: [apresLaFin])
+    #expect(compteRendu.revalide(dans: segments).sujets?.isEmpty == true)
 }
 
 // Le flux par piste de `empreinte` ne doit pas dépendre de l'entrecroisement entre pistes : un

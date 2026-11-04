@@ -204,6 +204,10 @@ public struct CompteRendu: Codable, Sendable, Hashable {
         func sujetsValides() -> [Sujet]? {
             let finTranscription = segments.map(\.fin).max() ?? 0
             return sujets?.compactMap { original -> Sujet? in
+                // Un début après la fin de la transcription n'est jamais un bon sujet, même si la
+                // tolérance de segmentsSources le ferait passer : sinon il resterait affiché, ramené
+                // à une durée nulle, après la dernière parole.
+                guard original.debut <= finTranscription else { return nil }
                 let sources = ValidationSources.segmentsSources(de: original.debut, dans: segments)
                 guard !sources.isEmpty else { return nil }
                 var sujet = original
