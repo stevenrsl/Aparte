@@ -313,11 +313,16 @@ public final class ModeleApp {
                 extrait.meta.decalages = reunion.meta.decalages
                 extrait.meta.nomsDesVoix = reunion.meta.nomsDesVoix
                 try extrait.enregistrerMeta()
-                let segmentsExtrait = reunion.segments().filter { garder($0.debut) || garder($0.fin) }
+                // Même chevauchement que le contrôle des sujets périmés (`CompteRendu.revalide`) : un seul
+                // long segment qui englobe tout un sujet doit aussi être gardé, pas seulement celui qui
+                // commence ou finit dedans. Les notes, elles, restent un point : `garder` au-dessus.
+                let segmentsExtrait = reunion.segments().filter { segment in choisis.contains { $0.chevauche(segment) } }
                 try extrait.enregistrer(segments: segmentsExtrait)
                 try extrait.enregistrer(notes: reunion.notes().filter { garder($0.temps) })
-                // L'extrait d'une analyse qui n'était déjà plus à jour ne peut pas se déclarer à jour lui-même.
-                let empreinteExtrait = compteRendu.fraicheur == .aJour ? CompteRendu.empreinte(de: segmentsExtrait) : nil
+                // L'extrait d'une analyse qui n'était déjà plus à jour, ou sans aucune transcription à lui,
+                // ne peut pas se déclarer à jour lui-même.
+                let empreinteExtrait = (compteRendu.fraicheur == .aJour && !segmentsExtrait.isEmpty)
+                    ? CompteRendu.empreinte(de: segmentsExtrait) : nil
                 try enregistrer(compteRendu.extrait(choisis, empreinte: empreinteExtrait), pour: extrait)
             }
             recharger()

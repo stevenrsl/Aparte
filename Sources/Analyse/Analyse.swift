@@ -37,6 +37,11 @@ public struct Sujet: Codable, Sendable, Identifiable, Hashable {
     }
 
     public func contient(_ temps: Double) -> Bool { temps >= debut && temps <= fin }
+
+    /// Vrai si une partie de ce segment tombe dans le sujet, même un seul long segment qui l'englobe
+    /// entièrement. Utilisé pour les extraits (`Modele.repartir`) et le contrôle d'un sujet périmé
+    /// (`revalide`) : les deux doivent voir le même chevauchement, sans découper les segments.
+    public func chevauche(_ segment: Segment) -> Bool { segment.fin >= debut && segment.debut <= fin }
 }
 
 /// Une phrase rédigée par le modèle pour « En bref », et les moments qu'elle résume.
