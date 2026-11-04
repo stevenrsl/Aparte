@@ -237,19 +237,28 @@ private let horsTranscription = Sujet(titre: "Hors transcription", debut: 100, f
 }
 
 // Un sujet dont la fin dépasse largement la fin de la transcription (relecture qui a raccourci la
-// réunion) est retiré. Un léger dépassement dans la tolérance, ou une fin qui tombe dans un silence
-// entre deux segments, ne doit pas faire perdre un bon sujet.
-@Test func unSujetDontLaFinDepasseLaTranscriptionEstRetireSaufDansLaToleranceOuUnSilence() {
+// réunion) s'arrête à cette fin, sans être retiré. Un léger dépassement dans la tolérance, ou une fin
+// qui tombe dans un silence entre deux segments, garde ses bornes.
+@Test func unSujetDontLaFinDepasseLaTranscriptionSArreteASaFinSaufDansLaToleranceOuUnSilence() {
     let segments = [Segment(debut: 0, fin: 5, piste: .micro, texte: "On parle du budget.")]
 
     let loinDevant = Sujet(titre: "Budget", debut: 0, fin: 900)
     let compteRenduLoin = CompteRendu(fournisseur: "Test", decisions: [], actions: [], questions: [], sujets: [loinDevant])
-    #expect(compteRenduLoin.revalide(dans: segments).sujets?.isEmpty == true)
+    let ramene = compteRenduLoin.revalide(dans: segments).sujets?.first
+    #expect(ramene?.id == loinDevant.id)
+    #expect(ramene?.titre == "Budget")
+    #expect(ramene?.fin == 5)
+
+    // Une relecture peut finir la transcription quelques secondes plus tôt : cinq minutes dites restent un sujet.
+    let dernier = Sujet(titre: "Budget", debut: 600, fin: 900)
+    let relue = [Segment(debut: 600, fin: 890, piste: .micro, texte: "On parle du budget.")]
+    let compteRenduDernier = CompteRendu(fournisseur: "Test", decisions: [], actions: [], questions: [], sujets: [dernier])
+    #expect(compteRenduDernier.revalide(dans: relue).sujets?.first?.fin == 890)
 
     // `ValidationSources.marge` est interne (2 secondes) : 1 seconde de dépassement reste dans la tolérance.
     let dansLaTolerance = Sujet(titre: "Budget", debut: 0, fin: 6)
     let compteRenduTolerance = CompteRendu(fournisseur: "Test", decisions: [], actions: [], questions: [], sujets: [dansLaTolerance])
-    #expect(compteRenduTolerance.revalide(dans: segments).sujets?.first?.titre == "Budget")
+    #expect(compteRenduTolerance.revalide(dans: segments).sujets?.first?.fin == 6)
 
     let segmentsAvecSilence = [
         Segment(debut: 0, fin: 5, piste: .micro, texte: "On parle du budget."),
@@ -257,5 +266,5 @@ private let horsTranscription = Sujet(titre: "Hors transcription", debut: 100, f
     ]
     let finDansLeSilence = Sujet(titre: "Budget", debut: 0, fin: 20)
     let compteRenduSilence = CompteRendu(fournisseur: "Test", decisions: [], actions: [], questions: [], sujets: [finDansLeSilence])
-    #expect(compteRenduSilence.revalide(dans: segmentsAvecSilence).sujets?.first?.titre == "Budget")
+    #expect(compteRenduSilence.revalide(dans: segmentsAvecSilence).sujets?.first?.fin == 20)
 }
