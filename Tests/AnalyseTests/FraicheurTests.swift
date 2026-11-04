@@ -26,6 +26,22 @@ import Transcription
     #expect(CompteRendu.empreinte(de: echoDifferent) != reference)
 }
 
+// Sans voix renseignée, une phrase du micro et la même phrase du son du Mac ne disent pas la même
+// chose (voir AnalysteLocal.invite : « moi » contre « eux » en visio) : l'empreinte doit le voir.
+@Test func empreinteChangeAvecLaPisteSansVoixRenseignee() {
+    let surMicro = [Segment(debut: 0, fin: 5, piste: .micro, texte: "Budget validé.")]
+    let surSysteme = [Segment(debut: 0, fin: 5, piste: .systeme, texte: "Budget validé.")]
+    #expect(CompteRendu.empreinte(de: surMicro) != CompteRendu.empreinte(de: surSysteme))
+}
+
+// Un segment sans aucun mot (un simple « … ») ne doit rien changer : ni son texte vide, ni ses
+// marqueurs de piste, de voix ou d'écho, ne doivent faire bouger l'empreinte.
+@Test func empreinteIgnoreUnSegmentSansAucunMot() {
+    let sansPoints = [Segment(debut: 0, fin: 5, piste: .micro, texte: "Budget validé.", voix: "Voix 1")]
+    let avecPointsEnPlus = sansPoints + [Segment(debut: 5, fin: 6, piste: .systeme, texte: "…", voix: "Voix 2", echoProbable: true)]
+    #expect(CompteRendu.empreinte(de: sansPoints) == CompteRendu.empreinte(de: avecPointsEnPlus))
+}
+
 // `nommer` ne réécrit jamais la transcription (voir nommerUneVoixNeReecritPasLaTranscription) : la
 // substitution du nom affiché n'existe que dans une copie passée au modèle, jamais dans les segments
 // sur le disque. L'empreinte, calculée sur ces segments bruts, ne peut donc jamais bouger à cause d'elle.

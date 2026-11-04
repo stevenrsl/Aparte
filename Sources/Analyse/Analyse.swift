@@ -101,13 +101,24 @@ public struct CompteRendu: Codable, Sendable, Hashable {
     }
 
     /// Le flux ignore les bornes des segments : un découpage différent au même contenu rend la même empreinte.
-    /// Seuls un mot, une voix ou une marque d'écho différents la changent. Le nom donné à une voix n'y entre pas.
+    /// Seuls un mot, une voix, une piste ou une marque d'écho différents la changent. Le nom donné à une
+    /// voix n'y entre pas. La piste entre, car une même phrase sans voix renseignée ne dit pas la même
+    /// chose selon qu'elle vient du micro ou du son du Mac (voir `invite`, `qui`).
     public static func empreinte(de segments: [Segment]) -> String {
         var flux = ""
+        var dernierePiste: Piste?
         var derniereVoix: String?
         var dernierEcho = false
         var premier = true
         for segment in segments {
+            // Un segment sans aucun mot (« … » seul) ne doit rien changer, y compris ses marqueurs :
+            // sinon un espace supplémentaire suffirait à rendre une analyse périmée à tort.
+            let texte = ValidationSources.normaliser(segment.texte)
+            guard !texte.isEmpty else { continue }
+            if premier || segment.piste != dernierePiste {
+                flux += "#\(segment.piste.rawValue)#"
+                dernierePiste = segment.piste
+            }
             if premier || segment.voix != derniereVoix {
                 flux += "§\(segment.voix ?? "")§"
                 derniereVoix = segment.voix
@@ -117,7 +128,7 @@ public struct CompteRendu: Codable, Sendable, Hashable {
                 flux += echo ? "¤echo¤" : "¤¤"
                 dernierEcho = echo
             }
-            flux += ValidationSources.normaliser(segment.texte) + " "
+            flux += texte + " "
             premier = false
         }
         let empreinte = SHA256.hash(data: Data(flux.utf8))
