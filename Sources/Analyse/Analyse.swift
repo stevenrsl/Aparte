@@ -444,25 +444,34 @@ public enum DecoupageSujets {
         }
     }
 
-    /// Exceptions sur le mot brut : « a » n'est pas « à », ni « LA » le déterminant « la ».
     private static let motsGrammaticaux: Set<String> = [
-        "à", "au", "aux", "de", "des", "du", "en", "et", "la", "le", "les", "un", "une"
+        "à", "au", "aux", "de", "des", "du", "en", "et", "la", "le", "les"
     ]
+    private static let caracteresInterdits = try! NSRegularExpression(pattern: #"[^\p{L}\p{N}\p{M}\s'’\-,.:()«»"]"#)
+    private static let nombresAmbigus = try! NSRegularExpression(pattern: #"\d[^\p{L}\p{N}]+\d|-\s*\d"#)
+    private static let motsTitre = try! NSRegularExpression(pattern: #"[\p{L}\p{N}\p{M}]+"#)
+    private static let lettreInitiale = try! NSRegularExpression(pattern: #"^\p{L}"#)
 
-    /// Les unités et nombres ambigus reviennent aux mots dits plutôt que d'être interprétés.
+    /// Un titre douteux revient aux mots dits ; l'ordre et la négation ne sont pas contrôlés.
     static func titreDit(_ titre: String, lu: Set<Substring>) -> Bool {
-        guard titre.rangeOfCharacter(from: CharacterSet(charactersIn: "€$£%")) == nil,
-              titre.range(of: #"\d[\s,.]+\d"#, options: .regularExpression) == nil else { return false }
-        let expression = try! NSRegularExpression(pattern: #"[\p{L}\p{N}]+"#)
+        let titre = titre.precomposedStringWithCanonicalMapping
         let texte = titre as NSString
+        let entier = NSRange(location: 0, length: texte.length)
+        guard caracteresInterdits.firstMatch(in: titre, range: entier) == nil,
+              nombresAmbigus.firstMatch(in: titre, range: entier) == nil else { return false }
         var porteur = false
-        for correspondance in expression.matches(in: titre, range: NSRange(location: 0, length: texte.length)) {
+        for correspondance in motsTitre.matches(in: titre, range: entier) {
             let brut = texte.substring(with: correspondance.range)
             let minuscule = brut.lowercased()
             let suite = correspondance.range.location + correspondance.range.length
             let apostrophe = suite < texte.length && ["'", "’"].contains(texte.substring(with: NSRange(location: suite, length: 1)))
+            let apres = suite + 1
+            let lettreApres = apres < texte.length && lettreInitiale.firstMatch(
+                in: texte.substring(from: apres), range: NSRange(location: 0, length: texte.length - apres)) != nil
+            let elision = ["l", "d"].contains(minuscule) && apostrophe && lettreApres
             let capitales = brut == brut.uppercased()
-            let elision = ["l", "d"].contains(minuscule) && apostrophe
+            guard !(brut.count == 1 && brut.first!.isLetter && !["à", "À"].contains(brut) && !elision),
+                  !(capitales && (motsGrammaticaux.contains(minuscule) || ["un", "une"].contains(minuscule)) && brut != "À") else { return false }
             let grammatical = (brut == "À") || elision || (!capitales && motsGrammaticaux.contains(minuscule))
             if !grammatical {
                 porteur = true

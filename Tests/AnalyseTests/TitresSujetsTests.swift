@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import Analyse
 
@@ -42,7 +43,7 @@ private func dit(_ titre: String, _ phrase: String = "budget") -> Bool {
                             ("Marché DE", "Marché confirmé"), ("Version EN", "Version confirmée")] {
         #expect(!dit(titre, phrase))
     }
-    #expect(dit("Plan A", "On retient le plan A."))
+    #expect(!dit("Plan A", "On retient le plan A."))
 }
 
 @Test func unitesEtNombresAmbigusSontRefuses() {
@@ -62,7 +63,7 @@ private func dit(_ titre: String, _ phrase: String = "budget") -> Bool {
 
 @Test func exemptionsGrammaticalesExplicites() {
     // Liste indépendante de celle de production : un retrait doit casser ce test.
-    for mot in ["à", "au", "aux", "de", "des", "du", "en", "et", "la", "le", "les", "un", "une", "À", "La", "De"] {
+    for mot in ["à", "au", "aux", "de", "des", "du", "en", "et", "la", "le", "les", "À", "La", "De"] {
         #expect(dit("\(mot) budget"), "Exception attendue : \(mot)")
     }
     for apostrophe in ["'", "’"] {
@@ -77,6 +78,59 @@ private func dit(_ titre: String, _ phrase: String = "budget") -> Bool {
 @Test func motsNonExemptesRestentControles() {
     for mot in ["pas", "ne", "ou", "sur", "pour", "a", "l", "d", "LA", "UN", "DE", "EN", "L"] {
         #expect(!dit("budget \(mot)"), "Mot à contrôler : \(mot)")
-        #expect(dit("budget \(mot)", "budget \(mot)"))
+        if mot.count > 1 && mot != mot.uppercased() { #expect(dit("budget \(mot)", "budget \(mot)")) }
     }
+}
+
+@Test func contreExemplesHomographesEtElisions() {
+    for (titre, phrase) in [
+        ("Plan A", "On retient le plan B, il a raison."), ("Option A", "On va à Lyon, option C."),
+        ("Plan D", "Plan B, d'accord."), ("Taille L", "Taille M pour l'équipe."),
+        ("Bureau à LA", "Le bureau de la ville ferme."), ("Accord UN", "Un accord confirmé"),
+        ("Marché DE", "Marché de Noël confirmé"), ("Version EN", "Version en cours"),
+        ("plan a", "On retient le plan B, il a raison."), ("Taille l", "Taille M pour l’équipe."),
+        ("Phase un", "phase deux"),
+        ("Phase Un", "phase deux"), ("Option Une", "option deux"),
+        ("Plan 'D'", "plan B"), ("Taille ’L’", "taille M"), ("Taille L'", "taille M"),
+        ("Plan d' budget", "Plan budget"), ("À", "à")
+    ] { #expect(!dit(titre, phrase)) }
+}
+
+@Test func separateursEtSignesInventesSontRefuses() {
+    for titre in ["Livraison 10/12", "Point à 10:30", "Retard 1-5 mois", "Budget 2 - 3"] {
+        #expect(!dit(titre, "Livraison Point Retard mois Budget 10 12 30 1 5 2 3"))
+    }
+    for separateur in ["'", "’", "-", "_", "\u{200b}", "\u{2060}", "\u{00ad}", "\u{202f}", "\u{00a0}", "\u{2009}", "\t", ":", ",", "."] {
+        #expect(!dit("budget 2\(separateur)000", "budget 2 000"))
+    }
+    #expect(!dit("Q3 2026", "Q3 2026"))
+    for (titre, phrase) in [
+        ("Livraison 10/12", "Livraison de 10 caisses et 12 palettes."),
+        ("Point à 10:30", "Point sur 10 dossiers et 30 clients."),
+        ("Retard 1-5 mois", "Retard de 1 mois pour 5 personnes."),
+        ("Budget 2 - 3", "Budget 2 personnes 3 jours"),
+        ("Salle 20 °", "Salle 20 personnes."), ("Budget ≠ validé", "Budget validé."),
+        ("Budget -20", "Budget 20 personnes."), ("Budget +20", "Budget 20 personnes."),
+        ("Budget ×2", "Budget 2 personnes."), ("Effectif > 20", "Effectif 20 personnes."),
+        ("#2", "Budget 2 personnes.")
+    ] { #expect(!dit(titre, phrase), "Titre refusé : \(titre)") }
+    for signe in ["€", "$", "£", "%", "¥", "₿", "₹", "‰", "％", "﹪", "٪", "＄", "°", "≠", "+", "×", ">", "#", "?", "!", "/"] {
+        #expect(!dit("Budget \(signe)20", "Budget 20"))
+    }
+    for nombre in ["-20", "- 20"] { #expect(!dit("Budget \(nombre)", "Budget 20")) }
+}
+
+@Test func formesUnicodeEtPonctuationPermise() {
+    for titre in ["Budget dû", "Budget dé", "Plan là"] {
+        #expect(!dit(titre.decomposedStringWithCanonicalMapping, "Budget Plan validé"))
+    }
+    for (titre, phrase) in [("3D", "3D"), ("Q3", "Q3"), ("Saint-Denis", "Saint Denis"),
+                            ("L'ÉQUIPE", "équipe"), ("Budget : tournée", "Budget tournée"),
+                            ("« Budget »", "Budget"), ("\"Budget\"", "Budget"),
+                            ("L'équipe", "équipe"), ("Budget été", "Budget été"), ("À revoir", "revoir")] {
+        #expect(dit(titre, phrase))
+        #expect(dit(titre.decomposedStringWithCanonicalMapping, phrase))
+    }
+    #expect(!dit("3D", "3 D"))
+    #expect(!dit("Q3", "Q 3"))
 }
