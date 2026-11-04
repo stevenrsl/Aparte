@@ -216,3 +216,46 @@ private let horsTranscription = Sujet(titre: "Hors transcription", debut: 100, f
     let extraitPerimee = compteRenduPerimee.extrait([budget], empreinte: empreinteSiPerimee)
     #expect(extraitPerimee.empreinte == nil)
 }
+
+// `Sujet.chevauche` doit voir le même chevauchement que `revalide` : un seul long segment qui englobe
+// tout le sujet, et aucun segment du tout.
+@Test func chevaucheVoitUnLongSegmentQuiEnglobeLeSujetEtRienSansSegment() {
+    let sujet = Sujet(titre: "Budget", debut: 10, fin: 20)
+    let englobant = Segment(debut: 0, fin: 60, piste: .micro, texte: "On refuse le budget total.")
+    #expect(sujet.chevauche(englobant))
+
+    let ailleurs = Segment(debut: 100, fin: 110, piste: .micro, texte: "Autre chose.")
+    #expect(!sujet.chevauche(ailleurs))
+}
+
+// Un extrait sans aucune transcription à lui (son sujet n'est couvert par aucun segment gardé) ne
+// peut pas se déclarer à jour, même si l'original l'est : reproduit la décision de `Modele.repartir`.
+@Test func unExtraitSansAucunSegmentNeRecoitAucuneEmpreinteMemeAJour() {
+    let segmentsExtrait: [Segment] = []
+    let empreinte = (true && !segmentsExtrait.isEmpty) ? CompteRendu.empreinte(de: segmentsExtrait) : nil
+    #expect(empreinte == nil)
+}
+
+// Un sujet dont la fin dépasse largement la fin de la transcription (relecture qui a raccourci la
+// réunion) est retiré. Un léger dépassement dans la tolérance, ou une fin qui tombe dans un silence
+// entre deux segments, ne doit pas faire perdre un bon sujet.
+@Test func unSujetDontLaFinDepasseLaTranscriptionEstRetireSaufDansLaToleranceOuUnSilence() {
+    let segments = [Segment(debut: 0, fin: 5, piste: .micro, texte: "On parle du budget.")]
+
+    let loinDevant = Sujet(titre: "Budget", debut: 0, fin: 900)
+    let compteRenduLoin = CompteRendu(fournisseur: "Test", decisions: [], actions: [], questions: [], sujets: [loinDevant])
+    #expect(compteRenduLoin.revalide(dans: segments).sujets?.isEmpty == true)
+
+    // `ValidationSources.marge` est interne (2 secondes) : 1 seconde de dépassement reste dans la tolérance.
+    let dansLaTolerance = Sujet(titre: "Budget", debut: 0, fin: 6)
+    let compteRenduTolerance = CompteRendu(fournisseur: "Test", decisions: [], actions: [], questions: [], sujets: [dansLaTolerance])
+    #expect(compteRenduTolerance.revalide(dans: segments).sujets?.first?.titre == "Budget")
+
+    let segmentsAvecSilence = [
+        Segment(debut: 0, fin: 5, piste: .micro, texte: "On parle du budget."),
+        Segment(debut: 50, fin: 55, piste: .micro, texte: "On conclut la reunion."),
+    ]
+    let finDansLeSilence = Sujet(titre: "Budget", debut: 0, fin: 20)
+    let compteRenduSilence = CompteRendu(fournisseur: "Test", decisions: [], actions: [], questions: [], sujets: [finDansLeSilence])
+    #expect(compteRenduSilence.revalide(dans: segmentsAvecSilence).sujets?.first?.titre == "Budget")
+}

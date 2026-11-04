@@ -192,15 +192,18 @@ public struct CompteRendu: Codable, Sendable, Hashable {
         copie.actions = garder(actions)
         copie.questions = garder(questions)
 
-        // Un sujet n'est retiré que si ses bornes ne tombent plus sur un segment. Son titre, lui, doit
-        // encore être fait de mots dits dans ce moment (comme DecoupageSujets.valider à l'analyse) :
-        // sinon il revient aux six premiers mots dits du passage, bornes et id conservés.
+        // Un sujet n'est retiré que si ses bornes ne tombent plus sur un segment, ou si sa fin dépasse
+        // la fin de la transcription (au-delà de la tolérance) : un autre découpage de relecture, lui,
+        // ne doit pas faire perdre un bon sujet dont la fin tombe dans un silence entre deux segments.
+        // Son titre, lui, doit encore être fait de mots dits dans ce moment (comme DecoupageSujets.valider
+        // à l'analyse) : sinon il revient aux six premiers mots dits du passage, bornes et id conservés.
         func sujetsValides() -> [Sujet]? {
-            sujets?.compactMap { sujet -> Sujet? in
+            let finTranscription = segments.map(\.fin).max() ?? 0
+            return sujets?.compactMap { sujet -> Sujet? in
                 let sources = ValidationSources.segmentsSources(de: sujet.debut, dans: segments)
-                guard !sources.isEmpty else { return nil }
+                guard !sources.isEmpty, sujet.fin <= finTranscription + ValidationSources.marge else { return nil }
                 // Un long segment peut englober tout le sujet : on garde ce qui le chevauche, pas seulement ce qui y commence ou finit.
-                let chevauchants = segments.filter { $0.fin >= sujet.debut && $0.debut <= sujet.fin }
+                let chevauchants = segments.filter { sujet.chevauche($0) }
                 let texteCouverts = (chevauchants.isEmpty ? sources : chevauchants).map(\.texte).joined(separator: " ")
                 let lu = Set(ValidationSources.normaliser(texteCouverts).split(separator: " "))
                 guard !DecoupageSujets.titreDit(sujet.titre, lu: lu) else { return sujet }
