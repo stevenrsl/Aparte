@@ -268,3 +268,27 @@ private let horsTranscription = Sujet(titre: "Hors transcription", debut: 100, f
     let compteRenduSilence = CompteRendu(fournisseur: "Test", decisions: [], actions: [], questions: [], sujets: [finDansLeSilence])
     #expect(compteRenduSilence.revalide(dans: segmentsAvecSilence).sujets?.first?.fin == 20)
 }
+
+// Le flux par piste de `empreinte` ne doit pas dépendre de l'entrecroisement entre pistes : un
+// redécoupage d'une piste autour d'un mot de l'autre piste, aux mêmes mots et aux mêmes attributions,
+// doit rendre la même empreinte.
+@Test func empreinteIgnoreLEntrecroisementEntrePistes() {
+    let unSeulSegmentParPiste = [
+        Segment(debut: 0, fin: 10, piste: .micro, texte: "Budget valide."),
+        Segment(debut: 3, fin: 4, piste: .systeme, texte: "Oui."),
+    ]
+    let redecoupeAutourDuMot = [
+        Segment(debut: 0, fin: 2, piste: .micro, texte: "Budget"),
+        Segment(debut: 3, fin: 4, piste: .systeme, texte: "Oui."),
+        Segment(debut: 5, fin: 10, piste: .micro, texte: "valide."),
+    ]
+    #expect(CompteRendu.empreinte(de: unSeulSegmentParPiste) == CompteRendu.empreinte(de: redecoupeAutourDuMot))
+
+    // Mais une vraie phrase déplacée d'une piste à l'autre doit toujours changer l'empreinte.
+    let deplacee = [
+        Segment(debut: 0, fin: 2, piste: .systeme, texte: "Budget"),
+        Segment(debut: 3, fin: 4, piste: .systeme, texte: "Oui."),
+        Segment(debut: 5, fin: 10, piste: .micro, texte: "valide."),
+    ]
+    #expect(CompteRendu.empreinte(de: deplacee) != CompteRendu.empreinte(de: unSeulSegmentParPiste))
+}

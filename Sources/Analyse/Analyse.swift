@@ -104,32 +104,36 @@ public struct CompteRendu: Codable, Sendable, Hashable {
     /// Seuls un mot, une voix, une piste ou une marque d'écho différents la changent. Le nom donné à une
     /// voix n'y entre pas. La piste entre, car une même phrase sans voix renseignée ne dit pas la même
     /// chose selon qu'elle vient du micro ou du son du Mac (voir `invite`, `qui`).
+    ///
+    /// Un flux par piste, dans un ordre stable (micro, puis système) : le flux d'une piste ne dépend
+    /// ainsi plus de la façon dont les segments des deux pistes s'entrecroisent dans le temps. Limite
+    /// gardée : un même contenu dont seul l'ordre entre les deux pistes change n'est pas détecté.
     public static func empreinte(de segments: [Segment]) -> String {
         var flux = ""
-        var dernierePiste: Piste?
-        var derniereVoix: String?
-        var dernierEcho = false
-        var premier = true
-        for segment in segments {
-            // Un segment sans aucun mot (« … » seul) ne doit rien changer, y compris ses marqueurs :
-            // sinon un espace supplémentaire suffirait à rendre une analyse périmée à tort.
-            let texte = ValidationSources.normaliser(segment.texte)
-            guard !texte.isEmpty else { continue }
-            if premier || segment.piste != dernierePiste {
-                flux += "#\(segment.piste.rawValue)#"
-                dernierePiste = segment.piste
+        for piste in [Piste.micro, Piste.systeme] {
+            var sousFlux = ""
+            var derniereVoix: String?
+            var dernierEcho = false
+            var premier = true
+            for segment in segments where segment.piste == piste {
+                // Un segment sans aucun mot (« … » seul) ne doit rien changer, y compris ses marqueurs :
+                // sinon un espace supplémentaire suffirait à rendre une analyse périmée à tort.
+                let texte = ValidationSources.normaliser(segment.texte)
+                guard !texte.isEmpty else { continue }
+                if premier || segment.voix != derniereVoix {
+                    sousFlux += "§\(segment.voix ?? "")§"
+                    derniereVoix = segment.voix
+                }
+                let echo = segment.echoProbable == true
+                if premier || echo != dernierEcho {
+                    sousFlux += echo ? "¤echo¤" : "¤¤"
+                    dernierEcho = echo
+                }
+                sousFlux += texte + " "
+                premier = false
             }
-            if premier || segment.voix != derniereVoix {
-                flux += "§\(segment.voix ?? "")§"
-                derniereVoix = segment.voix
-            }
-            let echo = segment.echoProbable == true
-            if premier || echo != dernierEcho {
-                flux += echo ? "¤echo¤" : "¤¤"
-                dernierEcho = echo
-            }
-            flux += texte + " "
-            premier = false
+            guard !sousFlux.isEmpty else { continue }
+            flux += "#\(piste.rawValue)#" + sousFlux
         }
         let empreinte = SHA256.hash(data: Data(flux.utf8))
         return empreinte.compactMap { String(format: "%02x", $0) }.joined()
