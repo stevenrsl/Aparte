@@ -171,10 +171,16 @@ public struct Reunion: Identifiable, Sendable, Hashable {
             try gestionnaire.createDirectory(at: archives, withIntermediateDirectories: true)
             let base = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
             // Plusieurs analyses dans la même seconde ne doivent pas se marcher dessus : on cherche un
-            // nom libre pour la paire .json/.md, avec un suffixe -2, -3…
+            // nom libre pour la paire .json/.md, avec un suffixe -2, -3… Le nom n'est libre que si les
+            // deux extensions le sont : un .md isolé sous ce nom bloquerait sinon le déplacement du
+            // Markdown après celui du JSON, et le nouveau compte rendu ne serait jamais écrit.
+            func libre(_ nom: String) -> Bool {
+                !gestionnaire.fileExists(atPath: archives.appendingPathComponent("\(nom).json").path)
+                    && !gestionnaire.fileExists(atPath: archives.appendingPathComponent("\(nom).md").path)
+            }
             var nom = base
             var suffixe = 2
-            while gestionnaire.fileExists(atPath: archives.appendingPathComponent("\(nom).json").path) {
+            while !libre(nom) {
                 nom = "\(base)-\(suffixe)"
                 suffixe += 1
             }

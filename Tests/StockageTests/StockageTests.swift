@@ -59,6 +59,34 @@ private func racineTemporaire() throws -> URL {
     #expect(Set(archives).count == archives.count)
 }
 
+/// Un nom d'archive n'est libre que si .json ET .md le sont. Sinon un `.md` isolé sous ce nom
+/// bloquerait le déplacement du Markdown juste après celui du JSON, qui lui aurait déjà réussi :
+/// `analyse.json` disparaîtrait de la racine sans qu'aucun nouveau compte rendu ne soit écrit. On
+/// prédit le nom de la seconde courante comme `enregistrer`, pour ne pas dépendre de l'horloge au-delà.
+@Test func unMarkdownDArchiveIsoleNEmpecheNiNeDupliqueLaProchaineArchive() throws {
+    let racine = try racineTemporaire()
+    defer { try? FileManager.default.removeItem(at: racine) }
+    let reunion = try Bibliotheque(racine: racine).creerReunion(titre: "R", type: .presentiel, dossier: nil)
+    try reunion.enregistrer(analyseJSON: Data("{}".utf8), markdown: "un")
+
+    let archives = reunion.url.appendingPathComponent("analyses")
+    try FileManager.default.createDirectory(at: archives, withIntermediateDirectories: true)
+    let base = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
+    try "orphelin".write(to: archives.appendingPathComponent("\(base).md"), atomically: true, encoding: .utf8)
+
+    try reunion.enregistrer(analyseJSON: Data("{}".utf8), markdown: "deux")
+    try reunion.enregistrer(analyseJSON: Data("{}".utf8), markdown: "trois")
+
+    // Le nouveau compte rendu est bien écrit à la racine, jamais bloqué par l'archive isolée.
+    #expect(try #require(String(data: reunion.analyseJSON() ?? Data(), encoding: .utf8)) == "{}")
+    let fichiers = try FileManager.default.contentsOfDirectory(atPath: archives.path)
+    #expect(fichiers.filter { $0.hasSuffix(".json") }.count == 2)
+    #expect(fichiers.filter { $0.hasSuffix(".md") }.count == 3)
+    #expect(Set(fichiers).count == fichiers.count)
+    // L'archive isolée n'a jamais été écrasée : son nom n'a jamais pu être réutilisé.
+    #expect(try String(contentsOf: archives.appendingPathComponent("\(base).md"), encoding: .utf8) == "orphelin")
+}
+
 @Test func uneAncienneReunionSansDecalageSeRelit() throws {
     let racine = try racineTemporaire()
     defer { try? FileManager.default.removeItem(at: racine) }
