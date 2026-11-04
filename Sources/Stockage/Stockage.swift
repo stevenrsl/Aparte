@@ -184,13 +184,15 @@ public struct Reunion: Identifiable, Sendable, Hashable {
                 nom = "\(base)-\(suffixe)"
                 suffixe += 1
             }
-            try gestionnaire.moveItem(at: actuelle, to: archives.appendingPathComponent("\(nom).json"))
+            // On copie sans déplacer : si une étape échoue, le compte rendu actuel reste à sa place.
+            try gestionnaire.copyItem(at: actuelle, to: archives.appendingPathComponent("\(nom).json"))
             if gestionnaire.fileExists(atPath: lisible.path) {
-                try gestionnaire.moveItem(at: lisible, to: archives.appendingPathComponent("\(nom).md"))
+                try gestionnaire.copyItem(at: lisible, to: archives.appendingPathComponent("\(nom).md"))
             }
         }
-        try analyseJSON.write(to: actuelle, options: .atomic)
+        // Le JSON fait foi : écrit en dernier, il n'annonce la nouvelle analyse qu'une fois le Markdown en place.
         try markdown.write(to: lisible, atomically: true, encoding: .utf8)
+        try analyseJSON.write(to: actuelle, options: .atomic)
     }
 
     public func analyseJSON() -> Data? {
