@@ -169,7 +169,15 @@ public struct Reunion: Identifiable, Sendable, Hashable {
         if gestionnaire.fileExists(atPath: actuelle.path) {
             let archives = url.appendingPathComponent("analyses")
             try gestionnaire.createDirectory(at: archives, withIntermediateDirectories: true)
-            let nom = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
+            let base = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
+            // Plusieurs analyses dans la même seconde ne doivent pas se marcher dessus : on cherche un
+            // nom libre pour la paire .json/.md, avec un suffixe -2, -3…
+            var nom = base
+            var suffixe = 2
+            while gestionnaire.fileExists(atPath: archives.appendingPathComponent("\(nom).json").path) {
+                nom = "\(base)-\(suffixe)"
+                suffixe += 1
+            }
             try gestionnaire.moveItem(at: actuelle, to: archives.appendingPathComponent("\(nom).json"))
             if gestionnaire.fileExists(atPath: lisible.path) {
                 try gestionnaire.moveItem(at: lisible, to: archives.appendingPathComponent("\(nom).md"))

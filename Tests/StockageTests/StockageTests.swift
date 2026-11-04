@@ -43,6 +43,22 @@ private func racineTemporaire() throws -> URL {
     #expect(archives.count == 2)
 }
 
+/// Plusieurs analyses dans la même seconde ne doivent pas échouer sur un nom d'archive déjà pris :
+/// `enregistrer` cherche un nom libre pour la paire .json/.md, avec un suffixe -2, -3…
+@Test func plusieursAnalysesDansLaMemeSecondeGardentChacuneSonArchive() throws {
+    let racine = try racineTemporaire()
+    defer { try? FileManager.default.removeItem(at: racine) }
+    let reunion = try Bibliotheque(racine: racine).creerReunion(titre: "R", type: .presentiel, dossier: nil)
+    try reunion.enregistrer(analyseJSON: Data("{}".utf8), markdown: "un")
+    try reunion.enregistrer(analyseJSON: Data("{}".utf8), markdown: "deux")
+    try reunion.enregistrer(analyseJSON: Data("{}".utf8), markdown: "trois")
+    let dossierArchives = reunion.url.appendingPathComponent("analyses")
+    let archives = try FileManager.default.contentsOfDirectory(atPath: dossierArchives.path)
+    #expect(archives.filter { $0.hasSuffix(".json") }.count == 2)
+    #expect(archives.filter { $0.hasSuffix(".md") }.count == 2)
+    #expect(Set(archives).count == archives.count)
+}
+
 @Test func uneAncienneReunionSansDecalageSeRelit() throws {
     let racine = try racineTemporaire()
     defer { try? FileManager.default.removeItem(at: racine) }
