@@ -43,6 +43,104 @@ private func racineTemporaire() throws -> URL {
     #expect(archives.count == 2)
 }
 
+/// Plusieurs analyses dans la même seconde ne doivent pas échouer sur un nom d'archive déjà pris :
+/// `enregistrer` cherche un nom libre pour la paire .json/.md, avec un suffixe -2, -3…
+@Test func plusieursAnalysesDansLaMemeSecondeGardentChacuneSonArchive() throws {
+    let racine = try racineTemporaire()
+    defer { try? FileManager.default.removeItem(at: racine) }
+    let reunion = try Bibliotheque(racine: racine).creerReunion(titre: "R", type: .presentiel, dossier: nil)
+    try reunion.enregistrer(analyseJSON: Data("{}".utf8), markdown: "un")
+    try reunion.enregistrer(analyseJSON: Data("{}".utf8), markdown: "deux")
+    try reunion.enregistrer(analyseJSON: Data("{}".utf8), markdown: "trois")
+    let dossierArchives = reunion.url.appendingPathComponent("analyses")
+    let archives = try FileManager.default.contentsOfDirectory(atPath: dossierArchives.path)
+    #expect(archives.filter { $0.hasSuffix(".json") }.count == 2)
+    #expect(archives.filter { $0.hasSuffix(".md") }.count == 2)
+    #expect(Set(archives).count == archives.count)
+}
+
+/// Si l'archivage échoue, le compte rendu actuel reste lisible à sa place et rien de neuf n'est annoncé.
+@Test func unArchivageImpossibleLaisseLeCompteRenduActuelEnPlace() throws {
+    let racine = try racineTemporaire()
+    defer { try? FileManager.default.removeItem(at: racine) }
+    let reunion = try Bibliotheque(racine: racine).creerReunion(titre: "Archives", type: .presentiel, dossier: nil)
+    try reunion.enregistrer(analyseJSON: Data("ancien".utf8), markdown: "ancien")
+    let gestionnaire = FileManager.default
+    let archives = reunion.url.appendingPathComponent("analyses")
+    try gestionnaire.createDirectory(at: archives, withIntermediateDirectories: true)
+    try gestionnaire.setAttributes([.posixPermissions: 0o500], ofItemAtPath: archives.path)
+    defer { try? gestionnaire.setAttributes([.posixPermissions: 0o700], ofItemAtPath: archives.path) }
+
+    #expect(throws: (any Error).self) { try reunion.enregistrer(analyseJSON: Data("nouveau".utf8), markdown: "nouveau") }
+
+    #expect(reunion.analyseJSON() == Data("ancien".utf8))
+    #expect(try String(contentsOf: reunion.url.appendingPathComponent("analyse.md"), encoding: .utf8) == "ancien")
+}
+
+/// Le scénario de la relecture : l'ancien Markdown ne peut pas être remplacé. Le JSON reste l'ancien,
+/// et rien ne peut faire disparaître analyse.json de la racine.
+@Test func unMarkdownImpossibleARemplacerNeFaitPasDisparaitreLeJSON() throws {
+    let racine = try racineTemporaire()
+    defer { try? FileManager.default.removeItem(at: racine) }
+    let reunion = try Bibliotheque(racine: racine).creerReunion(titre: "Archives", type: .presentiel, dossier: nil)
+    try reunion.enregistrer(analyseJSON: Data("ancien".utf8), markdown: "ancien")
+    let gestionnaire = FileManager.default
+    let lisible = reunion.url.appendingPathComponent("analyse.md")
+    try gestionnaire.setAttributes([.immutable: true], ofItemAtPath: lisible.path)
+    defer { try? gestionnaire.setAttributes([.immutable: false], ofItemAtPath: lisible.path) }
+
+    #expect(throws: (any Error).self) { try reunion.enregistrer(analyseJSON: Data("nouveau".utf8), markdown: "nouveau") }
+
+    #expect(reunion.analyseJSON() == Data("ancien".utf8))
+    #expect(try String(contentsOf: lisible, encoding: .utf8) == "ancien")
+}
+
+/// Un archivage réussi garde bien l'ancien contenu aux archives et le nouveau à la racine.
+@Test func unArchivageReussiGardeLAncienContenu() throws {
+    let racine = try racineTemporaire()
+    defer { try? FileManager.default.removeItem(at: racine) }
+    let reunion = try Bibliotheque(racine: racine).creerReunion(titre: "Archives", type: .presentiel, dossier: nil)
+    try reunion.enregistrer(analyseJSON: Data("ancien".utf8), markdown: "ancien md")
+    try reunion.enregistrer(analyseJSON: Data("nouveau".utf8), markdown: "nouveau md")
+
+    let archives = reunion.url.appendingPathComponent("analyses")
+    let fichiers = try FileManager.default.contentsOfDirectory(at: archives, includingPropertiesForKeys: nil)
+    let json = try #require(fichiers.first { $0.pathExtension == "json" })
+    let md = try #require(fichiers.first { $0.pathExtension == "md" })
+    #expect(try Data(contentsOf: json) == Data("ancien".utf8))
+    #expect(try String(contentsOf: md, encoding: .utf8) == "ancien md")
+    #expect(reunion.analyseJSON() == Data("nouveau".utf8))
+    #expect(try String(contentsOf: reunion.url.appendingPathComponent("analyse.md"), encoding: .utf8) == "nouveau md")
+}
+
+/// Un nom d'archive n'est libre que si .json ET .md le sont. Sinon un `.md` isolé sous ce nom
+/// bloquerait le déplacement du Markdown juste après celui du JSON, qui lui aurait déjà réussi :
+/// `analyse.json` disparaîtrait de la racine sans qu'aucun nouveau compte rendu ne soit écrit. On
+/// prédit le nom de la seconde courante comme `enregistrer`, pour ne pas dépendre de l'horloge au-delà.
+@Test func unMarkdownDArchiveIsoleNEmpecheNiNeDupliqueLaProchaineArchive() throws {
+    let racine = try racineTemporaire()
+    defer { try? FileManager.default.removeItem(at: racine) }
+    let reunion = try Bibliotheque(racine: racine).creerReunion(titre: "R", type: .presentiel, dossier: nil)
+    try reunion.enregistrer(analyseJSON: Data("{}".utf8), markdown: "un")
+
+    let archives = reunion.url.appendingPathComponent("analyses")
+    try FileManager.default.createDirectory(at: archives, withIntermediateDirectories: true)
+    let base = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
+    try "orphelin".write(to: archives.appendingPathComponent("\(base).md"), atomically: true, encoding: .utf8)
+
+    try reunion.enregistrer(analyseJSON: Data("{}".utf8), markdown: "deux")
+    try reunion.enregistrer(analyseJSON: Data("{}".utf8), markdown: "trois")
+
+    // Le nouveau compte rendu est bien écrit à la racine, jamais bloqué par l'archive isolée.
+    #expect(try #require(String(data: reunion.analyseJSON() ?? Data(), encoding: .utf8)) == "{}")
+    let fichiers = try FileManager.default.contentsOfDirectory(atPath: archives.path)
+    #expect(fichiers.filter { $0.hasSuffix(".json") }.count == 2)
+    #expect(fichiers.filter { $0.hasSuffix(".md") }.count == 3)
+    #expect(Set(fichiers).count == fichiers.count)
+    // L'archive isolée n'a jamais été écrasée : son nom n'a jamais pu être réutilisé.
+    #expect(try String(contentsOf: archives.appendingPathComponent("\(base).md"), encoding: .utf8) == "orphelin")
+}
+
 @Test func uneAncienneReunionSansDecalageSeRelit() throws {
     let racine = try racineTemporaire()
     defer { try? FileManager.default.removeItem(at: racine) }
@@ -127,4 +225,24 @@ private func bibliothequeDeGestion() throws -> (Bibliotheque, URL) {
     let reunion = try bibliotheque.creerReunion(titre: "Fictive à jeter", type: .presentiel, dossier: nil)
     try bibliotheque.mettreALaCorbeille(reunion)
     #expect(bibliotheque.reunions().isEmpty)
+}
+
+@Test func laSignatureDUneAnalyseChangeAvecSonAnalyseEtSaTranscription() throws {
+    let racine = try racineTemporaire()
+    defer { try? FileManager.default.removeItem(at: racine) }
+    let reunion = try Bibliotheque(racine: racine).creerReunion(titre: "R", type: .visio, dossier: nil)
+    try reunion.enregistrer(segments: [Segment(debut: 1, fin: 2, piste: .micro, texte: "Bonjour")])
+    #expect(reunion.signatureAnalyse() == nil)
+
+    try reunion.enregistrer(analyseJSON: Data("{}".utf8), markdown: "")
+    let signature = try #require(reunion.signatureAnalyse())
+    #expect(reunion.signatureAnalyse() == signature)
+
+    // Même taille : seule la date peut trahir la réécriture.
+    try reunion.enregistrer(segments: [Segment(debut: 1, fin: 2, piste: .micro, texte: "Bonsoir")])
+    let apresRelecture = try #require(reunion.signatureAnalyse())
+    #expect(apresRelecture != signature)
+
+    try reunion.enregistrer(analyseJSON: Data("{}".utf8), markdown: "")
+    #expect(reunion.signatureAnalyse() != apresRelecture)
 }

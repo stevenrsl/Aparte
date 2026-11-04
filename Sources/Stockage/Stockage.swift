@@ -169,18 +169,45 @@ public struct Reunion: Identifiable, Sendable, Hashable {
         if gestionnaire.fileExists(atPath: actuelle.path) {
             let archives = url.appendingPathComponent("analyses")
             try gestionnaire.createDirectory(at: archives, withIntermediateDirectories: true)
-            let nom = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
-            try gestionnaire.moveItem(at: actuelle, to: archives.appendingPathComponent("\(nom).json"))
+            let base = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
+            // Plusieurs analyses dans la même seconde ne doivent pas se marcher dessus : on cherche un
+            // nom libre pour la paire .json/.md, avec un suffixe -2, -3… Le nom n'est libre que si les
+            // deux extensions le sont : un .md isolé sous ce nom bloquerait sinon le déplacement du
+            // Markdown après celui du JSON, et le nouveau compte rendu ne serait jamais écrit.
+            func libre(_ nom: String) -> Bool {
+                !gestionnaire.fileExists(atPath: archives.appendingPathComponent("\(nom).json").path)
+                    && !gestionnaire.fileExists(atPath: archives.appendingPathComponent("\(nom).md").path)
+            }
+            var nom = base
+            var suffixe = 2
+            while !libre(nom) {
+                nom = "\(base)-\(suffixe)"
+                suffixe += 1
+            }
+            // On copie sans déplacer : si une étape échoue, le compte rendu actuel reste à sa place.
+            try gestionnaire.copyItem(at: actuelle, to: archives.appendingPathComponent("\(nom).json"))
             if gestionnaire.fileExists(atPath: lisible.path) {
-                try gestionnaire.moveItem(at: lisible, to: archives.appendingPathComponent("\(nom).md"))
+                try gestionnaire.copyItem(at: lisible, to: archives.appendingPathComponent("\(nom).md"))
             }
         }
-        try analyseJSON.write(to: actuelle, options: .atomic)
+        // Le JSON fait foi : écrit en dernier, il n'annonce la nouvelle analyse qu'une fois le Markdown en place.
         try markdown.write(to: lisible, atomically: true, encoding: .utf8)
+        try analyseJSON.write(to: actuelle, options: .atomic)
     }
 
     public func analyseJSON() -> Data? {
         try? Data(contentsOf: url.appendingPathComponent("analyse.json"))
+    }
+
+    /// Change dès que l'analyse ou la transcription est réécrite. Absente sans analyse ou sans transcription.
+    public func signatureAnalyse() -> String? {
+        let signatures = [url.appendingPathComponent("analyse.json"), transcriptionURL].map { fichier -> String? in
+            guard let attributs = try? FileManager.default.attributesOfItem(atPath: fichier.path),
+                  let date = attributs[.modificationDate] as? Date, let taille = attributs[.size] as? Int else { return nil }
+            return "\(date.timeIntervalSinceReferenceDate)-\(taille)"
+        }
+        let presentes = signatures.compactMap { $0 }
+        return presentes.count == signatures.count ? presentes.joined(separator: "|") : nil
     }
 }
 
