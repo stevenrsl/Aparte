@@ -311,17 +311,33 @@ public enum DecoupageSujets {
         }
     }
 
-    /// Exceptions grammaticales explicites, écrites comme après normalisation (accents retirés).
-    private static let motsGrammaticaux: Set<Substring> = [
-        "a", "au", "aux", "de", "des", "du", "en", "et", "l", "la", "le", "les", "un", "une"
+    /// Exceptions sur le mot brut : « a » n'est pas « à », ni « LA » le déterminant « la ».
+    private static let motsGrammaticaux: Set<String> = [
+        "à", "au", "aux", "de", "des", "du", "en", "et", "la", "le", "les", "un", "une"
     ]
 
-    /// Tous les mots porteurs de sens doivent avoir été dits, même un nom ou un nombre court.
-    /// Un titre sans aucun mot porteur de sens ne décrit pas un sujet.
+    /// Les unités et nombres ambigus reviennent aux mots dits plutôt que d'être interprétés.
     static func titreDit(_ titre: String, lu: Set<Substring>) -> Bool {
-        let mots = ValidationSources.normaliser(titre).split(separator: " ")
-        return mots.contains { !motsGrammaticaux.contains($0) }
-            && mots.allSatisfy { motsGrammaticaux.contains($0) || lu.contains($0) }
+        guard titre.rangeOfCharacter(from: CharacterSet(charactersIn: "€$£%")) == nil,
+              titre.range(of: #"\d[\s,.]+\d"#, options: .regularExpression) == nil else { return false }
+        let expression = try! NSRegularExpression(pattern: #"[\p{L}\p{N}]+"#)
+        let texte = titre as NSString
+        var porteur = false
+        for correspondance in expression.matches(in: titre, range: NSRange(location: 0, length: texte.length)) {
+            let brut = texte.substring(with: correspondance.range)
+            let minuscule = brut.lowercased()
+            let suite = correspondance.range.location + correspondance.range.length
+            let apostrophe = suite < texte.length && ["'", "’"].contains(texte.substring(with: NSRange(location: suite, length: 1)))
+            let capitales = brut == brut.uppercased()
+            let elision = ["l", "d"].contains(minuscule) && apostrophe
+            let grammatical = (brut == "À") || elision || (!capitales && motsGrammaticaux.contains(minuscule))
+            if !grammatical {
+                porteur = true
+                let mots = ValidationSources.normaliser(brut).split(separator: " ")
+                guard !mots.isEmpty, mots.allSatisfy({ lu.contains($0) }) else { return false }
+            }
+        }
+        return porteur
     }
 
     public static func valider(_ proposes: [Propose], phrases: [String], debuts: [Double], fin: Double) -> [Sujet] {
