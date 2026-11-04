@@ -311,8 +311,43 @@ public enum DecoupageSujets {
         }
     }
 
-    /// Les mots trop courts (« de », « la ») ne prouvent rien : ils ne sont pas contrôlés.
-    private static let longueurControlee = 4
+    private static let motsGrammaticaux: Set<String> = [
+        "à", "au", "aux", "de", "des", "du", "en", "et", "la", "le", "les"
+    ]
+    private static let caracteresInterdits = try! NSRegularExpression(pattern: #"[^\p{L}\p{N}\p{M}\s'’\-,.:()«»"]"#)
+    private static let nombresAmbigus = try! NSRegularExpression(pattern: #"\d[^\p{L}\p{N}]+\d|-\s*\d"#)
+    private static let motsTitre = try! NSRegularExpression(pattern: #"[\p{L}\p{N}\p{M}]+"#)
+    private static let lettreInitiale = try! NSRegularExpression(pattern: #"^\p{L}"#)
+
+    /// Un titre douteux revient aux mots dits ; l'ordre et la négation ne sont pas contrôlés.
+    static func titreDit(_ titre: String, lu: Set<Substring>) -> Bool {
+        let titre = titre.precomposedStringWithCanonicalMapping
+        let texte = titre as NSString
+        let entier = NSRange(location: 0, length: texte.length)
+        guard caracteresInterdits.firstMatch(in: titre, range: entier) == nil,
+              nombresAmbigus.firstMatch(in: titre, range: entier) == nil else { return false }
+        var porteur = false
+        for correspondance in motsTitre.matches(in: titre, range: entier) {
+            let brut = texte.substring(with: correspondance.range)
+            let minuscule = brut.lowercased()
+            let suite = correspondance.range.location + correspondance.range.length
+            let apostrophe = suite < texte.length && ["'", "’"].contains(texte.substring(with: NSRange(location: suite, length: 1)))
+            let apres = suite + 1
+            let lettreApres = apres < texte.length && lettreInitiale.firstMatch(
+                in: texte.substring(from: apres), range: NSRange(location: 0, length: texte.length - apres)) != nil
+            let elision = ["l", "d"].contains(minuscule) && apostrophe && lettreApres
+            let capitales = brut == brut.uppercased()
+            guard !(brut.count == 1 && brut.first!.isLetter && !["à", "À"].contains(brut) && !elision),
+                  !(capitales && (motsGrammaticaux.contains(minuscule) || ["un", "une"].contains(minuscule)) && brut != "À") else { return false }
+            let grammatical = (brut == "À") || elision || (!capitales && motsGrammaticaux.contains(minuscule))
+            if !grammatical {
+                porteur = true
+                let mots = ValidationSources.normaliser(brut).split(separator: " ")
+                guard !mots.isEmpty, mots.allSatisfy({ lu.contains($0) }) else { return false }
+            }
+        }
+        return porteur
+    }
 
     public static func valider(_ proposes: [Propose], phrases: [String], debuts: [Double], fin: Double) -> [Sujet] {
         guard phrases.count == debuts.count, !phrases.isEmpty else { return [] }
@@ -325,8 +360,7 @@ public enum DecoupageSujets {
             let dites = phrases[(premiere - 1)..<derniere]
             let lu = Set(ValidationSources.normaliser(dites.joined(separator: " ")).split(separator: " "))
             let titre = propose.titre.trimmingCharacters(in: .whitespacesAndNewlines)
-            let mots = ValidationSources.normaliser(titre).split(separator: " ")
-            let dit = !mots.isEmpty && mots.allSatisfy { $0.count < longueurControlee || lu.contains($0) }
+            let dit = titreDit(titre, lu: lu)
             let debutPhrase = dites.first.map { $0.split(separator: " ").prefix(6).joined(separator: " ") } ?? ""
             sujets.append(Sujet(titre: dit ? titre : debutPhrase, debut: debuts[premiere - 1],
                                 fin: derniere < debuts.count ? debuts[derniere] : fin))
