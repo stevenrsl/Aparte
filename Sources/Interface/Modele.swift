@@ -113,12 +113,13 @@ public final class ModeleApp {
     /// relecture se lance seule, ce qui enchaîne sur l'analyse locale. Tout reste sur ce Mac.
     private func recupererApresPlantage(_ reunion: Reunion) {
         guard recuperationsRelues.insert(reunion.id).inserted, reunion.segments().isEmpty else { return }
+        var maj = reunion
         if reunion.meta.duree == 0, let duree = Recording.seconds(of: reunion.micro) ?? Recording.seconds(of: reunion.systeme) {
-            var maj = reunion
             maj.meta.duree = duree
             try? maj.enregistrerMeta()
         }
-        relire(reunion)
+        // `relire` réécrit la fiche qu'on lui donne : il lui faut celle qui porte la durée.
+        relire(maj)
     }
 
     func compteRendu(de reunion: Reunion) -> CompteRendu? {
