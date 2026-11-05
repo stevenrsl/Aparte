@@ -388,6 +388,12 @@ struct EcranCompteRendu: View {
                         let action = ActionOuverte(reunion: reunion, element: element)
                         Toggle("Marquer comme faite : \(element.texte)", isOn: Binding(get: { modele.actionEstFaite(action) }, set: { modele.definirAction(action, faite: $0) }))
                             .labelsHidden().toggleStyle(.checkbox)
+                            .overlay {
+                                if !modele.actionEstFaite(action) {
+                                    RoundedRectangle(cornerRadius: 4).stroke(Color.encre, lineWidth: 1)
+                                        .allowsHitTesting(false).accessibilityHidden(true)
+                                }
+                            }
                     }
                     Button { choisir(element) } label: {
                         HStack(alignment: .top, spacing: 10) {

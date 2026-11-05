@@ -36,3 +36,5 @@ dans le [plan des agents](plan-agents.md).
 | Hiérarchie visuelle du compte rendu | Panko | `v05-compte-rendu-panko` | en relecture | `Sources/Interface/`, `Tests/InterfaceTests/RendusEcrans.swift`, `docs/tableau.md` |
 
 | Apaiser la transcription du compte rendu | Panko | `v05-compte-rendu-panko` | en relecture | `Sources/DA/DA.swift`, `Sources/Interface/`, `docs/tableau.md` |
+
+| Atténuer Accueil et renforcer la case dans le compte rendu | Panko | `v05-compte-rendu-panko` | en relecture | `Sources/Interface/Vues.swift`, `Sources/Interface/EcranCompteRendu.swift`, `docs/tableau.md` |

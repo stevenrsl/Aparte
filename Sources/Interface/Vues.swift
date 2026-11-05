@@ -103,6 +103,11 @@ struct BarreLaterale: View {
     @Bindable var modele: ModeleApp
     @State private var demarrage = false
 
+    private var compteRenduOuvert: Bool {
+        if case .compteRendu = modele.ecran { return true }
+        return false
+    }
+
     private func demarrer(_ type: TypeReunion) {
         demarrage = true
         let dossier = modele.dossierCourant
@@ -138,7 +143,7 @@ struct BarreLaterale: View {
             .disabled(demarrage)
             .frame(maxWidth: .infinity, alignment: .leading)
             VStack(alignment: .leading, spacing: 2) {
-                EntreeLaterale(titre: "Accueil", active: modele.origineNavigation == .accueil) { modele.ecran = .accueil }
+                EntreeLaterale(titre: "Accueil", active: modele.origineNavigation == .accueil, discrete: compteRenduOuvert) { modele.ecran = .accueil }
                 EntreeLaterale(titre: "Toutes les réunions", active: modele.origineNavigation == .toutes, compte: modele.reunions.count) { modele.ecran = .toutes }
             }
             VStack(alignment: .leading, spacing: 2) {
@@ -169,14 +174,15 @@ struct EntreeLaterale: View {
     let active: Bool
     var compte: Int?
     var enCours = false
+    var discrete = false
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 8) {
                 Rectangle()
-                    .fill(active ? Color.argile : (enCours ? Color.terracotta : Color.clear))
-                    .frame(width: 7, height: 7)
+                    .fill(active ? (discrete ? Color.encre : Color.argile) : (enCours ? Color.terracotta : Color.clear))
+                    .frame(width: active && discrete ? 3 : 7, height: active && discrete ? 16 : 7)
                 Text(titre).lineLimit(1)
                 Spacer(minLength: 0)
                 if let compte {
@@ -186,8 +192,9 @@ struct EntreeLaterale: View {
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
-            .background(active ? Color.encreColonne : Color.clear)
-            .foregroundStyle(active ? Color.colonneTexte : Color.encre)
+            // Écart local au brief : dans le compte rendu, la navigation s'efface devant le contenu.
+            .background(active ? (discrete ? Color.creme : Color.encreColonne) : Color.clear)
+            .foregroundStyle(active && !discrete ? Color.colonneTexte : Color.encre)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
