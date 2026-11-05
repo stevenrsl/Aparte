@@ -6,4 +6,4 @@ dans le [plan des agents](plan-agents.md).
 
 | Tâche | Agent | Branche | État | Fichiers touchés |
 |---|---|---|---|---|
-| Accueil et dossier plus denses | Claude Code | `accueil-dense` | en cours | `docs/brief-da-reunions.md`, `Sources/DA/DA.swift`, `Sources/Interface/Vues.swift`, `Sources/Interface/Modele.swift`, `Tests/InterfaceTests/` |
+| Accueil et dossier plus denses | Claude Code | `accueil-dense` | en relecture | `docs/brief-da-reunions.md`, `Sources/DA/DA.swift`, `Sources/Interface/Vues.swift`, `Sources/Interface/Modele.swift`, `Tests/InterfaceTests/` |
