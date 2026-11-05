@@ -383,6 +383,8 @@ public final class ModeleApp {
 
     public func nommer(_ voix: String, _ nom: String, dans reunion: Reunion) {
         var nommee = reunions.first { $0.id == reunion.id } ?? reunion
+        // Un champ qui prend le focus redonne sa valeur : rien à écrire, ni à recharger.
+        guard (nommee.meta.nomsDesVoix?[voix] ?? "") != nom.trimmingCharacters(in: .whitespacesAndNewlines) else { return }
         nommee.meta.nomsDesVoix = (nommee.meta.nomsDesVoix ?? [:]).merging([voix: nom.trimmingCharacters(in: .whitespacesAndNewlines)]) { _, nouveau in nouveau }
         do {
             try nommee.enregistrerMeta()
