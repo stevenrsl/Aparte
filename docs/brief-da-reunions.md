@@ -153,8 +153,8 @@ Il rend l'interface organique. Il doit se sentir, pas se voir.
 - **Case à cocher** : carré de 14 pt, bordure 2 pt.
 - **Boutons** : principal en aplat `encre`, texte crème ; signal en aplat `argile`, texte encre, sur
   la colonne encre uniquement ; secondaire en bordure 1 pt, fond transparent. Carrés, sans ombre.
-- **Logo provisoire** : carré de 2 × 2 pixels (encre, terracotta, argile, encre) suivi du nom,
-  « Aparté », en New York.
+- **Logo** : les cinq colonnes de points de l'icône (argile, la centrale en crème) sur un carré
+  `encre`, suivies du nom, « Aparté », en New York. Source de l'icône : `Support/Icone/`.
 - **Alerte de réunion détectée** (seulement si la détection est retenue, voir la fiche) : un bandeau
   carré sur fond `encre`, sans ombre, fermé par un filet `colonne-filet`. Libellé
   « // réunion détectée », la phrase « Zoom utilise le micro », un bouton signal « Démarrer
@@ -196,6 +196,5 @@ Il rend l'interface organique. Il doit se sentir, pas se voir.
 
 ## À Steven
 
-- **Le vrai logo.** Le nom est choisi, Aparté, mais le carré de pixels reste provisoire.
-- **L'icône de l'app** : à dessiner dans la même palette.
+- **Le logo et l'icône** : piste « niveaux sonores » retenue par Steven le 2 novembre 2026.
 - **L'intensité du grain** : 16 % est un point de départ, à juger sur son écran réel.

@@ -16,3 +16,4 @@ dans le [plan des agents](plan-agents.md).
 
 | Assemblage V0.5 et découpage des vues | Luna | `v0-5` | en cours | `Sources/Interface/`, `Tests/InterfaceTests/RendusEcrans.swift`, `docs/` |
 | Accueil et dossier plus denses | Claude Code | `accueil-dense` | en relecture | `docs/brief-da-reunions.md`, `Sources/DA/DA.swift`, `Sources/Interface/Vues.swift`, `Sources/Interface/Modele.swift`, `Tests/InterfaceTests/` |
+| Logo et icône de l'app | Claude Code | `logo` | en relecture | `Support/`, `build.sh`, `Sources/DA/DA.swift`, `docs/brief-da-reunions.md`, `docs/proposition-logo.md` |
