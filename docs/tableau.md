@@ -12,4 +12,6 @@ dans le [plan des agents](plan-agents.md).
 | Essai complet de l'app sur audio de synthèse | Biscuit | aucune | fait, à rejouer sur le build final | aucun |
 | Contrôle des écrans | Pickle (Miso n'a rien exécuté) | `controle-ecrans` | fusionné dans `build-integration` | `Sources/Interface/Vues.swift`, `Sources/DA/DA.swift`, `Tests/InterfaceTests/RendusEcrans.swift` |
 | Défauts de l'essai : analyse automatique, réunion récupérée, fausse alerte de coupure | Dev | `defauts-essai` | fusionné dans `build-integration` | `Sources/Interface/Modele.swift`, `Sources/Capture/Capture.swift`, `Sources/Interface/Vues.swift` (`sansAnalyse` seulement), tests liés |
-| Corrections après l'essai sur une vraie réunion : son du Mac accéléré, écran vide, compte rendu à la Cairn, noms des voix | Claude Code | `corrections-essai-cairn` | en cours | `Sources/Capture/`, `Sources/Analyse/`, `Sources/Interface/`, `Sources/Stockage/`, `Tests/`, `docs/fiche-reunions-2026-11.md`, `README.md` |
+| Corrections après l'essai sur une vraie réunion : son du Mac accéléré, écran vide, compte rendu à la Cairn, noms des voix | Claude Code | `corrections-essai-cairn` | terminé, base V0.5 | `Sources/Capture/`, `Sources/Analyse/`, `Sources/Interface/`, `Sources/Stockage/`, `Tests/`, `docs/fiche-reunions-2026-11.md`, `README.md` |
+
+| Assemblage V0.5 et découpage des vues | Luna | `v0-5` | en cours | `Sources/Interface/`, `Tests/InterfaceTests/RendusEcrans.swift`, `docs/` |
