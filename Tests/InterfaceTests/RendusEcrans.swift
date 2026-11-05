@@ -77,6 +77,11 @@ func rendreLesEcrans() async throws {
     try await rendre("compte-rendu-sombre", .compteRendu(relue), sombre: true)
     try await rendre("dossier", .dossier("Documentaire voile"))
     try await rendre("reglages", .reglages)
+    let enCours = try #require(modele.bibliotheque).creerReunion(titre: "Point en cours", type: .visio, dossier: nil)
+    modele.session = SessionReunion(reunion: enCours)
+    try await rendre("en-reunion", .enReunion)
+    try await rendre("accueil-en-reunion", .accueil)
+    modele.session = nil
     modele.ecran = .accueil
 }
 

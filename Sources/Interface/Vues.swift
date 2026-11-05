@@ -517,6 +517,15 @@ struct SectionActions: View {
 
 struct EcranAccueil: View {
     @Bindable var modele: ModeleApp
+    @State private var demarrage = false
+
+    private func demarrer(_ type: TypeReunion) {
+        demarrage = true
+        Task {
+            await modele.demarrer(titre: "", type: type, dossier: nil, entree: nil)
+            demarrage = false
+        }
+    }
 
     var body: some View {
         let actions = modele.actionsOuvertes()
@@ -525,9 +534,22 @@ struct EcranAccueil: View {
             Libelle(Date().formatted(.dateTime.locale(Locale(identifier: "fr_FR")).weekday(.wide).day().month(.wide)))
             TitreEcran(debut: "Bonjour, ", fin: "Steven")
         } commandes: {
-            Button("Préparer une réunion") { modele.ecran = .nouvelle }
-                .buttonStyle(BoutonPrincipal())
-                .disabled(modele.session != nil)
+            if modele.session != nil {
+                Button("Revenir à la réunion") { modele.ecran = .enReunion }
+                    .buttonStyle(BoutonPrincipal())
+            } else {
+                HStack(spacing: 10) {
+                    Button("Préparer une réunion") { modele.ecran = .nouvelle }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(Color.terracottaTexte)
+                        .padding(.trailing, 8)
+                    Button("Démarrer en présentiel") { demarrer(.presentiel) }
+                        .buttonStyle(BoutonSecondaire())
+                    Button("Démarrer en visio") { demarrer(.visio) }
+                        .buttonStyle(BoutonPrincipal())
+                }
+                .disabled(demarrage)
+            }
         } contenu: {
             SectionActions(modele: modele, actions: actions)
             VStack(alignment: .leading, spacing: 0) {
@@ -734,30 +756,38 @@ struct EcranEnReunion: View {
             Libelle(session.reunion.dossier?.lowercased() ?? "réunion en cours")
             TitreEcran(debut: session.reunion.meta.titre, fin: "")
         } contenu: {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Mes notes").font(Typo.titreSection).italic().padding(.bottom, 6)
-                    ForEach(session.lignes) { ligne in
-                        HStack(alignment: .firstTextBaseline, spacing: 12) {
-                            Text(horodatage(ligne.temps))
-                                .font(Typo.horodatage)
-                                .foregroundStyle(ligne.texte.isEmpty ? Color.clear : Color.terracottaTexte)
-                                .frame(width: 52, alignment: .leading)
-                            TextField("Note ici, chaque ligne garde son moment.", text: Binding(
-                                get: { ligne.texte },
-                                set: { session.changer(ligne.id, texte: $0) }
-                            ))
-                            .textFieldStyle(.plain)
-                            .font(Typo.note)
-                            .focused($ligneActive, equals: ligne.id)
-                            .onSubmit { ligneActive = session.ligneSuivante() }
+            VStack(alignment: .leading, spacing: 0) {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Mes notes").font(Typo.titreSection).italic().padding(.bottom, 6)
+                        ForEach(session.lignes) { ligne in
+                            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                                Text(horodatage(ligne.temps))
+                                    .font(Typo.horodatage)
+                                    .foregroundStyle(ligne.texte.isEmpty ? Color.clear : Color.terracottaTexte)
+                                    .frame(width: 52, alignment: .leading)
+                                TextField("Note ici, chaque ligne garde son moment.", text: Binding(
+                                    get: { ligne.texte },
+                                    set: { session.changer(ligne.id, texte: $0) }
+                                ))
+                                .textFieldStyle(.plain)
+                                .font(Typo.note)
+                                .focused($ligneActive, equals: ligne.id)
+                                .onSubmit { ligneActive = session.ligneSuivante() }
+                            }
                         }
                     }
+                    .padding(.horizontal, 36)
+                    .padding(.vertical, 24)
                 }
-                .padding(.horizontal, 36)
-                .padding(.vertical, 24)
+                .onAppear { ligneActive = session.lignes.last?.id }
+                Text("Pense à prévenir les participants que tu enregistres.")
+                    .foregroundStyle(Color.encreDouce)
+                    .padding(.horizontal, 36)
+                    .padding(.vertical, 12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .overlay(alignment: .top) { Color.filet.frame(height: 1) }
             }
-            .onAppear { ligneActive = session.lignes.last?.id }
         } enteteEncre: {
             HStack {
                 Rectangle().fill(Color.argile).frame(width: 9, height: 9)
