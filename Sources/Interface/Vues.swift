@@ -101,30 +101,55 @@ struct PremierLancement: View {
 
 struct BarreLaterale: View {
     @Bindable var modele: ModeleApp
+    @State private var demarrage = false
+
+    private func demarrer(_ type: TypeReunion) {
+        demarrage = true
+        let dossier = modele.dossierCourant
+        Task {
+            await modele.demarrer(titre: "", type: type, dossier: dossier, entree: nil)
+            demarrage = false
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             LogoApparte()
-            VStack(alignment: .leading, spacing: 2) {
-                EntreeLaterale(titre: "Accueil", active: modele.ecran == .accueil) { modele.ecran = .accueil }
-                EntreeLaterale(titre: "Toutes les réunions", active: modele.ecran == .toutes, compte: modele.reunions.count) { modele.ecran = .toutes }
+            VStack(alignment: .leading, spacing: 8) {
                 if let session = modele.session {
-                    EntreeLaterale(titre: session.reunion.meta.titre, active: modele.ecran == .enReunion, enCours: true) { modele.ecran = .enReunion }
+                    Text(session.reunion.meta.titre).font(Typo.titreLigne).lineLimit(2)
+                    Text("Enregistrement en cours").font(Typo.horodatage)
+                    TimelineView(.periodic(from: .now, by: 1)) { _ in
+                        Text(horodatage(session.temps)).font(Typo.horodatage).monospacedDigit()
+                    }
+                    Button("Revenir à la réunion") { modele.ouvrirReunionEnCours() }
+                } else {
+                    if let dossier = modele.dossierCourant { Libelle("dans \(dossier)") }
+                    Button("Démarrer en visio") { demarrer(.visio) }
+                    Button("Démarrer en présentiel") { demarrer(.presentiel) }
+                    Button("Préparer…") { modele.preparerReunion() }
+                        .foregroundStyle(Color.terracottaTexte)
                 }
+            }
+            .disabled(demarrage)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            VStack(alignment: .leading, spacing: 2) {
+                EntreeLaterale(titre: "Accueil", active: modele.origineNavigation == .accueil) { modele.ecran = .accueil }
+                EntreeLaterale(titre: "Toutes les réunions", active: modele.origineNavigation == .toutes, compte: modele.reunions.count) { modele.ecran = .toutes }
             }
             VStack(alignment: .leading, spacing: 2) {
                 Libelle("dossiers").padding(.bottom, 4)
                 ScrollView {
                     VStack(alignment: .leading, spacing: 2) {
                         ForEach(modele.dossiers, id: \.self) { nom in
-                            EntreeLaterale(titre: nom, active: modele.ecran == .dossier(nom),
+                            EntreeLaterale(titre: nom, active: modele.origineNavigation == .dossier(nom),
                                            compte: modele.reunions.filter { $0.dossier == nom }.count) { modele.ecran = .dossier(nom) }
                         }
                     }
                 }
             }
             Spacer(minLength: 0)
-            EntreeLaterale(titre: "Réglages", active: modele.ecran == .reglages) { modele.ecran = .reglages }
+            EntreeLaterale(titre: "Réglages", active: modele.origineNavigation == .reglages) { modele.ecran = .reglages }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 22)

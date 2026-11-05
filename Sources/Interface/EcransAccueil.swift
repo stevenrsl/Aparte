@@ -19,7 +19,7 @@ struct LigneReunion: View {
 
     var body: some View {
         let compteRendu = modele.resumeEnregistre(de: reunion)
-        Button { modele.ecran = .compteRendu(reunion) } label: {
+        Button { modele.ouvrir(reunion) } label: {
             HStack(alignment: .firstTextBaseline, spacing: 18) {
                 Text("\(date) · \(Int(reunion.meta.duree / 60)) min")
                     .font(Typo.horodatage)
@@ -27,7 +27,7 @@ struct LigneReunion: View {
                     .frame(width: 150, alignment: .leading)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(reunion.meta.titre).font(Typo.titreLigne).lineLimit(1)
-                    Text(compteRendu?.apercu ?? "Pas encore analysée.")
+                    Text(modele.session?.reunion.id == reunion.id ? "En cours" : (compteRendu?.apercu ?? "Pas encore analysée."))
                         .foregroundStyle(Color.encreDouce)
                         .lineLimit(1)
                 }
@@ -92,7 +92,7 @@ struct LigneAction: View {
             .buttonStyle(.plain)
             .padding(.top, 2)
             .accessibilityLabel("Marquer comme fait : \(action.element.texte)")
-            Button { modele.ecran = .compteRendu(action.reunion) } label: {
+            Button { modele.ouvrir(action.reunion, moment: action.element.sources.first) } label: {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(action.element.texte).multilineTextAlignment(.leading)
                     Text(details).font(Typo.horodatage).foregroundStyle(Color.encreDouce)
@@ -140,16 +140,6 @@ struct SectionActions: View {
 
 struct EcranAccueil: View {
     @Bindable var modele: ModeleApp
-    @State private var demarrage = false
-
-    private func demarrer(_ type: TypeReunion) {
-        demarrage = true
-        Task {
-            await modele.demarrer(titre: "", type: type, dossier: nil, entree: nil)
-            demarrage = false
-        }
-    }
-
     var body: some View {
         let actions = modele.actionsOuvertes()
         EcranLecture(phrase: phraseEtat(actions: actions, derniere: modele.reunions.first { $0.id != modele.session?.reunion.id },
@@ -157,22 +147,7 @@ struct EcranAccueil: View {
             Libelle(Date().formatted(.dateTime.locale(Locale(identifier: "fr_FR")).weekday(.wide).day().month(.wide)))
             TitreEcran(debut: "Bonjour, ", fin: "Steven")
         } commandes: {
-            if modele.session != nil {
-                Button("Revenir à la réunion") { modele.ecran = .enReunion }
-                    .buttonStyle(BoutonPrincipal())
-            } else {
-                HStack(spacing: 10) {
-                    Button("Préparer une réunion") { modele.ecran = .nouvelle }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(Color.terracottaTexte)
-                        .padding(.trailing, 8)
-                    Button("Démarrer en présentiel") { demarrer(.presentiel) }
-                        .buttonStyle(BoutonSecondaire())
-                    Button("Démarrer en visio") { demarrer(.visio) }
-                        .buttonStyle(BoutonPrincipal())
-                }
-                .disabled(demarrage)
-            }
+            EmptyView()
         } contenu: {
             SectionActions(modele: modele, actions: actions)
             VStack(alignment: .leading, spacing: 0) {

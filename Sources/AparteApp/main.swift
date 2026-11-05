@@ -18,9 +18,20 @@ struct AparteApp: App {
         .defaultSize(width: 1280, height: 800)
         .commands {
             CommandGroup(replacing: .newItem) {
-                Button("Nouvelle réunion") { modele.ecran = .nouvelle }
+                Button("Nouvelle réunion") { modele.preparerReunion() }
                     .keyboardShortcut("n")
                     .disabled(modele.session != nil)
+            }
+            CommandGroup(replacing: .appSettings) {
+                Button("Réglages…") { modele.ecran = .reglages }.keyboardShortcut(",")
+            }
+            CommandMenu("Présentation") {
+                Button("Accueil") { modele.ecran = .accueil }
+                Button("Toutes les réunions") { modele.ecran = .toutes }
+                Divider()
+                Button("Retour") { modele.revenir() }
+                    .keyboardShortcut("[", modifiers: .command)
+                    .disabled({ if case .compteRendu = modele.ecran { return false }; if case .nouvelle = modele.ecran { return false }; return true }())
             }
             CommandGroup(after: .newItem) {
                 Button("Terminer la réunion") { Task { await modele.terminer() } }

@@ -148,7 +148,7 @@ struct EcranDossier: View {
                 VStack(alignment: .leading, spacing: 0) {
                     Libelle("dernières décisions").padding(.bottom, 8)
                     ListeRepliable(elements: decisions) { element in
-                        Button { modele.ecran = .compteRendu(element.reunion) } label: {
+                        Button { modele.ouvrir(element.reunion, moment: element.decision.sources.first) } label: {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(element.decision.texte).multilineTextAlignment(.leading)
                                 Text(element.reunion.meta.titre + (element.decision.sources.first.map { " · \(horodatage($0))" } ?? ""))

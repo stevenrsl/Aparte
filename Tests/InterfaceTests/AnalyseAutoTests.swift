@@ -62,3 +62,29 @@ private struct FausseAnalyste: Analyste {
     #expect(modele.echecsAnalyseAuto[reunion.id] == nil)
     #expect(modele.erreur == nil)
 }
+
+@MainActor
+@Test func navigationEtRefusAnalysePendantLaReunion() throws {
+    let racine = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: racine, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: racine) }
+    let reunion = try Bibliotheque(racine: racine).creerReunion(titre: "Fictive", type: .visio, dossier: nil)
+    try reunion.enregistrer(segments: [Segment(debut: 0, fin: 1, piste: .micro, texte: "Bonjour")])
+    let modele = ModeleApp()
+    modele.session = SessionReunion(reunion: reunion)
+    modele.ecran = .dossier("Projet")
+    modele.ouvrir(reunion)
+    #expect(modele.ecran == .enReunion)
+    #expect(modele.dossierCourant == "Projet")
+    modele.analyser(reunion, avec: FausseAnalyste(echoue: false))
+    #expect(modele.analyses[reunion.id] == nil)
+    #expect(modele.compteRendu(de: reunion) == nil)
+    modele.revenir()
+    #expect(modele.ecran == .dossier("Projet"))
+    modele.session = nil
+    modele.ouvrir(reunion, moment: 12)
+    #expect(modele.ecran == .compteRendu(reunion, moment: 12))
+    #expect(modele.libelleRetour == "Projet")
+    modele.revenir()
+    #expect(modele.ecran == .dossier("Projet"))
+}

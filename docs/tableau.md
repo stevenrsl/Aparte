@@ -22,3 +22,5 @@ dans le [plan des agents](plan-agents.md).
 
 | Découpage des vues V0.5 par écran, sans changement de comportement | Luna | `v0-5` | compilé et testé, relecture attendue | `Sources/Interface/` |
 | Contrat de navigation vers un moment du compte rendu | Panko | `v05-navigation` | en cours | `Sources/Interface/Modele.swift`, `Sources/Interface/Vues.swift`, `Sources/Interface/EcranCompteRendu.swift`, `Tests/InterfaceTests/` |
+
+| Navigation V0.5 : parcours et barre latérale | Panko | `v05-navigation` | en relecture | `Sources/Interface/Modele.swift`, `Vues.swift`, `EcransAccueil.swift`, `EcransDossier.swift`, `EcranNouvelle.swift`, `Sources/AparteApp/main.swift`, tests |

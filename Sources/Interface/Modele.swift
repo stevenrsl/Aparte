@@ -59,6 +59,51 @@ func phraseEtat(actions: [ActionOuverte], derniere: Reunion?, enCours: String?) 
 @Observable
 public final class ModeleApp {
     public var ecran: Ecran = .accueil
+    public private(set) var precedent: Ecran = .accueil
+
+    public var origineNavigation: Ecran {
+        switch ecran {
+        case .compteRendu, .nouvelle, .enReunion: return precedent
+        default: return ecran
+        }
+    }
+
+    public var dossierCourant: String? {
+        if case let .dossier(nom) = origineNavigation { return nom }
+        return nil
+    }
+
+    public var libelleRetour: String {
+        switch precedent {
+        case .dossier(let nom): return nom
+        case .toutes: return "toutes les réunions"
+        case .reglages: return "réglages"
+        default: return "accueil"
+        }
+    }
+
+    public func revenir() { ecran = precedent }
+
+    public func ouvrirReunionEnCours() {
+        guard session != nil else { return }
+        precedent = origineNavigation
+        ecran = .enReunion
+    }
+
+    public func preparerReunion() {
+        precedent = origineNavigation
+        ecran = .nouvelle
+    }
+
+    public func ouvrir(_ reunion: Reunion, moment: Double? = nil) {
+        if session?.reunion.id == reunion.id {
+            precedent = origineNavigation
+            ecran = .enReunion
+        } else {
+            precedent = origineNavigation
+            ecran = .compteRendu(reunion, moment: moment)
+        }
+    }
     public var racine: URL?
     public var reunions: [Reunion] = []
     public var dossiers: [String] = []
@@ -217,6 +262,7 @@ public final class ModeleApp {
 
     public func demarrer(titre: String, type: TypeReunion, dossier: String?, entree: EntreeAudio?) async {
         guard let bibliotheque, session == nil else { return }
+        precedent = origineNavigation
         do {
             guard await MicrophoneSource.requestAccess() else { throw ErreurCapture.microRefuse }
             let reunion = try bibliotheque.creerReunion(titre: titre, type: type, dossier: dossier)
@@ -307,7 +353,7 @@ public final class ModeleApp {
     /// Analyse une réunion. `signaler` : une analyse lancée sans clic n'interrompt pas pour dire
     /// qu'Apple Intelligence n'est pas disponible, le bouton reste là.
     public func analyser(_ reunion: Reunion, avec analyste: any Analyste, signaler: Bool = true) {
-        guard analyses[reunion.id] == nil, relectures[reunion.id] == nil else { return }
+        guard session?.reunion.id != reunion.id, analyses[reunion.id] == nil, relectures[reunion.id] == nil else { return }
         // Le modèle lit les noms donnés aux voix. Les temps et les mots ne changent pas.
         var segments = reunion.segments()
         guard !segments.isEmpty else { return }
@@ -338,7 +384,7 @@ public final class ModeleApp {
 
     /// Envoie cette réunion à Mistral. Seul un clic de Steven, confirmé, arrive ici (règle 2).
     public func analyserAvecMistral(_ reunion: Reunion) {
-        guard let cle = Trousseau.mistral.lire() else { return }
+        guard session?.reunion.id != reunion.id, let cle = Trousseau.mistral.lire() else { return }
         analyser(reunion, avec: AnalysteMistral(cle: cle))
     }
 

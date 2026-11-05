@@ -14,6 +14,7 @@ struct EcranNouvelle: View {
     @State private var type = TypeReunion.visio
     @State private var dossier = ""
     @State private var nouveauDossier = ""
+    private let choixNouveau = "\u{0}nouveau"
     @State private var entree: EntreeAudio?
     @State private var entrees: [EntreeAudio] = []
     @State private var niveaux: [Float] = Array(repeating: 0, count: 28)
@@ -43,13 +44,16 @@ struct EcranNouvelle: View {
                         Picker("Dossier", selection: $dossier) {
                             Text("Aucun").tag("")
                             ForEach(modele.dossiers, id: \.self) { Text($0).tag($0) }
+                            Text("Nouveau dossier…").tag(choixNouveau)
                         }
                         .labelsHidden()
-                        TextField("Ou un nouveau dossier", text: $nouveauDossier)
-                            .textFieldStyle(.plain)
-                            .padding(8)
-                            .background(Color.champ)
-                            .overlay { Rectangle().strokeBorder(Color.filet, lineWidth: 1) }
+                        if dossier == choixNouveau {
+                            TextField("Nom du dossier", text: $nouveauDossier)
+                                .textFieldStyle(.plain)
+                                .padding(8)
+                                .background(Color.champ)
+                                .overlay { Rectangle().strokeBorder(Color.filet, lineWidth: 1) }
+                        }
                     }
                     VStack(alignment: .leading, spacing: 8) {
                         Libelle("type")
@@ -71,6 +75,7 @@ struct EcranNouvelle: View {
                         .labelsHidden()
                     }
                 }
+                Button("Annuler") { modele.revenir() }
                 Spacer(minLength: 0)
                 HStack(alignment: .top, spacing: 14) {
                     Rectangle().fill(Color.terracotta).frame(width: 8, height: 8).padding(.top, 6)
@@ -122,6 +127,7 @@ struct EcranNouvelle: View {
             .padding(.vertical, 26)
         }
         .onAppear {
+            dossier = modele.dossierCourant ?? ""
             entrees = EntreeAudio.liste()
             lancerTest()
         }
@@ -151,9 +157,13 @@ struct EcranNouvelle: View {
         test?.arreter()
         test = nil
         Task {
-            var choisi: String? = dossier.isEmpty ? nil : dossier
-            let nom = nouveauDossier.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !nom.isEmpty { choisi = try? modele.bibliotheque?.creerDossier(nom) }
+            var choisi: String? = dossier.isEmpty || dossier == choixNouveau ? nil : dossier
+            if dossier == choixNouveau {
+                let nom = nouveauDossier.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !nom.isEmpty else { modele.erreur = "Donne un nom au dossier."; demarrage = false; return }
+                do { choisi = try modele.bibliotheque?.creerDossier(nom) }
+                catch { modele.erreur = error.localizedDescription; demarrage = false; return }
+            }
             await modele.demarrer(titre: titre, type: type, dossier: choisi, entree: entree)
             demarrage = false
         }
