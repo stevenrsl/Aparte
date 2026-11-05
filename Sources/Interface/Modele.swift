@@ -37,6 +37,9 @@ public final class ModeleApp {
     public private(set) var relectures: [String: Double] = [:]
     /// Les réunions en cours d'analyse, avec leur avancée.
     public private(set) var analyses: [String: Double] = [:]
+    /// Une analyse lancée sans clic qui n'a pas abouti, avec sa raison lisible. Elle s'efface au
+    /// prochain essai, clic compris.
+    public private(set) var echecsAnalyseAuto: [String: String] = [:]
     /// Une clé Mistral est dans le trousseau. Elle-même n'est lue qu'au moment d'envoyer.
     public private(set) var cleMistralPresente = Trousseau.mistral.presente()
     @ObservationIgnored private var compteRendus: [String: CompteRendu] = [:]
@@ -257,6 +260,7 @@ public final class ModeleApp {
         let empreinte = CompteRendu.empreinte(de: segments)
         for i in segments.indices { segments[i].voix = segments[i].voix.map { reunion.nom(de: $0) } }
         analyses[reunion.id] = 0
+        echecsAnalyseAuto[reunion.id] = nil
         let notes = reunion.notes()
         let type = reunion.meta.type
         Task {
@@ -267,7 +271,9 @@ public final class ModeleApp {
                 resultat.empreinte = empreinte
                 try enregistrer(resultat, pour: reunion)
             } catch {
-                if signaler { erreur = error.localizedDescription }
+                // Lancée sans clic, une erreur n'interrompt pas (le bouton reste là) : mais elle ne doit
+                // pas non plus rester muette, sans quoi l'écran dit « pas encore d'analyse » pour toujours.
+                if signaler { erreur = error.localizedDescription } else { echecsAnalyseAuto[reunion.id] = error.localizedDescription }
             }
             analyses[reunion.id] = nil
             actualiser(reunion)
