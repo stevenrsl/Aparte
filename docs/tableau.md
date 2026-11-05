@@ -10,5 +10,5 @@ dans le [plan des agents](plan-agents.md).
 | Présence de la clé sans lecture, tests d'interface relancés, petits nettoyages | Dev | `trousseau-presence` | fusionné dans `build-integration` | `Sources/Analyse/Mistral.swift`, `Sources/Interface/Modele.swift`, `Sources/Stockage/Stockage.swift`, `Tests/InterfaceTests/`, `Tests/StockageTests/` |
 | Élisions et tirets des titres de sujets | Luna | `titres-finitions` | fusionné dans `build-integration` | `Sources/Analyse/Analyse.swift`, `Tests/AnalyseTests/TitresSujetsTests.swift` |
 | Essai complet de l'app sur audio de synthèse | Biscuit | aucune | fait, à rejouer sur le build final | aucun |
-| Contrôle des écrans | Miso | `controle-ecrans` | en cours | `Sources/Interface/Vues.swift`, `Sources/DA/DA.swift`, `Tests/InterfaceTests/RendusEcrans.swift` |
-| Défauts de l'essai : analyse automatique, réunion récupérée, fausse alerte de coupure | Dev | `defauts-essai` | en cours | `Sources/Interface/Modele.swift`, `Sources/Capture/Capture.swift`, `Sources/Interface/Vues.swift` (`sansAnalyse` seulement), tests liés |
+| Contrôle des écrans | Pickle (Miso n'a rien exécuté) | `controle-ecrans` | fusionné dans `build-integration` | `Sources/Interface/Vues.swift`, `Sources/DA/DA.swift`, `Tests/InterfaceTests/RendusEcrans.swift` |
+| Défauts de l'essai : analyse automatique, réunion récupérée, fausse alerte de coupure | Dev | `defauts-essai` | fusionné dans `build-integration` | `Sources/Interface/Modele.swift`, `Sources/Capture/Capture.swift`, `Sources/Interface/Vues.swift` (`sansAnalyse` seulement), tests liés |

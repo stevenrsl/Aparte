@@ -38,7 +38,8 @@ func rendreLesEcrans() async throws {
     setenv("APARTE_RACINE", racine.path, 1)
     defer { unsetenv("APARTE_RACINE") }
     let modele = ModeleApp()
-    let compteRendu = RendusCompteRendu.exemple(segments)
+    var compteRendu = RendusCompteRendu.exemple(segments)
+    compteRendu.empreinte = CompteRendu.empreinte(de: segments)
     try modele.enregistrer(compteRendu, pour: meta)
     modele.recharger()
 
@@ -66,6 +67,26 @@ func rendreLesEcrans() async throws {
     try await rendre("compte-rendu-sombre", .compteRendu(relue), sombre: true)
     try await rendre("dossier", .dossier("Documentaire voile"))
     try await rendre("reglages", .reglages)
+
+    // Les états qu'on ne voit qu'en cas de pépin : analyse périmée, pas d'analyse, analyse automatique en échec.
+    var changes = segments
+    changes[1].texte = "Oui, on a trois versions du film."
+    try relue.enregistrer(segments: changes)
+    modele.recharger()
+    let perimee = try #require(modele.reunions.first { $0.id == relue.id })
+    try await rendre("compte-rendu-perimee", .compteRendu(perimee))
+    try await rendre("compte-rendu-perimee-sombre", .compteRendu(perimee), sombre: true)
+
+    let sansAnalyse = try bibliotheque.creerReunion(titre: "Point sans analyse", type: .visio, dossier: nil)
+    try sansAnalyse.enregistrer(segments: segments)
+    _ = try bibliotheque.creerReunion(titre: "Point muet", type: .presentiel, dossier: nil)
+    modele.recharger()
+    let aAnalyser = try #require(modele.reunions.first { $0.meta.titre == "Point sans analyse" })
+    try await rendre("sans-analyse", .compteRendu(aAnalyser))
+    modele.analyser(aAnalyser, avec: AnalysteEnPanne(), signaler: false)
+    while modele.analyses[aAnalyser.id] != nil { try await Task.sleep(for: .milliseconds(20)) }
+    try await rendre("sans-analyse-echec", .compteRendu(aAnalyser))
+    try await rendre("sans-phrase", .compteRendu(try #require(modele.reunions.first { $0.meta.titre == "Point muet" })))
     modele.ecran = .accueil
 }
 
@@ -78,5 +99,15 @@ enum RendusCompteRendu {
                            sujets: [Sujet(titre: "version longue", debut: 0, fin: 80), Sujet(titre: "photos de plateau", debut: 80, fin: 240)],
                            enBref: [PhraseSourcee(texte: "L'équipe garde la version longue pour le festival.", sources: [segments[2].debut]),
                                     PhraseSourcee(texte: "Marie envoie la musique à Paul avant vendredi, et les photos de plateau restent à attribuer.", sources: [segments[3].debut, segments[4].debut])])
+    }
+}
+
+/// Une analyse qui échoue sur commande, pour rendre la ligne d'échec sans vrai moteur.
+private struct AnalysteEnPanne: Analyste {
+    let nom = "En panne"
+
+    func analyser(segments: [Segment], notes: [LigneDeNote], type: TypeReunion,
+                  progression: @escaping @Sendable (Double) -> Void) async throws -> CompteRendu {
+        throw ErreurAnalyse.rienAAnalyser
     }
 }

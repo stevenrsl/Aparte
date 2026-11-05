@@ -808,9 +808,12 @@ struct EcranCompteRendu: View {
                 .foregroundStyle(Color.encreDouce)
             echecAnalyseAuto
             relecture
-            HStack(spacing: 10) {
-                boutonAnalyser("Analyser sur ce Mac", style: BoutonPrincipal())
-                boutonMistral
+            // Sans phrase, analyser ne fait rien : ces boutons ne seraient que des promesses.
+            if !segments.isEmpty {
+                HStack(spacing: 10) {
+                    boutonAnalyser("Analyser sur ce Mac", style: BoutonPrincipal())
+                    boutonMistral
+                }
             }
             incidentsAudio
         }
