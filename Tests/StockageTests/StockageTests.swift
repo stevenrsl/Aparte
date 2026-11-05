@@ -9,6 +9,17 @@ private func racineTemporaire() throws -> URL {
     return url
 }
 
+/// `copyItem` garde le verrou d'immuabilité sur sa copie : sans ce déverrouillage récursif avant
+/// `removeItem`, une archive copiée depuis un fichier verrouillé resterait sur le disque.
+private func deverrouille(_ racine: URL) {
+    guard let enumerateur = FileManager.default.enumerator(at: racine, includingPropertiesForKeys: nil) else { return }
+    for element in enumerateur {
+        guard let url = element as? URL else { continue }
+        try? FileManager.default.setAttributes([.immutable: false], ofItemAtPath: url.path)
+    }
+    try? FileManager.default.setAttributes([.immutable: false], ofItemAtPath: racine.path)
+}
+
 @Test func uneReunionSeRelitDepuisSonDossier() throws {
     let racine = try racineTemporaire()
     defer { try? FileManager.default.removeItem(at: racine) }
@@ -81,7 +92,7 @@ private func racineTemporaire() throws -> URL {
 /// et rien ne peut faire disparaître analyse.json de la racine.
 @Test func unMarkdownImpossibleARemplacerNeFaitPasDisparaitreLeJSON() throws {
     let racine = try racineTemporaire()
-    defer { try? FileManager.default.removeItem(at: racine) }
+    defer { deverrouille(racine); try? FileManager.default.removeItem(at: racine) }
     let reunion = try Bibliotheque(racine: racine).creerReunion(titre: "Archives", type: .presentiel, dossier: nil)
     try reunion.enregistrer(analyseJSON: Data("ancien".utf8), markdown: "ancien")
     let gestionnaire = FileManager.default
@@ -114,9 +125,9 @@ private func racineTemporaire() throws -> URL {
 }
 
 /// Un nom d'archive n'est libre que si .json ET .md le sont. Sinon un `.md` isolé sous ce nom
-/// bloquerait le déplacement du Markdown juste après celui du JSON, qui lui aurait déjà réussi :
-/// `analyse.json` disparaîtrait de la racine sans qu'aucun nouveau compte rendu ne soit écrit. On
-/// prédit le nom de la seconde courante comme `enregistrer`, pour ne pas dépendre de l'horloge au-delà.
+/// bloquerait la copie du Markdown d'archive juste après celle du JSON, qui aurait déjà réussi :
+/// l'enregistrement échouerait sans écrire le nouveau compte rendu, alors que l'ancien reste intact.
+/// On prédit le nom de la seconde courante comme `enregistrer`, pour ne pas dépendre de l'horloge au-delà.
 @Test func unMarkdownDArchiveIsoleNEmpecheNiNeDupliqueLaProchaineArchive() throws {
     let racine = try racineTemporaire()
     defer { try? FileManager.default.removeItem(at: racine) }

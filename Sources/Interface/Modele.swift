@@ -230,10 +230,18 @@ public final class ModeleApp {
         let segments = reunion.segments()
         guard brute.etat(selon: segments) == .perimee else { return }
         let revalidee = brute.revalide(dans: segments)
+        let markdown = revalidee.markdown(incidents: reunion.meta.incidentsAudio ?? [])
         do {
-            try reunion.enregistrer(analyseJSON: donnees, markdown: revalidee.markdown(incidents: reunion.meta.incidentsAudio ?? []))
+            try reunion.enregistrer(analyseJSON: donnees, markdown: markdown)
         } catch {
-            erreur = "Le compte rendu de « \(reunion.meta.titre) » n'a pas pu être marqué périmé : \(error.localizedDescription)"
+            // `enregistrer` écrit le Markdown avant le JSON : si lui seul a échoué, le compte rendu
+            // affiché dit déjà « périmée », et ce message ne doit pas prétendre le contraire.
+            let lisible = reunion.url.appendingPathComponent("analyse.md")
+            if (try? String(contentsOf: lisible, encoding: .utf8)) == markdown {
+                erreur = "Le compte rendu de « \(reunion.meta.titre) » est marqué périmé, mais n'a pas pu l'être dans son fichier interne : \(error.localizedDescription)"
+            } else {
+                erreur = "Le compte rendu de « \(reunion.meta.titre) » n'a pas pu être marqué périmé : \(error.localizedDescription)"
+            }
         }
     }
 
