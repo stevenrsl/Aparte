@@ -49,7 +49,7 @@ struct EcranCompteRendu: View {
     }
 
     var body: some View {
-        Colonnes {
+        Colonnes(transcriptionClaire: true) {
             HStack {
                 Button("← \(modele.libelleRetour)") { modele.revenir() }.buttonStyle(.plain)
                 Libelle("compte rendu · \(reunion.meta.date.formatted(.dateTime.locale(Locale(identifier: "fr_FR")).day().month(.abbreviated))) · \(Int(reunion.meta.duree / 60)) min"
@@ -108,7 +108,7 @@ struct EcranCompteRendu: View {
             }
             }
         } enteteEncre: {
-            Libelle(selection == nil ? "transcription" : "passage · \(horodatage(selection?.sources.first ?? 0))", surColonne: true)
+            Libelle(selection == nil ? "transcription" : "passage · \(horodatage(selection?.sources.first ?? 0))")
             if selection != nil { Button("Voir toute la transcription") { selection = nil; lecteur.arreter() } }
             Spacer(minLength: 0)
             HStack(alignment: .bottom) {
@@ -460,7 +460,7 @@ private struct BoutonEcouteDiscret: ButtonStyle {
             .font(Typo.texteDemiGras)
             .padding(.horizontal, 16)
             .padding(.vertical, 9)
-            .foregroundStyle(Color.colonneTexte)
-            .overlay { Rectangle().strokeBorder(Color.colonneDoux, lineWidth: 1) }
+            .foregroundStyle(Color.encre)
+            .overlay { Rectangle().strokeBorder(Color.encreDouce, lineWidth: 1) }
     }
 }

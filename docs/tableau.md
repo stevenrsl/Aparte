@@ -34,3 +34,5 @@ dans le [plan des agents](plan-agents.md).
 | Rendus des états du compte rendu V0.5 | Panko | `v05-compte-rendu-panko` | en relecture, relecture et alertes à rendre | `Tests/InterfaceTests/RendusEcrans.swift`, `docs/tableau.md` |
 
 | Hiérarchie visuelle du compte rendu | Panko | `v05-compte-rendu-panko` | en relecture | `Sources/Interface/`, `Tests/InterfaceTests/RendusEcrans.swift`, `docs/tableau.md` |
+
+| Apaiser la transcription du compte rendu | Panko | `v05-compte-rendu-panko` | en relecture | `Sources/DA/DA.swift`, `Sources/Interface/`, `docs/tableau.md` |

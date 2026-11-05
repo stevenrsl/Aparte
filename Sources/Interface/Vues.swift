@@ -198,6 +198,7 @@ struct EntreeLaterale: View {
 
 /// Les deux colonnes, leurs en-têtes de 172 pt fermés sur le même filet.
 struct Colonnes<Entete: View, Contenu: View, EnteteEncre: View, ContenuEncre: View>: View {
+    var transcriptionClaire = false
     @ViewBuilder let entete: Entete
     @ViewBuilder let contenu: Contenu
     @ViewBuilder let enteteEncre: EnteteEncre
@@ -221,12 +222,12 @@ struct Colonnes<Entete: View, Contenu: View, EnteteEncre: View, ContenuEncre: Vi
                     .padding(.vertical, 20)
                     .frame(maxWidth: .infinity, alignment: .topLeading)
                     .frame(height: 172, alignment: .topLeading)
-                    .overlay(alignment: .bottom) { Color.colonneFilet.frame(height: 1) }
+                    .overlay(alignment: .bottom) { (transcriptionClaire ? Color.filet : Color.colonneFilet).frame(height: 1) }
                 contenuEncre.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
             .frame(width: 420)
-            .background(Color.encreColonne)
-            .foregroundStyle(Color.colonneTexte)
+            .background(transcriptionClaire ? Color.transcriptionFond : Color.encreColonne)
+            .foregroundStyle(transcriptionClaire ? Color.encre : Color.colonneTexte)
         }
     }
 }

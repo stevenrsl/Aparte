@@ -156,7 +156,7 @@ struct Bulles: View {
     @ViewBuilder private func enTete(_ segment: Segment) -> some View {
         let texte = Text(horodatage(segment.debut) + etiquette(segment))
             .font(Typo.horodatage)
-            .foregroundStyle(Color.colonneSignal)
+            .foregroundStyle(discret ? Color.encreDouce : Color.colonneSignal)
         if let voix = segment.voix, let reunion, let modele {
             Button { voixANommer = segment.id } label: { texte }
                 .buttonStyle(.plain)
@@ -184,8 +184,8 @@ struct Bulles: View {
             Text(segment.texte)
                 .textSelection(.enabled)
                 .padding(10)
-                .background(discret ? (source ? Color.argile : (moi ? Color(red: 0x60 / 255, green: 0x4D / 255, blue: 0x43 / 255) : Color.bulleEux)) : (moi ? Color.argile : Color.bulleEux))
-                .foregroundStyle(discret ? (source ? Color.encreColonne : Color.colonneTexte) : (moi ? Color.encreColonne : Color.colonneTexte))
+                .background(discret ? (source ? Color.argile : (moi ? Color.transcriptionBulleMoi : Color.transcriptionBulleEux)) : (moi ? Color.argile : Color.bulleEux))
+                .foregroundStyle(discret ? (source ? Color.encreColonne : Color.encre) : (moi ? Color.encreColonne : Color.colonneTexte))
                 .overlay(alignment: .leading) {
                     if source { Color.argile.frame(width: 3) }
                 }

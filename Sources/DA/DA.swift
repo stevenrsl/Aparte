@@ -19,6 +19,10 @@ private extension NSColor {
 private func fixe(_ hex: UInt32) -> Color { Color(nsColor: NSColor(hex: hex)) }
 
 public extension Color {
+    // Écart local au brief : transcription plus claire dans le compte rendu, après squint test.
+    static let transcriptionFond = dynamique("transcriptionFond", clair: 0xEDE2D8, sombre: 0x302722)
+    static let transcriptionBulleMoi = dynamique("transcriptionBulleMoi", clair: 0xE2D2C5, sombre: 0x40342E)
+    static let transcriptionBulleEux = dynamique("transcriptionBulleEux", clair: 0xF5EEE6, sombre: 0x392F2A)
     static let creme = dynamique("creme", clair: 0xF5EEE6, sombre: 0x2A211D)
     static let surface = dynamique("surface", clair: 0xE9D8C9, sombre: 0x231B18)
     static let encre = dynamique("encre", clair: 0x40332D, sombre: 0xF5EEE6)
