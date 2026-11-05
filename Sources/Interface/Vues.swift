@@ -806,12 +806,21 @@ struct EcranCompteRendu: View {
         VStack(alignment: .leading, spacing: 14) {
             Text(segments.isEmpty ? "Aucune phrase n'a été transcrite." : "\(segments.count) phrases transcrites. Pas encore d'analyse.")
                 .foregroundStyle(Color.encreDouce)
+            echecAnalyseAuto
             relecture
             HStack(spacing: 10) {
                 boutonAnalyser("Analyser sur ce Mac", style: BoutonPrincipal())
                 boutonMistral
             }
             incidentsAudio
+        }
+    }
+
+    /// Une analyse lancée sans clic (après une relecture) qui a échoué : silencieuse pour ne pas
+    /// interrompre, mais pas invisible non plus.
+    @ViewBuilder private var echecAnalyseAuto: some View {
+        if let raison = modele.echecsAnalyseAuto[reunion.id] {
+            Libelle("l'analyse automatique n'a pas abouti : \(raison)")
         }
     }
 

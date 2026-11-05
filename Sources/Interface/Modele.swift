@@ -37,12 +37,18 @@ public final class ModeleApp {
     public private(set) var relectures: [String: Double] = [:]
     /// Les réunions en cours d'analyse, avec leur avancée.
     public private(set) var analyses: [String: Double] = [:]
+    /// Une analyse lancée sans clic qui n'a pas abouti, avec sa raison lisible. Elle s'efface au
+    /// prochain essai, clic compris.
+    public private(set) var echecsAnalyseAuto: [String: String] = [:]
     /// Une clé Mistral est dans le trousseau. Elle-même n'est lue qu'au moment d'envoyer.
     public private(set) var cleMistralPresente = Trousseau.mistral.presente()
     @ObservationIgnored private var compteRendus: [String: CompteRendu] = [:]
     @ObservationIgnored private var comptesRendusLus: [String: (signature: String, compteRendu: CompteRendu)] = [:]
     @ObservationIgnored private var faites: [String: Set<UUID>] = [:]
     @ObservationIgnored private var echecsSignales: Set<String> = []
+    /// Une réunion récupérée après un plantage, sans aucun segment, ne relance sa relecture automatique
+    /// qu'une fois : ni à chaque `recharger()`, ni si elle échoue ou ne trouve aucun mot.
+    @ObservationIgnored private var recuperationsRelues: Set<String> = []
     @ObservationIgnored private static let cleRacine = "racine"
 
     public init() {
@@ -74,6 +80,7 @@ public final class ModeleApp {
         dossiers = bibliotheque.dossiers()
         compteRendus = [:]
         var echecs: [String] = []
+        var recuperees: [Reunion] = []
         for reunion in reunions {
             // Un enregistrement coupé par un plantage se termine ici.
             if session?.reunion.id != reunion.id {
@@ -81,6 +88,7 @@ public final class ModeleApp {
                 where FileManager.default.fileExists(atPath: aac.path) {
                     do {
                         try terminerEnregistrement(aac)
+                        recuperees.append(reunion)
                     } catch where echecsSignales.insert(aac.path).inserted {
                         echecs.append("« \(reunion.meta.titre) » : \(error.localizedDescription)")
                     } catch {}
@@ -97,6 +105,21 @@ public final class ModeleApp {
             }
         }
         if !echecs.isEmpty { erreur = ([erreur].compactMap { $0 } + echecs).joined(separator: "\n") }
+        for reunion in recuperees { recupererApresPlantage(reunion) }
+    }
+
+    /// Un enregistrement récupéré après un plantage, sans aucun segment, laissait l'écran dire « 0 min »
+    /// et « aucune phrase transcrite » sans rien proposer. La durée vient de l'audio récupéré, et une
+    /// relecture se lance seule, ce qui enchaîne sur l'analyse locale. Tout reste sur ce Mac.
+    private func recupererApresPlantage(_ reunion: Reunion) {
+        guard recuperationsRelues.insert(reunion.id).inserted, reunion.segments().isEmpty else { return }
+        var maj = reunion
+        if reunion.meta.duree == 0, let duree = Recording.seconds(of: reunion.micro) ?? Recording.seconds(of: reunion.systeme) {
+            maj.meta.duree = duree
+            try? maj.enregistrerMeta()
+        }
+        // `relire` réécrit la fiche qu'on lui donne : il lui faut celle qui porte la durée.
+        relire(maj)
     }
 
     func compteRendu(de reunion: Reunion) -> CompteRendu? {
@@ -257,6 +280,7 @@ public final class ModeleApp {
         let empreinte = CompteRendu.empreinte(de: segments)
         for i in segments.indices { segments[i].voix = segments[i].voix.map { reunion.nom(de: $0) } }
         analyses[reunion.id] = 0
+        echecsAnalyseAuto[reunion.id] = nil
         let notes = reunion.notes()
         let type = reunion.meta.type
         Task {
@@ -267,7 +291,9 @@ public final class ModeleApp {
                 resultat.empreinte = empreinte
                 try enregistrer(resultat, pour: reunion)
             } catch {
-                if signaler { erreur = error.localizedDescription }
+                // Lancée sans clic, une erreur n'interrompt pas (le bouton reste là) : mais elle ne doit
+                // pas non plus rester muette, sans quoi l'écran dit « pas encore d'analyse » pour toujours.
+                if signaler { erreur = error.localizedDescription } else { echecsAnalyseAuto[reunion.id] = error.localizedDescription }
             }
             analyses[reunion.id] = nil
             actualiser(reunion)
@@ -513,8 +539,11 @@ public final class SessionReunion {
     }
 
     /// Le son d'une piste s'arrête ou revient. L'incident reste dans la réunion, pour que le compte
-    /// rendu dise qu'il manque un moment.
+    /// rendu dise qu'il manque un moment. Pour le son du Mac, un silence simple et une vraie coupure ne
+    /// se distinguent pas de façon fiable (une visio peut démarrer muette, ou rester silencieuse un
+    /// moment) : seule une vraie erreur de capture (`signalerAudio`) reste signalée sur cette piste.
     func noterCoupure(_ piste: String, coupee: Bool, a date: Date) {
+        guard piste != "son du Mac" else { return }
         let moment = debut.map { date.timeIntervalSince($0) } ?? 0
         if coupee {
             alertesAudio[piste] = "Attention : plus de son (\(piste)) depuis \(horodatage(moment)). Vérifie ton entrée audio."

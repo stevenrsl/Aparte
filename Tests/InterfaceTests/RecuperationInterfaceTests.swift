@@ -76,6 +76,32 @@ import Transcription
 }
 
 @MainActor
+@Test func unSilenceDuSonDuMacNEstPasSignaleCommeUneCoupure() throws {
+    let racine = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: racine, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: racine) }
+    let reunion = try Bibliotheque(racine: racine).creerReunion(titre: "R", type: .presentiel, dossier: nil)
+    let session = SessionReunion(reunion: reunion)
+
+    // Une visio qui démarre coupée au Mac n'est pas une vraie coupure : rien à l'écran.
+    session.noterCoupure("son du Mac", coupee: true, a: Date())
+    #expect(session.alerte == nil)
+    session.noterCoupure("son du Mac", coupee: false, a: Date())
+    #expect(session.alerte == nil)
+
+    // Le micro, lui, continue d'être surveillé normalement.
+    session.noterCoupure("micro", coupee: true, a: Date())
+    #expect(session.alerte?.contains("plus de son") == true)
+    session.noterCoupure("micro", coupee: false, a: Date())
+    #expect(session.alerte?.contains("revenu") == true)
+
+    let relue = try #require(Bibliotheque(racine: racine).reunions().first)
+    let incidents = relue.meta.incidentsAudio ?? []
+    #expect(incidents.allSatisfy { $0.piste != "son du Mac" })
+    #expect(incidents.contains { $0.piste == "micro" })
+}
+
+@MainActor
 @Test func gererUneReunionSuitLEcranAffiche() throws {
     let racine = FileManager.default.temporaryDirectory.resolvingSymlinksInPath().appendingPathComponent(UUID().uuidString)
     try FileManager.default.createDirectory(at: racine, withIntermediateDirectories: true)
