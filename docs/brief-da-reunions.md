@@ -21,7 +21,15 @@ Le tout dans la palette argile de Steven, avec du grain sur toute l'interface.
 
 ## La fenêtre
 
-Tous les écrans partagent la même charpente. Ne pas la casser d'un écran à l'autre.
+Deux charpentes, décidées par Steven le 5 novembre 2026 après comparaison avec Cairn : la colonne encre
+n'apparaît que lorsqu'elle montre quelque chose de vivant ou une source à vérifier.
+
+- **La charpente à deux colonnes** : Nouvelle réunion, En réunion, Compte rendu, Réglages. Mesures
+  ci-dessous.
+- **La charpente de lecture** : Accueil, Toutes les réunions, Dossier. Une seule colonne, plus dense :
+  voir plus bas.
+
+La barre de titre et la barre latérale sont les mêmes partout.
 
 | Zone | Mesure | Contenu |
 |---|---|---|
@@ -37,6 +45,14 @@ Tous les écrans partagent la même charpente. Ne pas la casser d'un écran à l
 - Séparations par **filets de 1 pt**, jamais par des ombres ou des cartes.
 - **Angles carrés partout.** Seuls les feux de la fenêtre sont ronds.
 - La bande de pixels en haut de la fenêtre a été **retirée** par Steven. Ne pas la remettre.
+
+### La charpente de lecture
+
+- Pas de colonne encre, pas de chrono au repos, pas de grand chiffre décoratif.
+- Un en-tête à la hauteur de son contenu, fermé par un filet : libellé `//`, titre d'écran, commandes à
+  droite, puis au besoin une phrase d'état.
+- Marges de 36 pt, contenu limité à 1 040 pt de large et aligné à gauche, sur le même bord que l'en-tête.
+- La phrase d'état ne dit que des faits comptés dans les fichiers : jamais d'estimation ni de conseil.
 
 ## Les couleurs
 
@@ -95,7 +111,8 @@ déclarer en couleurs d'asset avec une variante claire et une variante sombre.
 |---|---|---|---|
 | Titre d'écran | New York | 38 pt, interligne 1,05 | La fin du titre en italique `terracotta-texte` (« Point montage, *documentaire voile* ») |
 | Titre de section | New York italique | 22 pt | « *Mes notes* », « *Transcription* » |
-| Titre de réunion dans une liste | New York | 20 pt | |
+| Titre de réunion dans une liste | New York | 17 pt | |
+| Phrase d'état | New York italique | 16 pt | Charpente de lecture seulement |
 | Résumé du compte rendu | New York | 20 pt, interligne 1,5 | Précédé d'un trait terracotta de 3 pt |
 | Texte courant | Zalando Sans | 14 pt ; 16 pt pour les notes | Interligne 1,45 à 1,55 |
 | Libellé | JetBrains Mono | 11 pt, approche +0,02 em | En minuscules, préfixé par `//` : « // décisions » |
@@ -146,22 +163,25 @@ Il rend l'interface organique. Il doit se sentir, pas se voir.
 
 ## Les écrans
 
-1. **Accueil** : salutation, réunions récentes (date, titre, résumé en une ligne, dossier, nombre
-   de décisions et d'actions). Colonne encre : démarrage rapide (Visio ou Présentiel, ⌘N) et
-   « À faire suite aux réunions », chaque action renvoyant au moment où elle a été dite. C'est une
-   liste à cocher, pas un gestionnaire de tâches.
-2. **Nouvelle réunion** : un écran de la charpente, jamais une fenêtre par-dessus. Titre, dossier,
+1. **Accueil** (charpente de lecture) : salutation, phrase d'état, démarrage en un clic (Visio ou
+   Présentiel) et « Préparer une réunion » (⌘N). Puis « À faire », chaque action renvoyant à sa réunion :
+   d'abord celles dont une échéance a été dite, puis les autres, repliées au-delà de cinq. L'échéance reste
+   les mots prononcés : Aparté ne calcule ni date ni retard. C'est une liste à cocher, pas un gestionnaire
+   de tâches. Puis les cinq dernières réunions et un lien vers toutes.
+   **Toutes les réunions** : la même ligne de réunion, sans limite, y compris celles sans dossier.
+2. **Nouvelle réunion** : facultatif depuis l'accueil, pour régler le titre, le dossier ou le micro. Un
+   écran de la charpente, jamais une fenêtre par-dessus. Titre, dossier,
    type, micro (une liste bien visible, avec les micros externes), analyste. Colonne encre : test du
    micro et du son du Mac, chacun avec un verdict en mots sous ses niveaux (« Le micro t'entend
    bien. »), puis `// l'audio ne quitte jamais ce Mac` juste au-dessus du bouton « Démarrer
    l'enregistrement » (⌘↩). Cette dernière ligne n'est pas encore sur le canvas. Le rappel de
    prévenir les participants est un encadré, jamais une fenêtre de confirmation.
-3. **En réunion** : mes notes horodatées à gauche ; chrono, niveaux et transcription en bulles à
-   droite.
+3. **En réunion** : mes notes horodatées à gauche, avec une ligne discrète qui rappelle de prévenir les
+   participants ; chrono, niveaux et transcription en bulles à droite.
 4. **Compte rendu** : résumé, décisions, actions, question ouverte, chacune avec sa puce de source.
    Colonne encre : écoute du passage source, l'échange en bulles, ma note à ce moment.
-5. **Dossier** : le fil chronologique des réunions du dossier, les dernières décisions avec leur
-   source, le nombre d'actions ouvertes. **Un dossier n'est qu'un dossier sur le disque** : pas de
+5. **Dossier** (charpente de lecture) : phrase d'état, les actions ouvertes, les dernières décisions avec
+   leur source, puis le fil chronologique des réunions du dossier. **Un dossier n'est qu'un dossier sur le disque** : pas de
    statut, pas d'échéance, rien à gérer.
 6. **Réglages** : analyste par défaut, micro, emplacement des réunions. Colonne encre : ce qui
    quitte le Mac, en clair (l'audio jamais, la transcription seulement sur choix, aucune

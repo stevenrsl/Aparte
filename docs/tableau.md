@@ -15,3 +15,4 @@ dans le [plan des agents](plan-agents.md).
 | Corrections après l'essai sur une vraie réunion : son du Mac accéléré, écran vide, compte rendu à la Cairn, noms des voix | Claude Code | `corrections-essai-cairn` | terminé, base V0.5 | `Sources/Capture/`, `Sources/Analyse/`, `Sources/Interface/`, `Sources/Stockage/`, `Tests/`, `docs/fiche-reunions-2026-11.md`, `README.md` |
 
 | Assemblage V0.5 et découpage des vues | Luna | `v0-5` | en cours | `Sources/Interface/`, `Tests/InterfaceTests/RendusEcrans.swift`, `docs/` |
+| Accueil et dossier plus denses | Claude Code | `accueil-dense` | en relecture | `docs/brief-da-reunions.md`, `Sources/DA/DA.swift`, `Sources/Interface/Vues.swift`, `Sources/Interface/Modele.swift`, `Tests/InterfaceTests/` |

@@ -68,6 +68,8 @@ public enum Typo {
     public static let titreEcran = Font.system(size: 38, design: .serif)
     public static let titreSection = Font.system(size: 22, design: .serif)
     public static let titreListe = Font.system(size: 20, design: .serif)
+    public static let titreLigne = Font.system(size: 17, design: .serif)
+    public static let phraseEtat = Font.system(size: 16, design: .serif)
     public static let resume = Font.system(size: 20, design: .serif)
     public static let texte = Polices.font("ZalandoSans.ttf", taille: 14, poids: 400, repli: .system(size: 14))
     public static let texteDemiGras = Polices.font("ZalandoSans.ttf", taille: 14, poids: 600, repli: .system(size: 14, weight: .semibold))

@@ -10,6 +10,7 @@ import Voix
 
 public enum Ecran: Hashable {
     case accueil
+    case toutes
     case nouvelle
     case enReunion
     case compteRendu(Reunion)
@@ -22,6 +23,36 @@ public struct ActionOuverte: Identifiable {
     public let reunion: Reunion
     public let element: ElementSource
     public var id: UUID { element.id }
+}
+
+/// Sépare les actions dont une échéance a été dite des autres, sans changer leur ordre. L'échéance
+/// reste les mots prononcés : rien n'est converti en date, pour ne pas annoncer un retard inventé.
+func rangerActions(_ actions: [ActionOuverte]) -> (avecEcheance: [ActionOuverte], sansEcheance: [ActionOuverte]) {
+    func aUneEcheance(_ action: ActionOuverte) -> Bool {
+        !(action.element.echeance ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+    return (actions.filter(aUneEcheance), actions.filter { !aUneEcheance($0) })
+}
+
+/// La phrase d'état de l'accueil : seulement des faits comptés dans les fichiers.
+func phraseEtat(actions: [ActionOuverte], derniere: Reunion?, enCours: String?) -> String {
+    let sansEcheance = rangerActions(actions).sansEcheance.count
+    var phrases: [String] = []
+    if let enCours { phrases.append("Réunion en cours : \(enCours).") }
+    if actions.isEmpty {
+        phrases.append("Aucune action ouverte.")
+    } else if sansEcheance == 0 {
+        phrases.append("\(accord(actions.count, "action ouverte", "actions ouvertes")).")
+    } else {
+        phrases.append("\(accord(actions.count, "action ouverte", "actions ouvertes")), dont \(sansEcheance) sans échéance.")
+    }
+    if let derniere {
+        let date = derniere.meta.date.formatted(.dateTime.locale(Locale(identifier: "fr_FR")).weekday(.wide).day().month(.wide))
+        phrases.append("Dernière réunion : \(derniere.meta.titre), \(date).")
+    } else if enCours == nil {
+        phrases.append("Pas encore de réunion.")
+    }
+    return phrases.joined(separator: " ")
 }
 
 @MainActor
