@@ -536,8 +536,12 @@ public final class ModeleApp {
         }
     }
 
+    @ObservationIgnored private var finalisationEnCours = false
+
     public func terminer() async {
-        guard let session else { return }
+        guard let session, !finalisationEnCours else { return }
+        finalisationEnCours = true
+        defer { finalisationEnCours = false }
         do {
             _ = try await session.terminer()
             let termineeRenommee: Reunion
@@ -583,7 +587,9 @@ public final class SessionReunion {
     private var alerteSauvegarde: String?
     private enum Ecriture { case meta, transcription, notes }
     @ObservationIgnored private var enAttente: Set<Ecriture> = []
-    @ObservationIgnored private var arretee = false
+    public private(set) var captureArretee = false
+    public private(set) var finalisationEnCours = false
+    private var finalisationAchevee = false
     @ObservationIgnored private var activite: NSObjectProtocol?
     @ObservationIgnored private var duree = 0.0
     @ObservationIgnored private var pistes: [PisteAudio] = []
@@ -599,7 +605,7 @@ public final class SessionReunion {
         return alertes.isEmpty ? nil : alertes.joined(separator: " ")
     }
 
-    public var temps: Double { debut.map { Date().timeIntervalSince($0) } ?? 0 }
+    public var temps: Double { captureArretee ? duree : (debut.map { Date().timeIntervalSince($0) } ?? 0) }
 
     func demarrer(entree: EntreeAudio?, vocabulaire: [String] = []) async throws {
         let locale = try await Parole.preparer()
@@ -747,7 +753,7 @@ public final class SessionReunion {
 
     /// Ne déplace jamais les fichiers tant que la capture n'est pas arrêtée.
     func appliquerTitre(dans bibliotheque: Bibliotheque) throws -> Reunion {
-        guard arretee else { throw CocoaError(.fileWriteUnknown) }
+        guard finalisationAchevee && !finalisationEnCours else { throw CocoaError(.fileWriteUnknown) }
         reunion = try bibliotheque.renommer(reunion, en: titre)
         return reunion
     }
@@ -755,15 +761,19 @@ public final class SessionReunion {
     /// Arrête l'audio une seule fois, puis écrit tout. Si l'écriture échoue, l'erreur remonte et
     /// tout reste en mémoire : un nouvel appel réessaie sans rien réenregistrer.
     func terminer() async throws -> Reunion {
-        if !arretee {
-            arretee = true
-            etat = "Derniers mots en cours de transcription…"
+        guard !finalisationEnCours else { throw CocoaError(.fileWriteUnknown) }
+        finalisationEnCours = true
+        defer { finalisationEnCours = false }
+        if !captureArretee {
             duree = temps
+            captureArretee = true
+            etat = "Derniers mots en cours de transcription…"
             for piste in pistes { piste.arreter() }
             if let activite { ProcessInfo.processInfo.endActivity(activite) }
             activite = nil
             for transcripteur in transcripteurs { await transcripteur.terminer() }
             etat = ""
+            finalisationAchevee = true
         }
         reunion.meta.duree = duree
         try reunion.enregistrerMeta()

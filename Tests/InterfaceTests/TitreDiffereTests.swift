@@ -34,3 +34,35 @@ import Testing
     #expect(session.titre == "Après")
     #expect(session.reunion.url == reunion.url)
 }
+
+@Test @MainActor func titreBlancGardeLeTitreExistant() async throws {
+    let racine = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: racine) }
+    let bibliotheque = Bibliotheque(racine: racine)
+    let reunion = try bibliotheque.creerReunion(titre: "Avant", type: .presentiel, dossier: nil)
+    let session = SessionReunion(reunion: reunion)
+    session.titre = " \n "
+    _ = try await session.terminer()
+    let resultat = try session.appliquerTitre(dans: bibliotheque)
+    #expect(resultat.url == reunion.url)
+    #expect(resultat.meta.titre == "Avant")
+    #expect(session.captureArretee)
+}
+
+@Test @MainActor func renommagePeutEtreRetenteApresEchec() async throws {
+    let racine = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: racine) }
+    let bibliotheque = Bibliotheque(racine: racine)
+    let reunion = try bibliotheque.creerReunion(titre: "Avant", type: .presentiel, dossier: nil)
+    let session = SessionReunion(reunion: reunion)
+    session.titre = "Après"
+    _ = try await session.terminer()
+    let temporaire = racine.appendingPathComponent("temporaire")
+    try FileManager.default.moveItem(at: reunion.url, to: temporaire)
+    #expect(throws: (any Error).self) { try session.appliquerTitre(dans: bibliotheque) }
+    #expect(session.captureArretee)
+    try FileManager.default.moveItem(at: temporaire, to: reunion.url)
+    _ = try await session.terminer()
+    let resultat = try session.appliquerTitre(dans: bibliotheque)
+    #expect(resultat.meta.titre == "Après")
+}

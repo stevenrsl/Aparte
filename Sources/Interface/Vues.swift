@@ -118,9 +118,13 @@ struct BarreLaterale: View {
             VStack(alignment: .leading, spacing: 8) {
                 if let session = modele.session {
                     Text(session.titre).font(Typo.titreLigne).lineLimit(2)
-                    Text("Enregistrement en cours").font(Typo.horodatage)
-                    TimelineView(.periodic(from: .now, by: 1)) { _ in
+                    Text(session.captureArretee ? (session.finalisationEnCours ? "Finalisation en cours" : "Enregistrement arrêté") : "Enregistrement en cours").font(Typo.horodatage)
+                    if session.captureArretee {
                         Text(horodatage(session.temps)).font(Typo.horodatage).monospacedDigit()
+                    } else {
+                        TimelineView(.periodic(from: .now, by: 1)) { _ in
+                            Text(horodatage(session.temps)).font(Typo.horodatage).monospacedDigit()
+                        }
                     }
                     Button("Revenir à la réunion") { modele.ouvrirReunionEnCours() }
                 } else {

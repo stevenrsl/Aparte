@@ -55,7 +55,7 @@ struct EcranEnReunion: View {
         } enteteEncre: {
             HStack {
                 Rectangle().fill(Color.argile).frame(width: 9, height: 9)
-                Libelle(session.etat.isEmpty ? "enregistrement en cours" : session.etat, surColonne: true)
+                Libelle(session.etat.isEmpty ? (session.captureArretee ? "enregistrement arrêté" : "enregistrement en cours") : session.etat, surColonne: true)
                 Spacer()
                 Button(fin ? "Fin…" : "Terminer") {
                     fin = true
