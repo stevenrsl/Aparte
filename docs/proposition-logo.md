@@ -1,7 +1,6 @@
 # Logo et icône de l'app
 
-Branche `logo`, un commit (`5ebab72`). Elle part de `fournisseur-mistral`, parce que `main` ne
-contient que le premier commit : seul ce commit est à relire.
+Branche `logo`, posée sur `main` (V0.3) : un commit de code, un commit pour cette proposition.
 
 ## Ce qui est fait
 
