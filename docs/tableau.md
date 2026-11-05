@@ -30,3 +30,5 @@ dans le [plan des agents](plan-agents.md).
 | Titre sur place et renommage différé | Panko | `v05-compte-rendu-panko` | en relecture | `Sources/Interface/`, `Tests/InterfaceTests/` |
 
 | Finalisation et sélection des sources V0.5 | Panko | `v05-compte-rendu-panko` | en relecture, validation visuelle et silence à compléter | `Sources/Interface/`, `Tests/InterfaceTests/` |
+
+| Rendus des états du compte rendu V0.5 | Panko | `v05-compte-rendu-panko` | en relecture, relecture et alertes à rendre | `Tests/InterfaceTests/RendusEcrans.swift`, `docs/tableau.md` |

@@ -35,9 +35,7 @@ func rendreLesEcrans() async throws {
     meta.meta.duree = 600
     meta.meta.nomsDesVoix = ["Voix 1": "Claire"]
     try meta.enregistrerMeta()
-    setenv("APARTE_RACINE", racine.path, 1)
-    defer { unsetenv("APARTE_RACINE") }
-    let modele = ModeleApp()
+    let modele = ModeleApp(verifierCle: false, racineInitiale: racine)
     var compteRendu = RendusCompteRendu.exemple(segments)
     compteRendu.empreinte = CompteRendu.empreinte(de: segments)
     try modele.enregistrer(compteRendu, pour: meta)
@@ -69,13 +67,22 @@ func rendreLesEcrans() async throws {
         fenetre.orderOut(nil)
         try #require(image.representation(using: .png, properties: [:])).write(to: sortie.appendingPathComponent("\(nom).png"))
     }
-    let relue = try #require(modele.reunions.first { $0.id == reunion.id })
+    let relue = try #require(modele.reunions.first { $0.meta.titre == reunion.meta.titre })
     try await rendre("accueil", .accueil)
     try await rendre("accueil-sombre", .accueil, sombre: true)
     try await rendre("toutes", .toutes)
     try await rendre("nouvelle", .nouvelle)
     try await rendre("compte-rendu", .compteRendu(relue))
     try await rendre("compte-rendu-sombre", .compteRendu(relue), sombre: true)
+    try await rendre("passage-selectionne", .compteRendu(relue, moment: 80))
+    // Une nouvelle vue sans moment présente toute la transcription.
+    try await rendre("transcription-complete", .compteRendu(relue))
+    let action = try #require(compteRendu.actions.first)
+    modele.definirAction(ActionOuverte(reunion: relue, element: action), faite: true)
+    try await rendre("action-cochee", .compteRendu(relue))
+    modele.erreur = "L’état de l’action n’a pas pu être enregistré : erreur d’écriture simulée."
+    try await rendre("erreur-ecriture", .compteRendu(relue))
+    modele.erreur = nil
     try await rendre("dossier", .dossier("Documentaire voile"))
     try await rendre("reglages", .reglages)
 
@@ -94,6 +101,10 @@ func rendreLesEcrans() async throws {
     modele.recharger()
     let aAnalyser = try #require(modele.reunions.first { $0.meta.titre == "Point sans analyse" })
     try await rendre("sans-analyse", .compteRendu(aAnalyser))
+    modele.analyser(aAnalyser, avec: AnalysteSuspendu(), signaler: false)
+    try await rendre("redaction", .compteRendu(aAnalyser))
+    // L'analyse simulée est annulée par son propre délai, sans réseau ni moteur réel.
+    while modele.analyses[aAnalyser.id] != nil { try await Task.sleep(for: .milliseconds(20)) }
     modele.analyser(aAnalyser, avec: AnalysteEnPanne(), signaler: false)
     while modele.analyses[aAnalyser.id] != nil { try await Task.sleep(for: .milliseconds(20)) }
     try await rendre("sans-analyse-echec", .compteRendu(aAnalyser))
@@ -102,6 +113,11 @@ func rendreLesEcrans() async throws {
     modele.session = SessionReunion(reunion: enCours)
     try await rendre("en-reunion", .enReunion)
     try await rendre("accueil-en-reunion", .accueil)
+    // Arrêt sans capture, puis échec de renommage simulé pour exposer l'état conservé.
+    _ = try await modele.session?.terminer()
+    modele.erreur = "Le titre n’a pas pu être enregistré : erreur d’écriture simulée."
+    try await rendre("capture-arretee-erreur-renommage", .enReunion)
+    modele.erreur = nil
     modele.session = nil
     modele.ecran = .accueil
 }
@@ -124,6 +140,16 @@ private struct AnalysteEnPanne: Analyste {
 
     func analyser(segments: [Segment], notes: [LigneDeNote], type: TypeReunion,
                   progression: @escaping @Sendable (Double) -> Void) async throws -> CompteRendu {
+        throw ErreurAnalyse.rienAAnalyser
+    }
+}
+
+/// Garde l'état de rédaction visible le temps du rendu, sans accès externe.
+private struct AnalysteSuspendu: Analyste {
+    let nom = "Simulé"
+    func analyser(segments: [Segment], notes: [LigneDeNote], type: TypeReunion,
+                  progression: @escaping @Sendable (Double) -> Void) async throws -> CompteRendu {
+        try await Task.sleep(for: .seconds(3))
         throw ErreurAnalyse.rienAAnalyser
     }
 }
