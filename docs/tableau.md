@@ -19,3 +19,5 @@ dans le [plan des agents](plan-agents.md).
 | Logo et icône de l'app | Claude Code | `logo` | en relecture | `Support/`, `build.sh`, `Sources/DA/DA.swift`, `docs/brief-da-reunions.md`, `docs/proposition-logo.md` |
 
 | Contrôle préalable de la base V0.5 et des rendus | Panko | `v05-controle-base` | en cours | `Tests/InterfaceTests/RendusEcrans.swift` |
+
+| Découpage des vues V0.5 par écran, sans changement de comportement | Luna | `v0-5` | compilé et testé, relecture attendue | `Sources/Interface/` |
