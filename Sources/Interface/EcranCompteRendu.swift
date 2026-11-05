@@ -16,6 +16,7 @@ struct EcranCompteRendu: View {
     @State private var segments: [Segment] = []
     @State private var notes: [LigneDeNote] = []
     @State private var selection: ElementSource?
+    @State private var cibleDefilement: UUID?
     @State private var confirmerMistral = false
     @State private var lecteur = Lecteur()
     @State private var copie = false
@@ -45,6 +46,7 @@ struct EcranCompteRendu: View {
                 .onChange(of: titreActif) { _, actif in if !actif { enregistrerTitre() } }
             etatCompteRendu
         } contenu: {
+            ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
                     if let compteRendu {
@@ -64,6 +66,8 @@ struct EcranCompteRendu: View {
                                     }.contentShape(Rectangle())
                                 }
                                 .buttonStyle(.plain)
+                                .id(note.id)
+                                .background(selection?.sources == [note.temps] ? Color.surface : Color.clear)
                                 .accessibilityHint("Affiche le passage de la transcription")
                             }
                         }
@@ -77,6 +81,10 @@ struct EcranCompteRendu: View {
                 }
                 .padding(.horizontal, 36)
                 .padding(.vertical, 22)
+            }
+            .onChange(of: cibleDefilement) { _, cible in
+                if let cible { proxy.scrollTo(cible, anchor: .center) }
+            }
             }
         } enteteEncre: {
             Libelle(selection == nil ? "transcription" : "passage · \(horodatage(selection?.sources.first ?? 0))", surColonne: true)
@@ -145,6 +153,9 @@ struct EcranCompteRendu: View {
             ?? notes.first { abs($0.temps - moment) < 0.01 }.map { ElementSource(texte: $0.texte, sources: [$0.temps]) }
             ?? compteRendu?.sujets?.first { $0.contient(moment) }.map { ElementSource(texte: $0.titre, sources: [$0.debut, $0.fin]) }
             ?? ElementSource(texte: "", sources: [moment])
+        cibleDefilement = elements.first { $0.id == element.id }?.id
+            ?? notes.first { abs($0.temps - moment) < 0.01 }?.id
+            ?? compteRendu?.sujets?.first { $0.contient(moment) }?.id
         choisir(element)
     }
 
@@ -328,6 +339,7 @@ struct EcranCompteRendu: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .id(sujet.id)
                     .padding(.horizontal, -10)
                     .accessibilityLabel("\(sujet.titre), à \(tempsParle(sujet.debut))")
                     .accessibilityHint("Affiche le passage de la transcription")
@@ -402,6 +414,7 @@ struct EcranCompteRendu: View {
                     .accessibilityHint("Affiche le passage de la transcription")
                     .accessibilityAddTraits(choisi ? [.isSelected, .isButton] : .isButton)
                     }
+                    .id(element.id)
                 }
             }
         }

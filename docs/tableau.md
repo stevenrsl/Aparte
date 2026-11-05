@@ -28,3 +28,5 @@ dans le [plan des agents](plan-agents.md).
 | Compte rendu V0.5 : parcours et sources | Panko | `v05-compte-rendu-panko` | en cours | `Sources/Interface/`, tests |
 
 | Titre sur place et renommage différé | Panko | `v05-compte-rendu-panko` | en relecture | `Sources/Interface/`, `Tests/InterfaceTests/` |
+
+| Finalisation et sélection des sources V0.5 | Panko | `v05-compte-rendu-panko` | en cours | `Sources/Interface/`, `Tests/InterfaceTests/` |
