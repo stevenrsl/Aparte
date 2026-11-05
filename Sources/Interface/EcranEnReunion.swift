@@ -17,7 +17,8 @@ struct EcranEnReunion: View {
     var body: some View {
         Colonnes {
             Libelle(session.reunion.dossier?.lowercased() ?? "réunion en cours")
-            TitreEcran(debut: session.reunion.meta.titre, fin: "")
+            TextField("Titre de la réunion", text: Bindable(session).titre)
+                .textFieldStyle(.plain).font(Typo.titreEcran)
         } contenu: {
             VStack(alignment: .leading, spacing: 0) {
                 ScrollView {

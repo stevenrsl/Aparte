@@ -19,6 +19,14 @@ struct EcranCompteRendu: View {
     @State private var confirmerMistral = false
     @State private var lecteur = Lecteur()
     @State private var copie = false
+    @State private var titre = ""
+    @FocusState private var titreActif: Bool
+
+    private func enregistrerTitre() {
+        let propre = titre.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !propre.isEmpty, propre != reunion.meta.titre else { titre = reunion.meta.titre; return }
+        modele.renommer(reunion, en: propre)
+    }
 
     var body: some View {
         Colonnes {
@@ -30,7 +38,11 @@ struct EcranCompteRendu: View {
                 Spacer(minLength: 12)
                 GestionReunion(modele: modele, reunion: reunion) { lecteur.arreter() }
             }
-            TitreEcran(debut: reunion.meta.titre, fin: "")
+            TextField("Titre de la réunion", text: $titre)
+                .textFieldStyle(.plain).font(Typo.titreEcran)
+                .focused($titreActif)
+                .onSubmit { enregistrerTitre() }
+                .onChange(of: titreActif) { _, actif in if !actif { enregistrerTitre() } }
             etatCompteRendu
         } contenu: {
             ScrollView {
@@ -85,6 +97,7 @@ struct EcranCompteRendu: View {
             Bulles(segments: passage, type: reunion.meta.type, sources: Set(selection?.sources ?? []), reunion: reunion, modele: modele)
         }
         .onAppear {
+            titre = reunion.meta.titre
             compteRendu = lireCompteRendu()
             segments = reunion.segments()
             notes = reunion.notes()

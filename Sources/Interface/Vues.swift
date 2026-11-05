@@ -117,7 +117,7 @@ struct BarreLaterale: View {
             LogoApparte()
             VStack(alignment: .leading, spacing: 8) {
                 if let session = modele.session {
-                    Text(session.reunion.meta.titre).font(Typo.titreLigne).lineLimit(2)
+                    Text(session.titre).font(Typo.titreLigne).lineLimit(2)
                     Text("Enregistrement en cours").font(Typo.horodatage)
                     TimelineView(.periodic(from: .now, by: 1)) { _ in
                         Text(horodatage(session.temps)).font(Typo.horodatage).monospacedDigit()

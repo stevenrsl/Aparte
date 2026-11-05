@@ -492,6 +492,10 @@ public final class ModeleApp {
     }
 
     public func renommer(_ reunion: Reunion, en titre: String) {
+        guard !estEnCours(reunion) else {
+            erreur = "Le titre ne peut pas être modifié pendant la relecture ou la rédaction. Réessaie une fois terminée."
+            return
+        }
         ranger(reunion) { try $0.renommer(reunion, en: titre) }
     }
 
@@ -535,10 +539,21 @@ public final class ModeleApp {
     public func terminer() async {
         guard let session else { return }
         do {
-            let reunion = try await session.terminer()
+            _ = try await session.terminer()
+            let termineeRenommee: Reunion
+            if let bibliotheque {
+                do {
+                    termineeRenommee = try session.appliquerTitre(dans: bibliotheque)
+                } catch {
+                    self.erreur = "Le titre n’a pas pu être enregistré : \(error.localizedDescription) Vérifie le dossier, puis clique de nouveau sur Terminer."
+                    return
+                }
+            } else {
+                throw CocoaError(.fileNoSuchFile)
+            }
             self.session = nil
             recharger()
-            let terminee = reunions.first { $0.id == reunion.id } ?? reunion
+            let terminee = reunions.first { $0.id == termineeRenommee.id } ?? termineeRenommee
             ecran = .compteRendu(terminee)
             relire(terminee)
         } catch {
@@ -553,6 +568,7 @@ public final class ModeleApp {
 @Observable
 public final class SessionReunion {
     public private(set) var reunion: Reunion
+    public var titre: String
     public private(set) var segments: [Segment] = []
     /// Ce qui s'affiche : l'écho marqué, les phrases réunies. `segments` garde les phrases séparées.
     public private(set) var segmentsLisibles: [Segment] = []
@@ -575,6 +591,7 @@ public final class SessionReunion {
 
     init(reunion: Reunion) {
         self.reunion = reunion
+        self.titre = reunion.meta.titre
     }
 
     public var alerte: String? {
@@ -726,6 +743,13 @@ public final class SessionReunion {
         let nouvelle = LigneDeNote(temps: temps, texte: "")
         lignes.append(nouvelle)
         return nouvelle.id
+    }
+
+    /// Ne déplace jamais les fichiers tant que la capture n'est pas arrêtée.
+    func appliquerTitre(dans bibliotheque: Bibliotheque) throws -> Reunion {
+        guard arretee else { throw CocoaError(.fileWriteUnknown) }
+        reunion = try bibliotheque.renommer(reunion, en: titre)
+        return reunion
     }
 
     /// Arrête l'audio une seule fois, puis écrit tout. Si l'écriture échoue, l'erreur remonte et
