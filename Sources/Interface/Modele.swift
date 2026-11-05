@@ -538,8 +538,11 @@ public final class SessionReunion {
     }
 
     /// Le son d'une piste s'arrête ou revient. L'incident reste dans la réunion, pour que le compte
-    /// rendu dise qu'il manque un moment.
+    /// rendu dise qu'il manque un moment. Pour le son du Mac, un silence simple et une vraie coupure ne
+    /// se distinguent pas de façon fiable (une visio peut démarrer muette, ou rester silencieuse un
+    /// moment) : seule une vraie erreur de capture (`signalerAudio`) reste signalée sur cette piste.
     func noterCoupure(_ piste: String, coupee: Bool, a date: Date) {
+        guard piste != "son du Mac" else { return }
         let moment = debut.map { date.timeIntervalSince($0) } ?? 0
         if coupee {
             alertesAudio[piste] = "Attention : plus de son (\(piste)) depuis \(horodatage(moment)). Vérifie ton entrée audio."
