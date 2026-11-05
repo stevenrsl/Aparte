@@ -46,6 +46,9 @@ public final class ModeleApp {
     @ObservationIgnored private var comptesRendusLus: [String: (signature: String, compteRendu: CompteRendu)] = [:]
     @ObservationIgnored private var faites: [String: Set<UUID>] = [:]
     @ObservationIgnored private var echecsSignales: Set<String> = []
+    /// Une réunion récupérée après un plantage, sans aucun segment, ne relance sa relecture automatique
+    /// qu'une fois : ni à chaque `recharger()`, ni si elle échoue ou ne trouve aucun mot.
+    @ObservationIgnored private var recuperationsRelues: Set<String> = []
     @ObservationIgnored private static let cleRacine = "racine"
 
     public init() {
@@ -77,6 +80,7 @@ public final class ModeleApp {
         dossiers = bibliotheque.dossiers()
         compteRendus = [:]
         var echecs: [String] = []
+        var recuperees: [Reunion] = []
         for reunion in reunions {
             // Un enregistrement coupé par un plantage se termine ici.
             if session?.reunion.id != reunion.id {
@@ -84,6 +88,7 @@ public final class ModeleApp {
                 where FileManager.default.fileExists(atPath: aac.path) {
                     do {
                         try terminerEnregistrement(aac)
+                        recuperees.append(reunion)
                     } catch where echecsSignales.insert(aac.path).inserted {
                         echecs.append("« \(reunion.meta.titre) » : \(error.localizedDescription)")
                     } catch {}
@@ -100,6 +105,20 @@ public final class ModeleApp {
             }
         }
         if !echecs.isEmpty { erreur = ([erreur].compactMap { $0 } + echecs).joined(separator: "\n") }
+        for reunion in recuperees { recupererApresPlantage(reunion) }
+    }
+
+    /// Un enregistrement récupéré après un plantage, sans aucun segment, laissait l'écran dire « 0 min »
+    /// et « aucune phrase transcrite » sans rien proposer. La durée vient de l'audio récupéré, et une
+    /// relecture se lance seule, ce qui enchaîne sur l'analyse locale. Tout reste sur ce Mac.
+    private func recupererApresPlantage(_ reunion: Reunion) {
+        guard recuperationsRelues.insert(reunion.id).inserted, reunion.segments().isEmpty else { return }
+        if reunion.meta.duree == 0, let duree = Recording.seconds(of: reunion.micro) ?? Recording.seconds(of: reunion.systeme) {
+            var maj = reunion
+            maj.meta.duree = duree
+            try? maj.enregistrerMeta()
+        }
+        relire(reunion)
     }
 
     func compteRendu(de reunion: Reunion) -> CompteRendu? {
