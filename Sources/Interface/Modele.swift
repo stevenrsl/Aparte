@@ -250,12 +250,24 @@ public final class ModeleApp {
         }
     }
 
+    func actionEstFaite(_ action: ActionOuverte) -> Bool {
+        actionsFaites(action.reunion).contains(action.element.id)
+    }
+
     func cocher(_ action: ActionOuverte) {
+        definirAction(action, faite: true)
+    }
+
+    func definirAction(_ action: ActionOuverte, faite: Bool) {
         var cochees = actionsFaites(action.reunion)
-        cochees.insert(action.element.id)
-        faites[action.reunion.id] = cochees
-        try? JSONEncoder().encode(cochees).write(to: urlFaites(action.reunion), options: .atomic)
-        reunions = reunions
+        if faite { cochees.insert(action.element.id) } else { cochees.remove(action.element.id) }
+        do {
+            try JSONEncoder().encode(cochees).write(to: urlFaites(action.reunion), options: .atomic)
+            faites[action.reunion.id] = cochees
+            reunions = reunions
+        } catch {
+            erreur = "L’état de l’action n’a pas pu être enregistré : \(error.localizedDescription)"
+        }
     }
 
     // MARK: L'enregistrement

@@ -82,12 +82,12 @@ struct GestionReunion: View {
             }
             Button("Répartir entre dossiers…") { repartition = true }
                 .disabled((modele.resumeEnregistre(de: reunion)?.sujets ?? []).isEmpty)
-            Button("Relire l'enregistrement") { modele.relire(reunion) }
+            Button("Réécouter l’enregistrement pour séparer les voix") { modele.relire(reunion) }
                 .disabled(!FileManager.default.fileExists(atPath: reunion.micro.path))
             Divider()
             Button("Mettre à la corbeille…", role: .destructive) { corbeille = true }
         } label: {
-            Libelle("gérer")
+            Text("Gérer…")
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)

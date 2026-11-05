@@ -23,13 +23,15 @@ struct EcranCompteRendu: View {
     var body: some View {
         Colonnes {
             HStack {
+                Button("← \(modele.libelleRetour)") { modele.revenir() }.buttonStyle(.plain)
                 Libelle("compte rendu · \(reunion.meta.date.formatted(.dateTime.locale(Locale(identifier: "fr_FR")).day().month(.abbreviated))) · \(Int(reunion.meta.duree / 60)) min"
-                        + (compteRendu.map { " · \($0.fournisseur.lowercased())" } ?? ""))
+                       )
                 if let origine = reunion.meta.origine { Libelle("extrait de \(origine)") }
                 Spacer(minLength: 12)
                 GestionReunion(modele: modele, reunion: reunion) { lecteur.arreter() }
             }
-            TitreEcran(debut: reunion.meta.titre, fin: reunion.dossier.map { ", \($0.lowercased())" } ?? "")
+            TitreEcran(debut: reunion.meta.titre, fin: "")
+            etatCompteRendu
         } contenu: {
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
@@ -43,30 +45,30 @@ struct EcranCompteRendu: View {
                             Text("Mes notes").font(Typo.titreSection).italic()
                             ForEach(notes) { note in
                                 HStack(alignment: .firstTextBaseline, spacing: 12) {
-                                    PuceSource(temps: note.temps) { lecteur.lire(a: note.temps) }
+                                    PuceSource(temps: note.temps) { choisir(ElementSource(texte: note.texte, sources: [note.temps])) }
                                     Text(note.texte).font(Typo.note).textSelection(.enabled)
                                 }
                             }
                         }
                     }
+                    if let compteRendu { sectionSujets(compteRendu.sujets ?? []) }
                     if compteRendu == nil { voixANommer }
-                    if let compteRendu, compteRendu.passagesNonAnalyses > 0 || compteRendu.elementsEcartes > 0 {
-                        Libelle("\(accord(compteRendu.passagesNonAnalyses, "passage non analysé", "passages non analysés")) · \(accord(compteRendu.elementsEcartes, "élément écarté", "éléments écartés")) faute de source")
-                    }
+
                 }
                 .padding(.horizontal, 36)
                 .padding(.vertical, 22)
             }
         } enteteEncre: {
-            Libelle(selection == nil ? "écoute" : "écoute du passage source", surColonne: true)
+            Libelle(selection == nil ? "transcription" : "passage · \(horodatage(selection?.sources.first ?? 0))", surColonne: true)
+            if selection != nil { Button("Voir toute la transcription") { selection = nil; lecteur.arreter() } }
             Spacer(minLength: 0)
             HStack(alignment: .bottom) {
-                Text(horodatage(selection?.sources.first ?? 0)).font(Typo.chrono).monospacedDigit()
+                Text("Passage à \(horodatage(selection?.sources.first ?? 0))").font(Typo.horodatage)
                 Spacer()
                 if lecteur.enLecture {
                     Button("Arrêter") { lecteur.arreter() }.buttonStyle(BoutonSignal())
                 } else {
-                    Button("Écouter") { lecteur.lire(a: selection?.sources.first ?? 0) }
+                    Button("Écouter ce passage") { lecteur.lire(a: selection?.sources.first ?? 0) }
                         .buttonStyle(BoutonSignal())
                         .disabled(!lecteur.disponible)
                 }
@@ -79,7 +81,9 @@ struct EcranCompteRendu: View {
             segments = reunion.segments()
             notes = reunion.notes()
             lecteur.charger(reunion)
+            if let moment { selectionnerMoment(moment) }
         }
+        .onExitCommand { selection = nil; lecteur.arreter() }
         .onDisappear { lecteur.arreter() }
         .onChange(of: occupee) { _, encore in
             guard !encore else { return }
@@ -93,6 +97,28 @@ struct EcranCompteRendu: View {
             if finie { segments = reunion.segments() }
         }
         .onChange(of: reunion.meta.nomsDesVoix) { _, _ in compteRendu = lireCompteRendu() }
+    }
+
+    @ViewBuilder private var etatCompteRendu: some View {
+        if modele.relectures[reunion.id] != nil {
+            Libelle("relecture de l’enregistrement")
+            Text("Ton compte rendu arrive, tu peux fermer cet écran. Tes notes et la transcription sont déjà là.")
+        } else if modele.analyses[reunion.id] != nil {
+            Libelle("rédaction du compte rendu")
+            Text("Ton compte rendu arrive, tu peux fermer cet écran. Tes notes et la transcription sont déjà là.")
+        } else if let raison = modele.echecsAnalyseAuto[reunion.id] {
+            Text("Le compte rendu n’a pas pu être rédigé : \(raison)")
+        } else if compteRendu != nil {
+            Libelle("compte rendu prêt")
+        } else {
+            Libelle("réunion enregistrée")
+        }
+    }
+
+    private func selectionnerMoment(_ moment: Double) {
+        let elements = (compteRendu?.decisions ?? []) + (compteRendu?.actions ?? []) + (compteRendu?.questions ?? [])
+        selection = elements.first { $0.sources.contains { abs($0 - moment) < 0.01 } }
+            ?? ElementSource(texte: "", sources: [moment])
     }
 
     /// Le compte rendu avec les noms donnés depuis l'analyse.
@@ -110,31 +136,24 @@ struct EcranCompteRendu: View {
         VStack(alignment: .leading, spacing: 14) {
             Text(segments.isEmpty ? "Aucune phrase n'a été transcrite." : "\(segments.count) phrases transcrites. Pas encore d'analyse.")
                 .foregroundStyle(Color.encreDouce)
-            echecAnalyseAuto
-            relecture
             // Sans phrase, analyser ne fait rien : ces boutons ne seraient que des promesses.
-            if !segments.isEmpty {
+            if !segments.isEmpty && !occupee {
                 HStack(spacing: 10) {
-                    boutonAnalyser("Analyser sur ce Mac", style: BoutonPrincipal())
+                    boutonAnalyser("Rédiger le compte rendu sur ce Mac", style: BoutonPrincipal())
                     boutonMistral
                 }
             }
+            if !modele.cleMistralPresente && !segments.isEmpty && !occupee {
+                Button("Ajoute ta clé dans les réglages") { modele.ecran = .reglages }.buttonStyle(.link)
+            }
             incidentsAudio
-        }
-    }
-
-    /// Une analyse lancée sans clic (après une relecture) qui a échoué : silencieuse pour ne pas
-    /// interrompre, mais pas invisible non plus.
-    @ViewBuilder private var echecAnalyseAuto: some View {
-        if let raison = modele.echecsAnalyseAuto[reunion.id] {
-            Libelle("l'analyse automatique n'a pas abouti : \(raison)")
         }
     }
 
     private var occupee: Bool { modele.analyses[reunion.id] != nil || modele.relectures[reunion.id] != nil }
 
     private func boutonAnalyser<Style: ButtonStyle>(_ titre: String, style: Style) -> some View {
-        Button(modele.analyses[reunion.id].map { "Analyse en cours · \(Int($0 * 100)) %" } ?? titre) {
+        Button(titre) {
             modele.analyser(reunion, avec: AnalysteLocal())
         }
         .buttonStyle(style)
@@ -143,17 +162,11 @@ struct EcranCompteRendu: View {
 
     /// Mistral : un envoi hors du Mac, confirmé à chaque fois, pour cette réunion seule (règle 2).
     private var boutonMistral: some View {
-        Button("Analyser avec Mistral…") { confirmerMistral = true }
+        Button("Rédiger avec Mistral…") { confirmerMistral = true }
             .buttonStyle(BoutonSecondaire())
             .disabled(occupee || segments.isEmpty || !modele.cleMistralPresente)
             .help(modele.cleMistralPresente ? "" : "Ajoute ta clé Mistral dans les réglages.")
             .confirmationMistral(presente: $confirmerMistral) { modele.analyserAvecMistral(reunion) }
-    }
-
-    @ViewBuilder private var relecture: some View {
-        if let avancee = modele.relectures[reunion.id] {
-            Libelle("relecture de l'enregistrement · \(Int(avancee * 100)) %")
-        }
     }
 
     /// Les personnes à nommer, juste sous le résumé : les noms changent toute la lecture qui suit.
@@ -172,7 +185,7 @@ struct EcranCompteRendu: View {
                         HStack(spacing: 12) {
                             Text(uneVoix.voix).font(Typo.horodatage).foregroundStyle(Color.encreDouce).frame(width: 60, alignment: .leading)
                             ChampNomDeVoix(modele: modele, reunion: reunion, voix: uneVoix.voix)
-                            PuceSource(temps: uneVoix.extrait.debut) { lecteur.lire(a: uneVoix.extrait.debut) }
+                            PuceSource(temps: uneVoix.extrait.debut) { choisir(ElementSource(texte: "", sources: [uneVoix.extrait.debut])) }
                         }
                         Text("« \(uneVoix.extrait.texte) »")
                             .font(Typo.note)
@@ -195,7 +208,6 @@ struct EcranCompteRendu: View {
     }
 
     @ViewBuilder private func analyse(_ compteRendu: CompteRendu) -> some View {
-        relecture
         bandeauFraicheur(compteRendu)
         VStack(alignment: .leading, spacing: 8) {
             if let enBref = compteRendu.enBref, !enBref.isEmpty {
@@ -214,7 +226,10 @@ struct EcranCompteRendu: View {
                 }
             }
         }
-        HStack(spacing: 10) {
+        if compteRendu.passagesNonAnalyses > 0 || compteRendu.elementsEcartes > 0 {
+            Libelle("\(accord(compteRendu.passagesNonAnalyses, "passage non analysé", "passages non analysés")) · \(accord(compteRendu.elementsEcartes, "élément écarté", "éléments écartés")) faute de source")
+        }
+        if !occupee { HStack(spacing: 10) {
             Button(copie ? "Copié" : "Copier le compte rendu") {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(compteRendu.texteACopier(incidents: reunion.meta.incidentsAudio ?? []), forType: .string)
@@ -222,14 +237,14 @@ struct EcranCompteRendu: View {
             }
             .buttonStyle(BoutonPrincipal())
             menuRefaire
-        }
+        } }
         incidentsAudio
         section("points clés", compteRendu.pointsCles ?? [])
         voixANommer
         section("décisions", compteRendu.decisions)
         section("actions", compteRendu.actions)
         section("questions ouvertes", compteRendu.questions)
-        sectionSujets(compteRendu.sujets ?? [])
+
     }
 
     /// La transcription a pu changer depuis cette analyse (relecture) ou n'avoir jamais été comparée
@@ -249,7 +264,7 @@ struct EcranCompteRendu: View {
 
     /// Refaire l'analyse : sur ce Mac, ou chez Mistral après confirmation.
     private var menuRefaire: some View {
-        Menu(modele.analyses[reunion.id].map { "Analyse en cours · \(Int($0 * 100)) %" } ?? "Refaire l'analyse") {
+        Menu("Refaire le compte rendu") {
             Button("Sur ce Mac") { modele.analyser(reunion, avec: AnalysteLocal()) }
             Button("Avec Mistral…") { confirmerMistral = true }
                 .disabled(!modele.cleMistralPresente)
@@ -263,7 +278,7 @@ struct EcranCompteRendu: View {
         .confirmationMistral(presente: $confirmerMistral) { modele.analyserAvecMistral(reunion) }
     }
 
-    /// Choisir un sujet montre son passage et le fait écouter.
+    /// Choisir un sujet montre son passage sans lancer le son.
     @ViewBuilder private func sectionSujets(_ sujets: [Sujet]) -> some View {
         if !sujets.isEmpty {
             VStack(alignment: .leading, spacing: 4) {
@@ -311,6 +326,12 @@ struct EcranCompteRendu: View {
                 Libelle(titre).padding(.bottom, 6)
                 ForEach(elements) { element in
                     let choisi = selection?.id == element.id
+                    HStack(alignment: .top) {
+                    if titre == "actions" {
+                        let action = ActionOuverte(reunion: reunion, element: element)
+                        Toggle("Marquer comme faite : \(element.texte)", isOn: Binding(get: { modele.actionEstFaite(action) }, set: { modele.definirAction(action, faite: $0) }))
+                            .labelsHidden().toggleStyle(.checkbox)
+                    }
                     Button { choisir(element) } label: {
                         HStack(alignment: .top, spacing: 10) {
                             VStack(alignment: .leading, spacing: 4) {
@@ -350,6 +371,7 @@ struct EcranCompteRendu: View {
                         + element.sources.map { "à \(tempsParle($0))" }).joined(separator: ", "))
                     .accessibilityHint("Affiche le passage de la transcription")
                     .accessibilityAddTraits(choisi ? [.isSelected, .isButton] : .isButton)
+                    }
                 }
             }
         }
@@ -357,7 +379,7 @@ struct EcranCompteRendu: View {
 
     private func choisir(_ element: ElementSource) {
         selection = element
-        if let temps = element.sources.first { lecteur.lire(a: temps) }
+        lecteur.arreter()
     }
 }
 
