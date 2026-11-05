@@ -34,6 +34,13 @@ public struct Trousseau: Sendable {
         return cle
     }
 
+    /// Vrai si une clé est rangée, sans la lire : aucune fenêtre d'autorisation au démarrage.
+    public func presente() -> Bool {
+        var cherche = requete
+        cherche[kSecMatchLimit as String] = kSecMatchLimitOne
+        return SecItemCopyMatching(cherche as CFDictionary, nil) == errSecSuccess
+    }
+
     /// nil ou une clé vide retire ce qui y était.
     @discardableResult
     public func ecrire(_ cle: String?) -> Bool {

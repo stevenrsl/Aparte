@@ -172,8 +172,8 @@ public struct Reunion: Identifiable, Sendable, Hashable {
             let base = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
             // Plusieurs analyses dans la même seconde ne doivent pas se marcher dessus : on cherche un
             // nom libre pour la paire .json/.md, avec un suffixe -2, -3… Le nom n'est libre que si les
-            // deux extensions le sont : un .md isolé sous ce nom bloquerait sinon le déplacement du
-            // Markdown après celui du JSON, et le nouveau compte rendu ne serait jamais écrit.
+            // deux extensions le sont : `copyItem` refuse d'écraser un fichier déjà là, donc un .md
+            // isolé sous ce nom bloquerait sinon l'archivage, et le nouvel enregistrement échouerait.
             func libre(_ nom: String) -> Bool {
                 !gestionnaire.fileExists(atPath: archives.appendingPathComponent("\(nom).json").path)
                     && !gestionnaire.fileExists(atPath: archives.appendingPathComponent("\(nom).md").path)

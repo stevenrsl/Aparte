@@ -38,7 +38,7 @@ public final class ModeleApp {
     /// Les réunions en cours d'analyse, avec leur avancée.
     public private(set) var analyses: [String: Double] = [:]
     /// Une clé Mistral est dans le trousseau. Elle-même n'est lue qu'au moment d'envoyer.
-    public private(set) var cleMistralPresente = Trousseau.mistral.lire() != nil
+    public private(set) var cleMistralPresente = Trousseau.mistral.presente()
     @ObservationIgnored private var compteRendus: [String: CompteRendu] = [:]
     @ObservationIgnored private var comptesRendusLus: [String: (signature: String, compteRendu: CompteRendu)] = [:]
     @ObservationIgnored private var faites: [String: Set<UUID>] = [:]
@@ -230,10 +230,18 @@ public final class ModeleApp {
         let segments = reunion.segments()
         guard brute.etat(selon: segments) == .perimee else { return }
         let revalidee = brute.revalide(dans: segments)
+        let markdown = revalidee.markdown(incidents: reunion.meta.incidentsAudio ?? [])
         do {
-            try reunion.enregistrer(analyseJSON: donnees, markdown: revalidee.markdown(incidents: reunion.meta.incidentsAudio ?? []))
+            try reunion.enregistrer(analyseJSON: donnees, markdown: markdown)
         } catch {
-            erreur = "Le compte rendu de « \(reunion.meta.titre) » n'a pas pu être marqué périmé : \(error.localizedDescription)"
+            // `enregistrer` écrit le Markdown avant le JSON : si lui seul a échoué, le compte rendu
+            // affiché dit déjà « périmée », et ce message ne doit pas prétendre le contraire.
+            let lisible = reunion.url.appendingPathComponent("analyse.md")
+            if (try? String(contentsOf: lisible, encoding: .utf8)) == markdown {
+                erreur = "Le compte rendu de « \(reunion.meta.titre) » est marqué périmé, mais n'a pas pu l'être dans son fichier interne : \(error.localizedDescription)"
+            } else {
+                erreur = "Le compte rendu de « \(reunion.meta.titre) » n'a pas pu être marqué périmé : \(error.localizedDescription)"
+            }
         }
     }
 
@@ -274,7 +282,7 @@ public final class ModeleApp {
 
     public func enregistrerCleMistral(_ cle: String?) {
         if !Trousseau.mistral.ecrire(cle) { erreur = "La clé n'a pas pu être rangée dans le trousseau." }
-        cleMistralPresente = Trousseau.mistral.lire() != nil
+        cleMistralPresente = Trousseau.mistral.presente()
     }
 
     /// Copie la clé que Cairn a rangée, sur le clic de Steven. macOS peut demander son autorisation, et
@@ -286,7 +294,7 @@ public final class ModeleApp {
             erreur = "La clé n'a pas pu être rangée dans le trousseau."
             return false
         }
-        cleMistralPresente = Trousseau.mistral.lire() != nil
+        cleMistralPresente = Trousseau.mistral.presente()
         return true
     }
 
