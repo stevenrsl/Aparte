@@ -74,7 +74,7 @@ public struct FenetreAparte: View {
                 } else {
                     EcranAccueil(modele: modele)
                 }
-            case let .compteRendu(reunion): EcranCompteRendu(modele: modele, reunion: reunion).id(reunion.id)
+            case let .compteRendu(reunion, moment): EcranCompteRendu(modele: modele, reunion: reunion, moment: moment).id(reunion.id)
             case let .dossier(nom): EcranDossier(modele: modele, nom: nom).id(nom)
             case .reglages: EcranReglages(modele: modele)
             }

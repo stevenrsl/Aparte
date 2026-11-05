@@ -112,14 +112,16 @@ import Transcription
     defer { unsetenv("APARTE_RACINE") }
     let modele = ModeleApp()
 
-    modele.ecran = .compteRendu(reunion)
+    modele.ecran = .compteRendu(reunion, moment: 42)
     modele.renommer(reunion, en: "Fictive renommée")
-    guard case let .compteRendu(renommee) = modele.ecran else { Issue.record("écran perdu"); return }
+    guard case let .compteRendu(renommee, momentRenomme) = modele.ecran else { Issue.record("écran perdu"); return }
     #expect(renommee.meta.titre == "Fictive renommée")
+    #expect(momentRenomme == 42)
 
     modele.deplacer(renommee, versNouveauDossier: "Clients")
-    guard case let .compteRendu(rangee) = modele.ecran else { Issue.record("écran perdu"); return }
+    guard case let .compteRendu(rangee, momentRange) = modele.ecran else { Issue.record("écran perdu"); return }
     #expect(rangee.dossier == "Clients")
+    #expect(momentRange == 42)
     #expect(modele.dossiers == ["Clients"])
 
     modele.mettreALaCorbeille(rangee)

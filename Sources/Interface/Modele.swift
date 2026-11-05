@@ -13,7 +13,7 @@ public enum Ecran: Hashable {
     case toutes
     case nouvelle
     case enReunion
-    case compteRendu(Reunion)
+    case compteRendu(Reunion, moment: Double? = nil)
     case dossier(String)
     case reglages
 }
@@ -427,9 +427,9 @@ public final class ModeleApp {
 
     private func actualiser(_ reunion: Reunion) {
         recharger()
-        if case let .compteRendu(affichee) = ecran, affichee.id == reunion.id,
+        if case let .compteRendu(affichee, moment) = ecran, affichee.id == reunion.id,
            let relue = reunions.first(where: { $0.id == reunion.id }) {
-            ecran = .compteRendu(relue)
+            ecran = .compteRendu(relue, moment: moment)
         }
     }
 
@@ -454,8 +454,8 @@ public final class ModeleApp {
             let rangee = try action(bibliotheque)
             faites[reunion.id] = nil
             recharger()
-            if case let .compteRendu(affichee) = ecran, affichee.id == reunion.id {
-                ecran = .compteRendu(reunions.first { $0.id == rangee.id } ?? rangee)
+            if case let .compteRendu(affichee, moment) = ecran, affichee.id == reunion.id {
+                ecran = .compteRendu(reunions.first { $0.id == rangee.id } ?? rangee, moment: moment)
             }
         } catch {
             erreur = "« \(reunion.meta.titre) » n'a pas pu être rangée : \(error.localizedDescription)"
@@ -467,7 +467,7 @@ public final class ModeleApp {
         do {
             try bibliotheque.mettreALaCorbeille(reunion)
             faites[reunion.id] = nil
-            if case let .compteRendu(affichee) = ecran, affichee.id == reunion.id { ecran = .accueil }
+            if case let .compteRendu(affichee, _) = ecran, affichee.id == reunion.id { ecran = .accueil }
             recharger()
         } catch {
             erreur = "« \(reunion.meta.titre) » n'a pas pu aller à la Corbeille : \(error.localizedDescription)"

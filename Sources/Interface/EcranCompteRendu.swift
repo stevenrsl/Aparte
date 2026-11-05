@@ -11,6 +11,7 @@ import Transcription
 struct EcranCompteRendu: View {
     @Bindable var modele: ModeleApp
     let reunion: Reunion
+    var moment: Double? = nil
     @State private var compteRendu: CompteRendu?
     @State private var segments: [Segment] = []
     @State private var notes: [LigneDeNote] = []
