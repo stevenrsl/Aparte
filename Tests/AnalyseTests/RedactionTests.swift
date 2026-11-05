@@ -124,3 +124,22 @@ private let segments = [
     #expect(passages.count == 3)
     #expect(passages.flatMap { $0 }.count == 30)
 }
+
+@Test func unMauvaisNumeroRetrouveLaPhraseQuiProuve() {
+    let phrases = ["Mais ça peut toujours te faire des images d'ambiance.", "Je t'envoie un mail de confirmation demain.", "Bon on filme jeudi alors."]
+    #expect(Gabarit.ligneQuiProuve("Envoyer un mail de confirmation", numero: 1, dans: phrases) == 2)
+    #expect(Gabarit.ligneQuiProuve("Réserver un restaurant pour le groupe", numero: 1, dans: phrases) == nil)
+}
+
+@Test func uneQuestionSansQuestionPoseeEstEcartee() {
+    let lu = Gabarit.PassageLu(questions: [Gabarit.Puce(ligne: 3, texte: "Quand filmer jeudi exactement"), Gabarit.Puce(ligne: 4, texte: "Clémence envoie le NDA quand")])
+    let choisi = AnalysteLocal.choisir(lu, dans: AnalysteLocal.lignes(de: segments), segments: segments)
+    #expect(choisi.questions.map(\.citation) == ["Clémence, tu m'envoies le NDA ?"])
+}
+
+@Test func unePhraseRecopieeNestPasUneReformulation() {
+    let lu = Gabarit.PassageLu(decisions: [Gabarit.Puce(ligne: 3, texte: "Bon on filme jeudi alors")])
+    let choisi = AnalysteLocal.choisir(lu, dans: AnalysteLocal.lignes(de: segments), segments: segments)
+    #expect(choisi.decisions.isEmpty)
+    #expect(choisi.ecartes == 1)
+}

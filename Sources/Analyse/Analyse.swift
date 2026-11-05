@@ -684,10 +684,12 @@ public struct AnalysteLocal: Analyste {
         return texte
     }
 
-    /// Une puce rédigée et la phrase de sa ligne, sa preuve. Le numéro doit exister.
+    /// Une puce rédigée et la phrase qui la prouve, sa citation. Rien si le numéro n'existe pas, ou si aucune
+    /// phrase du passage ne reprend assez ses mots.
     static func element(_ puce: Gabarit.Puce, dans lignes: [Ligne], responsable: String? = nil) -> ElementSource? {
-        guard lignes.indices.contains(puce.ligne - 1) else { return nil }
-        let ligne = lignes[puce.ligne - 1]
+        guard lignes.indices.contains(puce.ligne - 1),
+              let numero = Gabarit.ligneQuiProuve(puce.texte, numero: puce.ligne, dans: lignes.map(\.phrase)) else { return nil }
+        let ligne = lignes[numero - 1]
         return ElementSource(texte: puce.texte, sources: [ligne.debut], citation: ligne.phrase, responsable: responsable)
     }
 
@@ -722,8 +724,11 @@ public struct AnalysteLocal: Analyste {
     static func choisir(_ lu: Gabarit.PassageLu, dans lignes: [Ligne], segments: [Segment], noms: [String] = []) -> PassageChoisi {
         var choisi = PassageChoisi()
         func garder(_ puce: Gabarit.Puce, responsable: String? = nil) -> ElementSource? {
-            guard let brut = element(puce, dans: lignes, responsable: responsable),
-                  let valide = ValidationSources.valider(brut, dans: segments, noms: noms) else {
+            // Une reformulation refusée revient à la citation : du parlé brut, qui n'a rien à faire dans un résumé.
+            guard puce.texte.split(separator: " ").count >= Gabarit.motsMinimum,
+                  let brut = element(puce, dans: lignes, responsable: responsable),
+                  let valide = ValidationSources.valider(brut, dans: segments, noms: noms),
+                  valide.citationAffichee != nil else {
                 choisi.ecartes += 1
                 return nil
             }
@@ -734,7 +739,8 @@ public struct AnalysteLocal: Analyste {
             let (tache, responsable) = Gabarit.action(puce.texte)
             return garder(Gabarit.Puce(ligne: puce.ligne, texte: tache), responsable: responsable)
         }
-        choisi.questions = lu.questions.compactMap { garder($0) }
+        // Une question ouverte a été posée : sa citation le montre.
+        choisi.questions = lu.questions.compactMap { garder($0) }.filter { $0.citation?.contains("?") == true }
         let dits = Set(ValidationSources.normaliser((lignes.map(\.phrase) + lignes.compactMap(\.voix) + noms).joined(separator: " ")).split(separator: " ").map(String.init))
         choisi.sujets = lu.sujets.compactMap { sujet in
             let points = sujet.points.compactMap { garder($0) }
@@ -791,10 +797,10 @@ public struct AnalysteLocal: Analyste {
             do {
                 for (lu, lignes) in try await lirePassage(passage, notes: notes, type: type, contexte: contexte) {
                     let choisi = Self.choisir(lu, dans: lignes, segments: ordonnes)
-                    decisions += choisi.decisions
-                    actions += choisi.actions
-                    questions += choisi.questions
-                    sujets += choisi.sujets
+                    decisions += choisi.decisions.prefix(Gabarit.maxDecisionsParPassage)
+                    actions += choisi.actions.prefix(Gabarit.maxActionsParPassage)
+                    questions += choisi.questions.prefix(Gabarit.maxQuestionsParPassage)
+                    sujets += choisi.sujets.prefix(Gabarit.maxSujetsParPassage)
                     ecartes += choisi.ecartes
                 }
             } catch {
@@ -808,7 +814,7 @@ public struct AnalysteLocal: Analyste {
         let finales = Self.assembler(decisions: decisions, actions: actions, questions: questions, sujets: sujets, fin: ordonnes.last?.fin ?? 0)
 
         // L'essentiel s'écrit à partir des sujets : le modèle ne reçoit plus la transcription.
-        let points = finales.sujets.flatMap { $0.points ?? [] }
+        let points = finales.sujets.flatMap { $0.points ?? [] } + finales.decisions + finales.actions
         var enBref: [PhraseSourcee]?
         var pointsCles: [ElementSource]?
         if !points.isEmpty {

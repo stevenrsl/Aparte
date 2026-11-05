@@ -16,6 +16,13 @@ enum Gabarit {
     static let maxSujets = 8
     static let maxPointsParSujet = 5
     static let maxPointsCles = 5
+    /// Par passage : sans cela, les premières minutes bavardes prennent toute la place.
+    static let maxDecisionsParPassage = 2
+    static let maxActionsParPassage = 3
+    static let maxQuestionsParPassage = 1
+    static let maxSujetsParPassage = 2
+    /// Sous ce nombre de mots, une reformulation ne dit rien (« Cool », « Après ? »).
+    static let motsMinimum = 3
 
     static let secretaire = """
     Tu rédiges des comptes rendus de réunion en français, courts, sobres et exacts, avec des phrases simples.
@@ -199,6 +206,46 @@ enum Gabarit {
     static func recouvrement(_ a: Set<String>, _ b: Set<String>) -> Double {
         let petit = min(a.count, b.count)
         return petit > 0 ? Double(a.intersection(b).count) / Double(petit) : 0
+    }
+
+    // MARK: Trouver la preuve
+
+    private static let motsVides: Set<String> = [
+        "les", "des", "une", "est", "sont", "pour", "dans", "avec", "que", "qui", "doit", "doivent", "etre", "faire", "par", "sur",
+        "pas", "mais", "donc", "cette", "ces", "aux", "ont", "ete", "plus", "tout", "tous", "elle", "ils", "nous", "vous", "son", "ses",
+    ]
+    /// Assez pour qu'une phrase de quelques mots ne se prouve pas par hasard, assez peu pour admettre
+    /// une reformulation qui change les temps et l'ordre.
+    static let preuveMinimum = 0.5
+
+    /// Les racines qui portent le sens : « envoyer » et « envoies » se rejoignent, pas « le » ni « pour ».
+    static func racines(_ texte: String) -> Set<String> {
+        Set(ValidationSources.normaliser(texte).split(separator: " ").map(String.init)
+            .filter { $0.count > 2 && !motsVides.contains($0) }.map { String($0.prefix(5)) })
+    }
+
+    /// La part des racines d'une reformulation qu'on retrouve dans une phrase.
+    static func preuve(_ racinesTexte: Set<String>, dans phrase: String) -> Double {
+        guard !racinesTexte.isEmpty else { return 0 }
+        return Double(racinesTexte.intersection(racines(phrase)).count) / Double(racinesTexte.count)
+    }
+
+    /// Le numéro donné par le petit modèle est peu fiable : sur une vraie réunion, « Envoyer un mail » pointait
+    /// vers une phrase sur les images d'ambiance. La ligne retenue est celle du passage qui prouve le mieux le
+    /// texte, la plus proche de ce numéro à égalité. Aucune ne le prouve assez : rien (règle 1).
+    static func ligneQuiProuve(_ texte: String, numero: Int, dans phrases: [String]) -> Int? {
+        let cherchees = racines(texte)
+        guard cherchees.count >= 2 else { return phrases.indices.contains(numero - 1) && preuve(cherchees, dans: phrases[numero - 1]) >= 1 ? numero : nil }
+        var meilleure: (ligne: Int, score: Double)?
+        for (rang, phrase) in phrases.enumerated() {
+            let score = preuve(cherchees, dans: phrase)
+            guard score >= preuveMinimum else { continue }
+            let ligne = rang + 1
+            if let actuelle = meilleure, actuelle.score > score
+                || (actuelle.score == score && abs(actuelle.ligne - numero) <= abs(ligne - numero)) { continue }
+            meilleure = (ligne, score)
+        }
+        return meilleure?.ligne
     }
 
     /// Sans ce qui redit une ligne précédente, ou ce qui est déjà dans `autres`.
