@@ -66,6 +66,7 @@ public struct FenetreAparte: View {
         } else {
             switch modele.ecran {
             case .accueil: EcranAccueil(modele: modele)
+            case .toutes: EcranToutes(modele: modele)
             case .nouvelle: EcranNouvelle(modele: modele)
             case .enReunion:
                 if let session = modele.session {
@@ -106,6 +107,7 @@ struct BarreLaterale: View {
             LogoApparte()
             VStack(alignment: .leading, spacing: 2) {
                 EntreeLaterale(titre: "Accueil", active: modele.ecran == .accueil) { modele.ecran = .accueil }
+                EntreeLaterale(titre: "Toutes les réunions", active: modele.ecran == .toutes, compte: modele.reunions.count) { modele.ecran = .toutes }
                 if let session = modele.session {
                     EntreeLaterale(titre: session.reunion.meta.titre, active: modele.ecran == .enReunion, enCours: true) { modele.ecran = .enReunion }
                 }
@@ -208,6 +210,43 @@ struct TitreEcran: View {
         (Text(debut) + Text(fin).italic().foregroundStyle(Color.terracottaTexte))
             .font(Typo.titreEcran)
             .lineLimit(2)
+    }
+}
+
+/// La charpente de lecture : une colonne dense, sans colonne encre, pour lire et retrouver.
+struct EcranLecture<Entete: View, Commandes: View, Contenu: View>: View {
+    var phrase: String?
+    @ViewBuilder let entete: Entete
+    @ViewBuilder let commandes: Commandes
+    @ViewBuilder let contenu: Contenu
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .bottom, spacing: 24) {
+                    VStack(alignment: .leading, spacing: 6) { entete }
+                    Spacer(minLength: 0)
+                    commandes
+                }
+                if let phrase {
+                    Text(phrase).font(Typo.phraseEtat).italic().foregroundStyle(Color.encreDouce)
+                }
+            }
+            .frame(maxWidth: 1040, alignment: .leading)
+            .padding(.horizontal, 36)
+            .padding(.top, 20)
+            .padding(.bottom, 18)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .overlay(alignment: .bottom) { Color.filet.frame(height: 1) }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 26) { contenu }
+                    .frame(maxWidth: 1040, alignment: .leading)
+                    .padding(.horizontal, 36)
+                    .padding(.vertical, 20)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .background(Color.creme)
     }
 }
 
@@ -358,22 +397,19 @@ struct LigneReunion: View {
     var body: some View {
         let compteRendu = modele.resumeEnregistre(de: reunion)
         Button { modele.ecran = .compteRendu(reunion) } label: {
-            HStack(alignment: .top, spacing: 18) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(date)
-                    Text("\(Int(reunion.meta.duree / 60)) min")
-                }
-                .font(Typo.horodatage)
-                .foregroundStyle(Color.encreDouce)
-                .frame(width: 92, alignment: .leading)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(reunion.meta.titre).font(Typo.titreListe)
+            HStack(alignment: .firstTextBaseline, spacing: 18) {
+                Text("\(date) · \(Int(reunion.meta.duree / 60)) min")
+                    .font(Typo.horodatage)
+                    .foregroundStyle(Color.encreDouce)
+                    .frame(width: 150, alignment: .leading)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(reunion.meta.titre).font(Typo.titreLigne).lineLimit(1)
                     Text(compteRendu?.apercu ?? "Pas encore analysée.")
                         .foregroundStyle(Color.encreDouce)
                         .lineLimit(1)
                 }
                 Spacer(minLength: 0)
-                VStack(alignment: .trailing, spacing: 6) {
+                VStack(alignment: .trailing, spacing: 4) {
                     if montrerDossier, let dossier = reunion.dossier {
                         Text(dossier.lowercased()).font(Typo.horodatage)
                             .padding(.horizontal, 9).padding(.vertical, 3)
@@ -386,7 +422,7 @@ struct LigneReunion: View {
                     }
                 }
             }
-            .padding(.vertical, 16)
+            .padding(.vertical, 11)
             .overlay(alignment: .top) { Color.filet.frame(height: 1) }
             .contentShape(Rectangle())
         }
@@ -394,32 +430,87 @@ struct LigneReunion: View {
     }
 }
 
-struct ListeActions: View {
-    let modele: ModeleApp
-    let actions: [ActionOuverte]
+/// Une liste coupée à quelques lignes, qu'un clic déplie.
+struct ListeRepliable<Element: Identifiable, Ligne: View>: View {
+    let elements: [Element]
+    var limite = 5
+    @ViewBuilder let ligne: (Element) -> Ligne
+    @State private var depliee = false
 
     var body: some View {
-        ForEach(actions) { action in
-            HStack(alignment: .top, spacing: 12) {
-                Button { modele.cocher(action) } label: {
-                    Rectangle().strokeBorder(Color.argile, lineWidth: 2).frame(width: 14, height: 14)
-                }
+        ForEach(depliee ? elements : Array(elements.prefix(limite))) { ligne($0) }
+        if !depliee, elements.count > limite {
+            let reste = elements.count - limite
+            Button(reste > 1 ? "Voir les \(reste) autres" : "Voir la dernière") { depliee = true }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Marquer comme fait : \(action.element.texte)")
-                Button { modele.ecran = .compteRendu(action.reunion) } label: {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(action.element.texte).multilineTextAlignment(.leading)
-                        Text(([action.element.echeance ?? "pas de date", action.reunion.meta.titre]
-                              + action.element.sources.prefix(1).map { horodatage($0) }).joined(separator: " · "))
-                            .font(Typo.horodatage)
-                            .foregroundStyle(Color.colonneSignal)
-                    }
-                }
-                .buttonStyle(.plain)
+                .foregroundStyle(Color.terracottaTexte)
+                .padding(.top, 10)
+        }
+    }
+}
+
+struct LigneAction: View {
+    let modele: ModeleApp
+    let action: ActionOuverte
+    var montrerReunion = true
+
+    private var details: String {
+        var morceaux = [action.element.responsable, action.element.echeance].compactMap { $0 }
+        if montrerReunion { morceaux.append(action.reunion.meta.titre) }
+        morceaux += action.element.sources.prefix(1).map { horodatage($0) }
+        return morceaux.joined(separator: " · ")
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Button { modele.cocher(action) } label: {
+                Rectangle().strokeBorder(Color.encre, lineWidth: 2).frame(width: 14, height: 14)
             }
-            .padding(.vertical, 12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .overlay(alignment: .top) { Color.colonneFilet.frame(height: 1) }
+            .buttonStyle(.plain)
+            .padding(.top, 2)
+            .accessibilityLabel("Marquer comme fait : \(action.element.texte)")
+            Button { modele.ecran = .compteRendu(action.reunion) } label: {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(action.element.texte).multilineTextAlignment(.leading)
+                    Text(details).font(Typo.horodatage).foregroundStyle(Color.encreDouce)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.vertical, 9)
+        .overlay(alignment: .top) { Color.filet.frame(height: 1) }
+    }
+}
+
+/// Les actions ouvertes : celles dont une échéance a été dite d'abord, les autres repliées.
+struct SectionActions: View {
+    let modele: ModeleApp
+    let actions: [ActionOuverte]
+    var montrerReunion = true
+
+    var body: some View {
+        let rangees = rangerActions(actions)
+        VStack(alignment: .leading, spacing: 18) {
+            if actions.isEmpty {
+                VStack(alignment: .leading, spacing: 10) {
+                    Libelle("à faire")
+                    Text("Aucune action ouverte.").foregroundStyle(Color.encreDouce)
+                }
+            }
+            if !rangees.avecEcheance.isEmpty {
+                VStack(alignment: .leading, spacing: 0) {
+                    Libelle("à faire · échéance dite · \(rangees.avecEcheance.count)").padding(.bottom, 8)
+                    ForEach(rangees.avecEcheance) { LigneAction(modele: modele, action: $0, montrerReunion: montrerReunion) }
+                }
+            }
+            if !rangees.sansEcheance.isEmpty {
+                VStack(alignment: .leading, spacing: 0) {
+                    Libelle("à faire · sans échéance · \(rangees.sansEcheance.count)").padding(.bottom, 8)
+                    ListeRepliable(elements: rangees.sansEcheance) { LigneAction(modele: modele, action: $0, montrerReunion: montrerReunion) }
+                }
+            }
         }
     }
 }
@@ -428,52 +519,50 @@ struct EcranAccueil: View {
     @Bindable var modele: ModeleApp
 
     var body: some View {
-        Colonnes {
+        let actions = modele.actionsOuvertes()
+        EcranLecture(phrase: phraseEtat(actions: actions, derniere: modele.reunions.first { $0.id != modele.session?.reunion.id },
+                                        enCours: modele.session?.reunion.meta.titre)) {
             Libelle(Date().formatted(.dateTime.locale(Locale(identifier: "fr_FR")).weekday(.wide).day().month(.wide)))
             TitreEcran(debut: "Bonjour, ", fin: "Steven")
+        } commandes: {
+            Button("Préparer une réunion") { modele.ecran = .nouvelle }
+                .buttonStyle(BoutonPrincipal())
+                .disabled(modele.session != nil)
         } contenu: {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    Libelle("réunions récentes").padding(.bottom, 10)
-                    if modele.reunions.isEmpty {
-                        Text("Pas encore de réunion. Lance la première à droite.")
-                            .foregroundStyle(Color.encreDouce)
-                    }
-                    ForEach(modele.reunions) { LigneReunion(modele: modele, reunion: $0) }
+            SectionActions(modele: modele, actions: actions)
+            VStack(alignment: .leading, spacing: 0) {
+                Libelle("réunions récentes").padding(.bottom, 8)
+                if modele.reunions.isEmpty {
+                    Text("Pas encore de réunion.").foregroundStyle(Color.encreDouce)
                 }
-                .padding(.horizontal, 36)
-                .padding(.vertical, 22)
-            }
-        } enteteEncre: {
-            HStack {
-                Libelle("nouvelle réunion", surColonne: true)
-                Spacer()
-                Text("⌘N").font(Typo.horodatage).foregroundStyle(Color.colonneDoux)
-            }
-            Spacer(minLength: 0)
-            HStack(alignment: .bottom) {
-                Text("00:00").font(Typo.chrono).monospacedDigit().foregroundStyle(Color.chronoRepos)
-                Spacer()
-                Button("Démarrer") { modele.ecran = .nouvelle }
-                    .buttonStyle(BoutonSignal())
-                    .disabled(modele.session != nil)
-            }
-        } contenuEncre: {
-            let actions = modele.actionsOuvertes()
-            VStack(alignment: .leading, spacing: 14) {
-                HStack {
-                    Text("À faire suite aux réunions").font(Typo.titreSection).italic()
-                    Spacer()
-                    Text("\(actions.count)").font(Typo.horodatage).foregroundStyle(Color.colonneSignal)
-                }
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 0) {
-                        ListeActions(modele: modele, actions: actions)
-                    }
+                ForEach(modele.reunions.prefix(5)) { LigneReunion(modele: modele, reunion: $0) }
+                if modele.reunions.count > 5 {
+                    Button("Voir toutes les réunions") { modele.ecran = .toutes }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(Color.terracottaTexte)
+                        .padding(.top, 10)
                 }
             }
-            .padding(.horizontal, 28)
-            .padding(.vertical, 22)
+        }
+    }
+}
+
+struct EcranToutes: View {
+    @Bindable var modele: ModeleApp
+
+    var body: some View {
+        EcranLecture {
+            Libelle(accord(modele.reunions.count, "réunion"))
+            TitreEcran(debut: "Toutes les ", fin: "réunions")
+        } commandes: {
+            EmptyView()
+        } contenu: {
+            VStack(alignment: .leading, spacing: 0) {
+                if modele.reunions.isEmpty {
+                    Text("Pas encore de réunion.").foregroundStyle(Color.encreDouce)
+                }
+                ForEach(modele.reunions) { LigneReunion(modele: modele, reunion: $0) }
+            }
         }
     }
 }
@@ -1114,51 +1203,51 @@ struct EcranDossier: View {
 
     private var reunions: [Reunion] { modele.reunions.filter { $0.dossier == nom } }
 
+    /// Une décision et la réunion où elle a été prise, de la plus récente à la plus ancienne.
+    private struct DecisionDatee: Identifiable {
+        let reunion: Reunion
+        let decision: ElementSource
+        var id: UUID { decision.id }
+    }
+
+    private var decisions: [DecisionDatee] {
+        reunions.flatMap { reunion in
+            (modele.resumeEnregistre(de: reunion)?.decisions ?? []).map { DecisionDatee(reunion: reunion, decision: $0) }
+        }
+    }
+
     var body: some View {
-        Colonnes {
+        let actions = modele.actionsOuvertes(dossier: nom)
+        EcranLecture(phrase: "\(accord(actions.count, "action ouverte", "actions ouvertes")), \(accord(decisions.count, "décision")).") {
             Libelle("dossier · \(accord(reunions.count, "réunion"))")
             TitreEcran(debut: nom, fin: "")
+        } commandes: {
+            EmptyView()
         } contenu: {
-            ScrollView {
+            SectionActions(modele: modele, actions: actions, montrerReunion: reunions.count > 1)
+            if !decisions.isEmpty {
                 VStack(alignment: .leading, spacing: 0) {
-                    Libelle("le fil").padding(.bottom, 10)
-                    ForEach(reunions) { LigneReunion(modele: modele, reunion: $0, montrerDossier: false) }
-                }
-                .padding(.horizontal, 36)
-                .padding(.vertical, 22)
-            }
-        } enteteEncre: {
-            let actions = modele.actionsOuvertes(dossier: nom)
-            Libelle("actions ouvertes", surColonne: true)
-            Spacer(minLength: 0)
-            Text("\(actions.count)").font(Typo.grandChiffre).monospacedDigit()
-        } contenuEncre: {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    Text("Dernières décisions").font(Typo.titreSection).italic().padding(.bottom, 12)
-                    ForEach(reunions) { reunion in
-                        ForEach(modele.resumeEnregistre(de: reunion)?.decisions ?? []) { decision in
-                            Button { modele.ecran = .compteRendu(reunion) } label: {
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(decision.texte).multilineTextAlignment(.leading)
-                                    Text(reunion.meta.titre + (decision.sources.first.map { " · \(horodatage($0))" } ?? ""))
-                                        .font(Typo.horodatage)
-                                        .foregroundStyle(Color.colonneSignal)
-                                }
-                                .padding(.vertical, 12)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .overlay(alignment: .top) { Color.colonneFilet.frame(height: 1) }
+                    Libelle("dernières décisions").padding(.bottom, 8)
+                    ListeRepliable(elements: decisions) { element in
+                        Button { modele.ecran = .compteRendu(element.reunion) } label: {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(element.decision.texte).multilineTextAlignment(.leading)
+                                Text(element.reunion.meta.titre + (element.decision.sources.first.map { " · \(horodatage($0))" } ?? ""))
+                                    .font(Typo.horodatage)
+                                    .foregroundStyle(Color.encreDouce)
                             }
-                            .buttonStyle(.plain)
+                            .padding(.vertical, 9)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .overlay(alignment: .top) { Color.filet.frame(height: 1) }
+                            .contentShape(Rectangle())
                         }
-                    }
-                    if !modele.actionsOuvertes(dossier: nom).isEmpty {
-                        Text("Actions").font(Typo.titreSection).italic().padding(.vertical, 12)
-                        ListeActions(modele: modele, actions: modele.actionsOuvertes(dossier: nom))
+                        .buttonStyle(.plain)
                     }
                 }
-                .padding(.horizontal, 28)
-                .padding(.vertical, 22)
+            }
+            VStack(alignment: .leading, spacing: 0) {
+                Libelle("le fil").padding(.bottom, 8)
+                ForEach(reunions) { LigneReunion(modele: modele, reunion: $0, montrerDossier: false) }
             }
         }
     }

@@ -40,6 +40,15 @@ func rendreLesEcrans() async throws {
     let modele = ModeleApp()
     let compteRendu = RendusCompteRendu.exemple(segments)
     try modele.enregistrer(compteRendu, pour: meta)
+    // Une autre réunion, avec des citations longues et sans échéance, comme sur une vraie transcription.
+    let seconde = try bibliotheque.creerReunion(titre: "Réunion client", type: .presentiel, dossier: nil, date: Date().addingTimeInterval(-86_400 * 3))
+    let longues = ["Du coup il faudrait que quelqu'un reprenne le devis parce que les chiffres ont un peu bougé depuis la dernière fois.",
+                   "Je regarde avec la production pour voir si on peut décaler le tournage d'une semaine.",
+                   "On doit renvoyer les droits musicaux signés.", "Il faut que je rappelle le loueur pour la caméra.",
+                   "On garde une journée pour les retours.", "Je t'envoie le lien du montage.", "Il faudra relire le contrat ensemble."]
+    let lignes = longues.enumerated().map { Segment(debut: Double($0.offset) * 60, fin: Double($0.offset) * 60 + 30, piste: .micro, texte: $0.element) }
+    try seconde.enregistrer(segments: lignes)
+    try modele.enregistrer(CompteRendu(fournisseur: "Local", decisions: [], actions: lignes.map { ElementSource(texte: $0.texte, sources: [$0.debut], citation: $0.texte) }, questions: []), pour: seconde)
     modele.recharger()
 
     func rendre(_ nom: String, _ ecran: Ecran, sombre: Bool = false) async throws {
@@ -61,6 +70,8 @@ func rendreLesEcrans() async throws {
     }
     let relue = try #require(modele.reunions.first)
     try await rendre("accueil", .accueil)
+    try await rendre("accueil-sombre", .accueil, sombre: true)
+    try await rendre("toutes", .toutes)
     try await rendre("nouvelle", .nouvelle)
     try await rendre("compte-rendu", .compteRendu(relue))
     try await rendre("compte-rendu-sombre", .compteRendu(relue), sombre: true)
