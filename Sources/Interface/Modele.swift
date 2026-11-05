@@ -139,7 +139,7 @@ public final class ModeleApp {
         let encodeur = JSONEncoder()
         encodeur.outputFormatting = [.prettyPrinted, .sortedKeys]
         encodeur.dateEncodingStrategy = .iso8601
-        let revalidee = compteRendu.revalide(dans: reunion.segments())
+        let revalidee = compteRendu.revalide(dans: reunion.segments(), noms: Array((reunion.meta.nomsDesVoix ?? [:]).values))
         try reunion.enregistrer(analyseJSON: encodeur.encode(compteRendu), markdown: revalidee.markdown(incidents: reunion.meta.incidentsAudio ?? []))
         var meta = reunion
         if !meta.meta.fournisseurs.contains(compteRendu.fournisseur) {
@@ -367,6 +367,15 @@ public final class ModeleApp {
     }
 
     /// Donne un nom à une voix, partout dans la réunion. La transcription n'est pas réécrite.
+    /// Les noms déjà donnés à des voix, du plus employé au moins employé.
+    public var nomsConnus: [String] {
+        var compte: [String: Int] = [:]
+        for reunion in reunions {
+            for nom in Set((reunion.meta.nomsDesVoix ?? [:]).values) where !nom.isEmpty { compte[nom, default: 0] += 1 }
+        }
+        return compte.sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }.map(\.key)
+    }
+
     public func nommer(_ voix: String, _ nom: String, dans reunion: Reunion) {
         var nommee = reunions.first { $0.id == reunion.id } ?? reunion
         nommee.meta.nomsDesVoix = (nommee.meta.nomsDesVoix ?? [:]).merging([voix: nom.trimmingCharacters(in: .whitespacesAndNewlines)]) { _, nouveau in nouveau }

@@ -60,10 +60,9 @@ disque suit. Une réunion en cours d'enregistrement ne peut pas être modifiée.
 ## Ce qui est connu
 
 - L'analyse locale peut manquer des éléments, en retenir de trop ou mal les ranger : voir `docs/mesure-analyse.md`.
-  Les éléments cités sont toujours exacts, leur classement reste à relire.
-- « En bref » est rédigé par le modèle : il peut se tromper, ses sources sont juste en dessous. Les décisions, actions et
-  questions restent des citations exactes.
-- Chaque élément est la phrase exacte de la transcription, sans reformulation : elle garde ses hésitations et ses erreurs de transcription.
+  Les citations sont toujours exactes, les reformulations et leur classement restent à relire.
+- « En bref » est rédigé par le modèle : il peut se tromper, ses sources sont juste en dessous.
+- Chaque élément est une phrase courte rédigée par le modèle, avec dessous la phrase exacte de la transcription : sa preuve, avec ses hésitations et ses erreurs de transcription.
 - Une analyse avec Mistral envoie la transcription et les notes de cette réunion, après confirmation. Ta clé se saisit
   dans les réglages et va dans le trousseau, ou se reprend de Cairn d'un clic.
 - Si le son s'arrête, Aparté le signale en réunion, repart sur l'entrée disponible et note le blanc dans le compte

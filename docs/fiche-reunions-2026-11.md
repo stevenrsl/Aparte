@@ -156,12 +156,16 @@ de ce qu'elle contient n'est réécrit, sauf le titre dans `meta.json`.
   deux ou trois phrases, comme dans Cairn. Une reformulation peut se tromper : l'écran dit qui l'a rédigée,
   chaque phrase garde ses sources, et une phrase qui nomme une personne, un chiffre ou un moment absent de
   ses lignes est retirée. Sans phrase valide, le résumé construit revient.
-- **Chaque élément est une citation exacte** (décidé par Steven le 2 novembre 2026) : la phrase entière
-  de la transcription, jamais une reformulation, car aucun contrôle ne prouve qu'une reformulation dit
-  vrai. Plus sec, et les erreurs de transcription restent visibles.
-- **Les sujets** (demandés par Steven le 2 novembre 2026, repris de Cairn) : le titre d'un sujet ne contient que
-  des mots dits dans ce moment, sinon il devient le début de sa première phrase. Cairn y rédigeait des
-  points : ici, un sujet renvoie au passage, ce qui garde la règle 1.
+- **Chaque élément est reformulé, avec sa citation dessous** (décidé par Steven le 5 novembre 2026, à la place de
+  la citation seule retenue le 2 novembre, après l'essai sur une vraie réunion de 59 minutes : 59 « décisions » illisibles
+  face aux 3 actions de Cairn). Une phrase courte à la façon de Cairn, puis la phrase entière de la transcription, qui
+  reste affichée comme preuve. Une reformulation peut se tromper : le modèle doit donner le numéro de la ligne qui la
+  prouve, sans quoi l'élément est écarté, et elle laisse place à la citation si elle nomme une personne, un chiffre ou un
+  moment absent de ce passage, ou si elle change le sens d'une négation. Ce contrôle ne prouve pas qu'elle dit vrai : la
+  citation dessous permet de vérifier d'un coup d'œil. Plafonds : 8 décisions, 10 actions, 6 questions, 5 points clés.
+- **Les sujets et les points clés** (sujets demandés par Steven le 2 novembre 2026, repris de Cairn ; rédaction étendue
+  le 5 novembre 2026 avec la décision ci-dessus) : au plus 8 sujets, titrés par le modèle, chacun avec ses points et leurs
+  sources. Un titre avec un nom, un chiffre ou un moment jamais dit devient son premier point.
 - **Répartir une réunion** (demandé par Steven le 2 novembre 2026) : Steven choisit un dossier par sujet, et chaque
   dossier reçoit un extrait sans audio. La réunion d'origine ne change pas. Un extrait est une réunion
   marquée `origine`, faute de « notes libres », hors v1.

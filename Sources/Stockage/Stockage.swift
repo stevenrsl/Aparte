@@ -106,6 +106,26 @@ public enum FormatNotes {
     }
 }
 
+/// Les voix d'une réunion, dans l'ordre, avec un extrait assez long pour les reconnaître.
+public enum VoixDeLaReunion {
+    public struct Une: Identifiable, Hashable, Sendable {
+        public var voix: String
+        public var extrait: Segment
+        public var id: String { voix }
+    }
+
+    public static func liste(_ segments: [Segment]) -> [Une] {
+        var plusLongs: [String: Segment] = [:]
+        for segment in segments {
+            guard let voix = segment.voix else { continue }
+            if let actuel = plusLongs[voix], actuel.texte.count >= segment.texte.count { continue }
+            plusLongs[voix] = segment
+        }
+        return plusLongs.map { Une(voix: $0.key, extrait: $0.value) }
+            .sorted { $0.voix.localizedStandardCompare($1.voix) == .orderedAscending }
+    }
+}
+
 /// Une réunion, c'est un dossier lisible sans l'app.
 public struct Reunion: Identifiable, Sendable, Hashable {
     public var url: URL

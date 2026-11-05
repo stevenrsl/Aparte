@@ -38,16 +38,19 @@ private func enveloppe(_ json: String) -> String {
 
 // Ces tests partagent le modèle retenu dans les préférences : ils passent l'un après l'autre.
 @Suite(.serialized) struct TestsMistral {
-@Test func mistralNeRendQueLesLignesDeLaTranscription() async throws {
+@Test func mistralRedigeEtGardeLaLignePourPreuve() async throws {
     UserDefaults.standard.removeObject(forKey: "modeleMistral")
-    let json = #"{"decisions":[2,99],"actions":[{"ligne":3,"responsable":"Marie","echeance":"lundi"}],"questions":[],"sujets":[{"titre":"version longue","premiere":1,"derniere":3}],"en_bref":[{"texte":"La version longue est retenue.","lignes":[2]},{"texte":"Paul finira lundi.","lignes":[3]}]}"#
+    let json = #"{"decisions":[{"ligne":2,"texte":"Garder la version longue"},{"ligne":99,"texte":"Ligne inventée"}],"actions":[{"ligne":3,"texte":"Envoyer la musique","responsable":"Marie","echeance":"lundi"}],"questions":[],"points_cles":[{"ligne":2,"texte":"La version longue reste"}],"sujets":[{"titre":"Version longue","premiere":1,"derniere":3,"points":[{"ligne":2,"texte":"La version longue reste"}]}],"en_bref":[{"texte":"La version longue est retenue.","lignes":[2]},{"texte":"Paul finira lundi.","lignes":[3]}]}"#
     let serveur = Serveur([(200, nil, enveloppe(json))])
     let c = try await analyste(serveur).analyser(segments: reunion, notes: [], type: .presentiel, progression: { _ in })
-    #expect(c.decisions.map(\.texte) == ["On décide de garder la version longue."])
+    #expect(c.decisions.map(\.texte) == ["Garder la version longue"])
+    #expect(c.decisions.first?.citation == "On décide de garder la version longue.")
     #expect(c.elementsEcartes == 1)
+    #expect(c.pointsCles?.first?.citation == "On décide de garder la version longue.")
+    #expect(c.sujets?.first?.points?.count == 1)
     #expect(c.actions.first?.responsable == "Marie")
     #expect(c.actions.first?.echeance == nil)
-    #expect(c.sujets?.first?.titre == "version longue")
+    #expect(c.sujets?.first?.titre == "Version longue")
     #expect(c.fournisseur == "Mistral · Medium")
     #expect(c.enBref?.map(\.texte) == ["La version longue est retenue."])
 
@@ -58,7 +61,7 @@ private func enveloppe(_ json: String) -> String {
 
 @Test func uneLimiteAZeroPasseAuModeleSuivantEtLaCleRefuseeSArrete() async throws {
     UserDefaults.standard.removeObject(forKey: "modeleMistral")
-    let serveur = Serveur([(429, "0", ""), (200, nil, enveloppe(#"```json\#n{"decisions":[2]}\#n```"#))])
+    let serveur = Serveur([(429, "0", ""), (200, nil, enveloppe(#"```json\#n{"decisions":[{"ligne":2,"texte":"Garder la version longue"}]}\#n```"#))])
     let c = try await analyste(serveur).analyser(segments: reunion, notes: [], type: .presentiel, progression: { _ in })
     #expect(c.fournisseur == "Mistral · Small")
     #expect(c.decisions.count == 1)

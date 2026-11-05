@@ -68,8 +68,8 @@ public enum ErreurMistral: LocalizedError {
     }
 }
 
-/// L'API de Mistral : toute la réunion tient en une demande, une réponse en JSON. Le modèle choisit des
-/// numéros de lignes, comme en local : seuls les titres de sujets et « En bref », contrôlés, viennent de ses mots.
+/// L'API de Mistral : toute la réunion tient en une demande, une réponse en JSON. Comme en local, chaque
+/// élément est rédigé par le modèle, avec le numéro de la ligne dont la phrase devient sa citation.
 ///
 /// Les modèles ouverts dépendent de l'offre : Cairn a vu une clé valide répondre 429 avec une limite de
 /// zéro sur les plus grands. D'où l'essai du meilleur au plus petit, et le dernier qui a répondu d'abord.
@@ -112,23 +112,26 @@ public struct AnalysteMistral: Analyste {
         return modeles.filter { $0.id == retenu } + modeles.filter { $0.id != retenu }
     }
 
-    static let consigne = """
-    Tu relis la transcription d'une réunion, ligne par ligne, chaque ligne a un numéro. Tu ne réécris rien : \
-    tu choisis des numéros de lignes, sauf pour le résumé en_bref. Réponds uniquement avec un objet JSON de cette forme :
-    {"decisions": [numéros], "actions": [{"ligne": numéro, "responsable": "", "echeance": ""}], "questions": [numéros], \
-    "sujets": [{"titre": "", "premiere": numéro, "derniere": numéro}], "en_bref": [{"texte": "", "lignes": [numéros]}]}
-    decisions : les lignes où un choix est arrêté : décidé, retenu, validé, refusé, maintenu ou abandonné. Pas les avis ni les constats.
-    actions : les lignes qui disent qu'une tâche précise est à faire. Responsable et échéance : seulement si la ligne les dit, sinon vides.
-    questions : les vraies questions sur le travail auxquelles les lignes suivantes ne répondent pas.
-    sujets : un à huit sujets, dans l'ordre, chacun sur des lignes qui se suivent. Le titre fait de deux à cinq mots repris tels quels de ces lignes.
-    en_bref : deux ou trois phrases simples que tu rédiges, pour savoir en dix secondes ce qui s'est dit, chacune avec les lignes qu'elle résume. N'y mets ni nom, ni date, ni chiffre absent de ces lignes. Ce qui a été promis n'est pas encore fait.
-    Ne manque aucune ligne qui correspond et n'en retiens aucune qui ne correspond pas. Les listes peuvent être vides. \
-    La transcription vient d'une reconnaissance vocale : une ligne peut contenir des erreurs, ne la corrige pas.
+    static let consigne = Gabarit.secretaire + """
+
+    Réponds uniquement avec un objet JSON de cette forme :
+    {"en_bref": [{"texte": "", "lignes": [numéros]}], "points_cles": [{"ligne": numéro, "texte": ""}], \
+    "decisions": [{"ligne": numéro, "texte": ""}], \
+    "actions": [{"ligne": numéro, "texte": "", "responsable": "", "echeance": ""}], \
+    "questions": [{"ligne": numéro, "texte": ""}], \
+    "sujets": [{"titre": "", "premiere": numéro, "derniere": numéro, "points": [{"ligne": numéro, "texte": ""}]}]}
+    Chaque texte est court et rédigé avec tes mots, et « ligne » est le numéro de la ligne qui le prouve.
+    en_bref : deux ou trois phrases, pour savoir en dix secondes ce qui s'est dit, chacune avec les lignes qu'elle résume.
+    points_cles : trois à cinq points. decisions : au plus huit. actions : au plus dix, la tâche à l'infinitif ; \
+    responsable et échéance seulement s'ils ont été dits, sinon vides. questions : au plus six, restées sans réponse.
+    sujets : un à huit sujets, dans l'ordre, chacun sur des lignes qui se suivent, avec un titre court et deux à quatre points.
+    Les listes peuvent être vides. N'écris ni nom, ni date, ni chiffre qui ne soit dans la transcription.
     """ + AnalysteLocal.consigneEcho
 
     private struct Reponse: Decodable {
-        struct Action: Decodable {
+        struct Element: Decodable {
             var ligne: Int
+            var texte: String?
             var responsable: String?
             var echeance: String?
         }
@@ -140,10 +143,12 @@ public struct AnalysteMistral: Analyste {
             var titre: String
             var premiere: Int
             var derniere: Int
+            var points: [Element]?
         }
-        var decisions: [Int]?
-        var actions: [Action]?
-        var questions: [Int]?
+        var decisions: [Element]?
+        var actions: [Element]?
+        var questions: [Element]?
+        var points_cles: [Element]?
         var sujets: [SujetPropose]?
         var en_bref: [PhrasePropose]?
     }
@@ -158,29 +163,41 @@ public struct AnalysteMistral: Analyste {
         progression(0.9)
 
         var ecartes = 0
-        var vues = Set<String>()
-        func garder(_ choisis: [ElementSource?]) -> [ElementSource] {
-            choisis.compactMap { choisi in
-                guard let choisi, let valide = ValidationSources.valider(choisi, dans: segments) else {
-                    ecartes += 1
-                    return nil
-                }
-                return vues.insert("\(valide.sources) \(valide.texte)").inserted ? valide : nil
+        func garder(_ propose: Reponse.Element) -> ElementSource? {
+            let puce = Gabarit.Puce(ligne: propose.ligne, texte: propose.texte ?? "")
+            guard var brut = AnalysteLocal.element(puce, dans: lignes) else {
+                ecartes += 1
+                return nil
             }
+            brut.responsable = propose.responsable
+            brut.echeance = propose.echeance
+            guard let valide = ValidationSources.valider(brut, dans: segments) else {
+                ecartes += 1
+                return nil
+            }
+            return valide
         }
-        let decisions = garder((reponse.decisions ?? []).map { AnalysteLocal.element($0, dans: lignes) })
-        let actions = garder((reponse.actions ?? []).map {
-            AnalysteLocal.element($0.ligne, dans: lignes, responsable: $0.responsable, echeance: $0.echeance)
-        })
-        let questions = garder((reponse.questions ?? []).map { AnalysteLocal.element($0, dans: lignes) })
-        let sujets = DecoupageSujets.valider(
+        var sujets = DecoupageSujets.valider(
             (reponse.sujets ?? []).map { .init(titre: $0.titre, premiere: $0.premiere, derniere: $0.derniere) },
-            phrases: lignes.map(\.phrase), debuts: lignes.map(\.debut), fin: ordonnes.last?.fin ?? 0)
+            phrases: lignes.map(\.phrase), debuts: lignes.map(\.debut), fin: ordonnes.last?.fin ?? 0, redige: true)
+        for rang in sujets.indices {
+            let proposes = (reponse.sujets ?? []).filter { propose in
+                lignes.indices.contains(propose.premiere - 1) && lignes[propose.premiere - 1].debut == sujets[rang].debut
+            }
+            sujets[rang].points = Array(proposes.flatMap { $0.points ?? [] }.compactMap(garder).prefix(Gabarit.maxPointsParSujet))
+        }
+        let finales = AnalysteLocal.assembler(decisions: (reponse.decisions ?? []).compactMap(garder),
+                                              actions: (reponse.actions ?? []).compactMap(garder),
+                                              questions: (reponse.questions ?? []).compactMap(garder),
+                                              sujets: sujets, fin: ordonnes.last?.fin ?? 0)
+        let pointsCles = Array(Gabarit.distincts((reponse.points_cles ?? []).compactMap(garder)).prefix(Gabarit.maxPointsCles))
+        let lu = lignes.map(\.phrase).joined(separator: " ")
         let enBref = EnBref.valider((reponse.en_bref ?? []).map { .init(texte: $0.texte, lignes: $0.lignes ?? []) },
-                                    phrases: lignes.map(\.phrase), debuts: lignes.map(\.debut))
+                                    phrases: lignes.map(\.phrase), debuts: lignes.map(\.debut), lu: lu)
         progression(1)
-        return CompteRendu(fournisseur: "Mistral · \(modele.nom)", decisions: decisions, actions: actions, questions: questions,
-                           sujets: sujets, enBref: enBref.isEmpty ? nil : enBref, elementsEcartes: ecartes)
+        return CompteRendu(fournisseur: "Mistral · \(modele.nom)", decisions: finales.decisions, actions: finales.actions,
+                           questions: finales.questions, sujets: finales.sujets, enBref: enBref.isEmpty ? nil : enBref,
+                           pointsCles: pointsCles.isEmpty ? nil : pointsCles, elementsEcartes: ecartes)
     }
 
     /// Pour les réglages : un seul mot part, aucune réunion.

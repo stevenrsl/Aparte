@@ -21,19 +21,28 @@ public struct ElementSource: Codable, Sendable, Identifiable, Hashable {
         self.responsable = responsable
         self.echeance = echeance
     }
+
+    /// La citation à montrer sous le texte : rien si le texte est déjà la citation.
+    public var citationAffichee: String? {
+        guard let citation, ValidationSources.normaliser(citation) != ValidationSources.normaliser(texte) else { return nil }
+        return citation
+    }
 }
 
-/// Un sujet abordé : un moment de la réunion et un titre fait de ses propres mots.
+/// Un sujet abordé : un moment de la réunion, son titre et ce qui y a été dit.
 public struct Sujet: Codable, Sendable, Identifiable, Hashable {
     public var id = UUID()
     public var titre: String
     public var debut: Double
     public var fin: Double
+    /// Ce qui a été dit sur ce sujet, chaque point avec sa source. Absent des analyses plus anciennes.
+    public var points: [ElementSource]?
 
-    public init(titre: String, debut: Double, fin: Double) {
+    public init(titre: String, debut: Double, fin: Double, points: [ElementSource]? = nil) {
         self.titre = titre
         self.debut = debut
         self.fin = fin
+        self.points = points
     }
 
     public func contient(_ temps: Double) -> Bool { temps >= debut && temps <= fin }
@@ -74,6 +83,8 @@ public struct CompteRendu: Codable, Sendable, Hashable {
     public var sujets: [Sujet]?
     /// Deux ou trois phrases rédigées, chacune avec ses sources. Absent : le résumé construit prend la place.
     public var enBref: [PhraseSourcee]?
+    /// Les trois à cinq points à retenir, avec leur source. Absent des analyses plus anciennes.
+    public var pointsCles: [ElementSource]?
     public var passagesNonAnalyses: Int
     public var elementsEcartes: Int
     /// L'empreinte de la transcription lue par l'analyse. Absente avant ce contrôle : l'analyse reste « à vérifier ».
@@ -82,11 +93,11 @@ public struct CompteRendu: Codable, Sendable, Hashable {
     public var fraicheur: Fraicheur = .aJour
 
     private enum CodingKeys: String, CodingKey {
-        case fournisseur, date, decisions, actions, questions, sujets, enBref, passagesNonAnalyses, elementsEcartes, empreinte
+        case fournisseur, date, decisions, actions, questions, sujets, enBref, pointsCles, passagesNonAnalyses, elementsEcartes, empreinte
     }
 
     public init(fournisseur: String, date: Date = Date(), decisions: [ElementSource], actions: [ElementSource],
-                questions: [ElementSource], sujets: [Sujet]? = nil, enBref: [PhraseSourcee]? = nil, empreinte: String? = nil,
+                questions: [ElementSource], sujets: [Sujet]? = nil, enBref: [PhraseSourcee]? = nil, pointsCles: [ElementSource]? = nil, empreinte: String? = nil,
                 passagesNonAnalyses: Int = 0, elementsEcartes: Int = 0) {
         self.fournisseur = fournisseur
         self.date = date
@@ -96,6 +107,7 @@ public struct CompteRendu: Codable, Sendable, Hashable {
         self.passagesNonAnalyses = passagesNonAnalyses
         self.sujets = sujets
         self.enBref = enBref
+        self.pointsCles = pointsCles
         self.elementsEcartes = elementsEcartes
         self.empreinte = empreinte
     }
@@ -182,19 +194,20 @@ public struct CompteRendu: Codable, Sendable, Hashable {
                            questions: garder(questions), sujets: choisis, empreinte: empreinte)
     }
 
-    /// Une analyse relue depuis le disque repasse la validation : une ancienne reformulation laisse
+    /// Une analyse relue depuis le disque repasse la validation : une reformulation qui ne tient plus laisse
     /// place à la transcription, et ce qui n'est plus prouvé est écarté. Son état face à la transcription
     /// actuelle décide ensuite du sort d'« En bref » et des sujets (règle 1 : rien n'est affiché sans preuve).
-    public func revalide(dans segments: [Segment]) -> CompteRendu {
+    public func revalide(dans segments: [Segment], noms: [String] = []) -> CompteRendu {
         var copie = self
         func garder(_ elements: [ElementSource]) -> [ElementSource] {
-            let gardes = elements.compactMap { ValidationSources.valider($0, dans: segments) }
+            let gardes = elements.compactMap { ValidationSources.valider($0, dans: segments, noms: noms) }
             copie.elementsEcartes += elements.count - gardes.count
             return gardes
         }
         copie.decisions = garder(decisions)
         copie.actions = garder(actions)
         copie.questions = garder(questions)
+        let pointsClesValides = pointsCles.map { $0.compactMap { ValidationSources.valider($0, dans: segments, noms: noms) } }
 
         // Un sujet n'est retiré que si son début ne tombe plus sur un segment. Une fin au-delà de la
         // transcription (et de la tolérance) est ramenée à sa fin : une relecture qui finit plus tôt, ou
@@ -244,13 +257,47 @@ public struct CompteRendu: Codable, Sendable, Hashable {
                 !phrase.sources.isEmpty && phrase.sources.allSatisfy { !ValidationSources.segmentsSources(de: $0, dans: segments).isEmpty }
             }
             copie.sujets = sujets
+            copie.pointsCles = pointsClesValides
         case .perimee:
             // Une reformulation plus vieille que la transcription ne peut plus être garantie : le résumé construit prend sa place.
             copie.enBref = nil
+            copie.pointsCles = pointsClesValides
             copie.sujets = sujetsValides()
         case .aVerifier:
             copie.enBref = enBrefControle()
+            copie.pointsCles = pointsClesValides
             copie.sujets = sujetsValides()
+        }
+        return copie
+    }
+
+    /// Le compte rendu avec les noms donnés aux voix depuis l'analyse. Rien n'est écrit sur le disque : un
+    /// nom changé plus tard se lit partout, sans refaire l'analyse.
+    public func avecNoms(_ noms: [String: String]) -> CompteRendu {
+        let donnes = noms.filter { !$0.value.isEmpty }
+        guard !donnes.isEmpty else { return self }
+        func nomme(_ texte: String) -> String {
+            donnes.keys.sorted { $0.count > $1.count }.reduce(texte) { sortie, voix in
+                sortie.replacingOccurrences(of: "\\b\(voix)\\b", with: donnes[voix] ?? voix, options: .regularExpression)
+            }
+        }
+        func nomme(_ element: ElementSource) -> ElementSource {
+            var copie = element
+            copie.texte = nomme(element.texte)
+            copie.responsable = element.responsable.map(nomme)
+            return copie
+        }
+        var copie = self
+        copie.decisions = decisions.map(nomme)
+        copie.actions = actions.map(nomme)
+        copie.questions = questions.map(nomme)
+        copie.pointsCles = pointsCles?.map(nomme)
+        copie.enBref = enBref?.map { PhraseSourcee(texte: nomme($0.texte), sources: $0.sources) }
+        copie.sujets = sujets?.map { sujet in
+            var nomme_ = sujet
+            nomme_.titre = nomme(sujet.titre)
+            nomme_.points = sujet.points?.map(nomme)
+            return nomme_
         }
         return copie
     }
@@ -266,8 +313,14 @@ public struct CompteRendu: Codable, Sendable, Hashable {
         var parties = [apercu]
         if let avertissement = Self.perimee(fraicheur) { parties.append(avertissement) }
         if let audio = Self.audioIncomplet(incidents) { parties.append(audio) }
-        if !decisions.isEmpty { parties.append("Décisions\n" + decisions.map { "- \($0.texte)" }.joined(separator: "\n")) }
-        if !actions.isEmpty { parties.append("Actions\n" + actions.map { "- \($0.texte)" }.joined(separator: "\n")) }
+        func ligne(_ element: ElementSource) -> String {
+            let details = [element.responsable, element.echeance].compactMap { $0 }
+            return "- \(element.texte)" + (details.isEmpty ? "" : " (\(details.joined(separator: ", ")))")
+        }
+        if let pointsCles, !pointsCles.isEmpty { parties.append("Points clés\n" + pointsCles.map(ligne).joined(separator: "\n")) }
+        if !decisions.isEmpty { parties.append("Décisions\n" + decisions.map(ligne).joined(separator: "\n")) }
+        if !actions.isEmpty { parties.append("Actions\n" + actions.map(ligne).joined(separator: "\n")) }
+        if !questions.isEmpty { parties.append("Questions ouvertes\n" + questions.map(ligne).joined(separator: "\n")) }
         return parties.joined(separator: "\n\n")
     }
 
@@ -284,16 +337,24 @@ public struct CompteRendu: Codable, Sendable, Hashable {
     public func markdown(incidents: [IncidentAudio] = []) -> String {
         func bloc(_ titre: String, _ elements: [ElementSource]) -> String {
             guard !elements.isEmpty else { return "" }
-            let lignes = elements.map { element in
-                "- \(element.texte) (\(element.sources.map { horodatage($0) }.joined(separator: ", ")))"
-            }
-            return "\n## \(titre)\n\n" + lignes.joined(separator: "\n") + "\n"
+            return "\n## \(titre)\n\n" + elements.map(ligne).joined(separator: "\n") + "\n"
+        }
+        func ligne(_ element: ElementSource) -> String {
+            let details = [element.responsable, element.echeance].compactMap { $0 }
+            var texte = "- \(element.texte)" + (details.isEmpty ? "" : " — \(details.joined(separator: ", "))")
+                + " (\(element.sources.map { horodatage($0) }.joined(separator: ", ")))"
+            if let citation = element.citationAffichee { texte += "\n  > « \(citation) »" }
+            return texte
+        }
+        func sujet(_ sujet: Sujet) -> String {
+            "### \(sujet.titre) (\(horodatage(sujet.debut)))\n\n" + (sujet.points ?? []).map { "- \($0.texte) (\($0.sources.map { horodatage($0) }.joined(separator: ", ")))" }.joined(separator: "\n")
         }
         return "# Compte rendu\n\nProduit par : \(fournisseur)\n\n\(apercu)\n"
             + (Self.perimee(fraicheur).map { "\n\($0)\n" } ?? "")
             + (Self.audioIncomplet(incidents).map { "\n\($0)\n" } ?? "")
-            + ((sujets ?? []).isEmpty ? "" : "\n## Sujets\n\n" + (sujets ?? []).map { "- \($0.titre) (\(horodatage($0.debut)))" }.joined(separator: "\n") + "\n")
+            + bloc("Points clés", pointsCles ?? [])
             + bloc("Décisions", decisions) + bloc("Actions", actions) + bloc("Questions ouvertes", questions)
+            + ((sujets ?? []).isEmpty ? "" : "\n## Sujets\n\n" + (sujets ?? []).map(sujet).joined(separator: "\n\n") + "\n")
     }
 }
 
@@ -336,10 +397,21 @@ public enum ValidationSources {
         return nil
     }
 
-    /// L'élément si ses sources le prouvent, sinon nil. Son texte est toujours la transcription : aucune
-    /// reformulation n'est gardée, puisqu'aucun contrôle ne peut prouver qu'elle dit vrai. Seules les sources
-    /// où la citation se trouve restent, et un responsable ou une échéance doit être dans la phrase rendue.
-    public static func valider(_ element: ElementSource, dans segments: [Segment]) -> ElementSource? {
+    /// Le contrôle le moins coûteux d'un contresens : une reformulation ne change pas le sens d'une négation.
+    private static func negative(_ texte: String) -> Bool {
+        let mots = Set(normaliser(texte).split(separator: " ").map(String.init))
+        return !mots.isDisjoint(with: ["ne", "n", "pas", "jamais", "aucun", "aucune"])
+    }
+
+    /// Autour d'une source, ce qui compte comme dit pour un responsable, une échéance ou une reformulation.
+    static let voisinage = 30.0
+
+    /// L'élément si ses sources le prouvent, sinon nil. La citation est toujours la transcription, et elle
+    /// reste affichée sous la reformulation : aucun contrôle ne peut prouver qu'une reformulation dit vrai,
+    /// mais on peut toujours la comparer à sa preuve. Une reformulation avec un nom, un chiffre ou un moment
+    /// absent de ce passage laisse place à la citation. Seules les sources où la citation se trouve restent,
+    /// et un responsable ou une échéance doit être dans la phrase citée, ou être la voix qui la dit.
+    public static func valider(_ element: ElementSource, dans segments: [Segment], noms: [String] = []) -> ElementSource? {
         guard !element.sources.isEmpty else { return nil }
         let passages = element.sources.map { segmentsSources(de: $0, dans: segments) }
         guard !passages.contains(where: \.isEmpty) else { return nil }
@@ -352,15 +424,25 @@ public enum ValidationSources {
         var vus = Set<UUID>()
         let cites = prouvants.flatMap(\.1).filter { vus.insert($0.id).inserted }.sorted { $0.debut < $1.debut }
         guard let phrases = phrasesEntieres(contenant: cherche, dans: cites) else { return nil }
-        let lu = normaliser(phrases)
+        let temps = prouvants.map(\.0)
+        let autour = segments.filter { segment in
+            temps.contains { $0 >= segment.debut - voisinage && $0 <= segment.fin + voisinage }
+        }
+        let voix = Set(autour.compactMap(\.voix)).union(noms)
+        let lu = normaliser(([phrases] + autour.map(\.texte) + Array(voix)).joined(separator: " "))
+        // Un voisin nommé n'est pas pour autant responsable : il faut sa voix, ou son nom dans la phrase.
+        let porte = normaliser(([phrases] + cites.compactMap(\.voix) + noms).joined(separator: " "))
 
         func dit(_ valeur: String?) -> String? {
             guard let valeur = valeur?.trimmingCharacters(in: .whitespacesAndNewlines), !valeur.isEmpty else { return nil }
             let mots = normaliser(valeur)
-            return !mots.isEmpty && " \(lu) ".contains(" \(mots) ") ? valeur : nil
+            return !mots.isEmpty && " \(porte) ".contains(" \(mots) ") ? valeur : nil
         }
         var valide = element
-        valide.texte = phrases
+        let propose = element.texte.trimmingCharacters(in: .whitespacesAndNewlines)
+        let tient = !propose.isEmpty && EnBref.motsNonDits(propose, lu: Set(lu.split(separator: " ").map(String.init))).isEmpty
+            && negative(phrases) == negative(propose)
+        valide.texte = tient ? propose : phrases
         valide.citation = phrases
         valide.sources = prouvants.map(\.0)
         valide.responsable = dit(element.responsable)
@@ -416,13 +498,14 @@ public enum EnBref {
         return suspects.filter { !lu.contains($0) }
     }
 
-    public static func valider(_ proposes: [Propose], phrases: [String], debuts: [Double]) -> [PhraseSourcee] {
+    /// `lu` : tout ce qui compte comme dit, pour une synthèse qui dépasse les lignes qu'elle cite.
+    public static func valider(_ proposes: [Propose], phrases: [String], debuts: [Double], lu dits: String? = nil) -> [PhraseSourcee] {
         guard phrases.count == debuts.count else { return [] }
         return proposes.compactMap { propose -> PhraseSourcee? in
             let texte = propose.texte.trimmingCharacters(in: .whitespacesAndNewlines)
             let lignes = propose.lignes.filter { phrases.indices.contains($0 - 1) }
             guard !texte.isEmpty, !lignes.isEmpty, lignes.count == propose.lignes.count else { return nil }
-            let lu = Set(lignes.flatMap { ValidationSources.normaliser(phrases[$0 - 1]).split(separator: " ").map(String.init) })
+            let lu = Set(ValidationSources.normaliser(dits ?? lignes.map { phrases[$0 - 1] }.joined(separator: " ")).split(separator: " ").map(String.init))
             guard motsNonDits(texte, lu: lu).isEmpty else { return nil }
             return PhraseSourcee(texte: texte, sources: lignes.map { debuts[$0 - 1] })
         }.prefix(maximum).map { $0 }
@@ -488,7 +571,14 @@ public enum DecoupageSujets {
         return porteur
     }
 
-    public static func valider(_ proposes: [Propose], phrases: [String], debuts: [Double], fin: Double) -> [Sujet] {
+    /// Un titre rédigé par le modèle (« Interviews et atelier ») : court, et sans nom, chiffre ni moment
+    /// absent de ce qui a été dit.
+    static func titreRedige(_ titre: String, lu: Set<String>) -> Bool {
+        let mots = titre.split(whereSeparator: \.isWhitespace)
+        return !mots.isEmpty && mots.count <= 8 && EnBref.motsNonDits(titre, lu: lu).isEmpty
+    }
+
+    public static func valider(_ proposes: [Propose], phrases: [String], debuts: [Double], fin: Double, redige: Bool = false) -> [Sujet] {
         guard phrases.count == debuts.count, !phrases.isEmpty else { return [] }
         var sujets: [Sujet] = []
         var suivante = 1
@@ -499,7 +589,7 @@ public enum DecoupageSujets {
             let dites = phrases[(premiere - 1)..<derniere]
             let lu = Set(ValidationSources.normaliser(dites.joined(separator: " ")).split(separator: " "))
             let titre = propose.titre.trimmingCharacters(in: .whitespacesAndNewlines)
-            let dit = titreDit(titre, lu: lu)
+            let dit = redige ? titreRedige(titre, lu: Set(lu.map(String.init))) : titreDit(titre, lu: lu)
             let debutPhrase = dites.first.map { $0.split(separator: " ").prefix(6).joined(separator: " ") } ?? ""
             sujets.append(Sujet(titre: dit ? titre : debutPhrase, debut: debuts[premiere - 1],
                                 fin: derniere < debuts.count ? debuts[derniere] : fin))
@@ -529,129 +619,29 @@ public enum ErreurAnalyse: LocalizedError {
     }
 }
 
-@Generable
-struct LignesChoisies {
-    @Guide(description: "Les numéros des lignes retenues. Vide s'il n'y en a aucune.")
-    var lignes: [Int]
-}
-
-@Generable
-struct Confirmation {
-    @Guide(description: "Vrai seulement si la ligne marquée correspond clairement, d'après son contexte.")
-    var correspond: Bool
-}
-
-@Generable
-struct PhraseGeneree {
-    @Guide(description: "Une phrase simple, qui ne dit que ce que disent ses lignes.")
-    var texte: String
-    @Guide(description: "Les numéros des lignes que cette phrase résume.")
-    var lignes: [Int]
-}
-
-@Generable
-struct EnBrefGenere {
-    @Guide(description: "Deux ou trois phrases, pas plus.")
-    var phrases: [PhraseGeneree]
-}
-
-@Generable
-struct SujetChoisi {
-    @Guide(description: "Le sujet en deux à cinq mots, repris tels quels de ces lignes.")
-    var titre: String
-    @Guide(description: "Le numéro de la première ligne du sujet.")
-    var premiere: Int
-    @Guide(description: "Le numéro de la dernière ligne du sujet.")
-    var derniere: Int
-}
-
-@Generable
-struct SujetsChoisis {
-    @Guide(description: "Les sujets, dans l'ordre de la réunion.")
-    var sujets: [SujetChoisi]
-}
-
-@Generable
-struct ActionChoisie {
-    @Guide(description: "Le numéro de la ligne.")
-    var ligne: Int
-    @Guide(description: "La personne qui doit le faire, seulement si la ligne la nomme. Sinon vide.")
-    var responsable: String
-    @Guide(description: "L'échéance, seulement si la ligne la dit. Sinon vide.")
-    var echeance: String
-}
-
-@Generable
-struct ActionsChoisies {
-    @Guide(description: "Les lignes retenues. Vide s'il n'y en a aucune.")
-    var actions: [ActionChoisie]
-}
-
-/// Foundation Models sur l'appareil. La fenêtre de 4 096 tokens étant partagée entre
-/// l'entrée et la sortie, la transcription est découpée en passages d'environ cinq minutes.
+/// Foundation Models sur l'appareil, à la façon de Cairn : chaque passage donne ses sujets, ses décisions et
+/// ses actions, fusionnés ici, puis l'essentiel s'écrit à partir des sujets. La fenêtre de 4 096 tokens étant
+/// partagée entre l'entrée et la sortie, la transcription est découpée en passages selon sa longueur réelle.
 public struct AnalysteLocal: Analyste {
     public let nom = "Local · Apple Intelligence"
-    static let dureePassage = 300.0
-    static let motsMinimum = 4
+    /// Tokens de transcription par passage : il reste la place de la consigne et d'une réponse.
+    static let budgetPassage = 2_200
+    static let reponsePassage = 500
+    static let reponseSynthese = 400
 
     public init() {}
 
     /// Résumer les mots de quelqu'un, c'est les transformer, d'où ces garde-fous : ceux par défaut
     /// refusent parfois un passage pour un mot sorti de son contexte.
-    private func session(_ consigne: String) -> LanguageModelSession {
-        LanguageModelSession(model: SystemLanguageModel(guardrails: .permissiveContentTransformations), instructions: consigne)
-    }
+    private let modele = SystemLanguageModel(guardrails: .permissiveContentTransformations)
 
-    /// Partagée par les quatre consignes qui lisent une transcription marquée (ici et dans
+    /// Partagée par les consignes qui lisent une transcription marquée (ici et dans
     /// `AnalysteMistral.consigne`), pour n'écrire qu'une fois ce que signifie la mention.
     static let consigneEcho = """
      Une ligne « écho probable » est peut-être ce que le micro a capté du haut-parleur plutôt qu'une vraie réponse : \
     elle peut servir de preuve, mais ne conclus pas que c'est « moi » qui l'a dite, et ne la compte pas comme \
     une deuxième occurrence de ce qu'elle répète.
     """
-    /// Le modèle ne recopie ni n'écrit rien : il choisit des numéros de lignes, une catégorie à la fois.
-    /// Le texte rendu est donc toujours celui de la transcription.
-    private static let consigneCommune = """
-    Tu relis la transcription d'une réunion, ligne par ligne. Chaque ligne a un numéro. \
-    Renvoie seulement les numéros demandés. Sois attentif : ne manque aucune ligne qui correspond, \
-    et n'en retiens aucune qui ne correspond pas.
-    """ + consigneEcho
-    static let consigneDecisions = consigneCommune + """
-     Retiens les lignes où un choix est arrêté : ce qui est décidé, retenu, validé, refusé, maintenu ou abandonné. \
-    Pas les avis, les préférences, les constats, les questions ni les tâches à faire.
-    """
-    static let consigneActions = consigneCommune + """
-     Retiens les lignes qui disent qu'une tâche précise est à faire : quelqu'un fait, envoie, appelle, réserve, écrit ou demande quelque chose. \
-    Pas les choix arrêtés, les constats, les questions ni les simples accords.
-    """
-    static let consigneEnBref = """
-    Tu résumes une réunion en français, en deux ou trois phrases simples, pour quelqu'un qui veut savoir \
-    en dix secondes ce qui s'est dit. Tu ne t'appuies que sur les lignes numérotées qu'on te donne, et tu indiques \
-    celles que chaque phrase résume. Tu n'inventes ni nom, ni date, ni chiffre. Ce qui a été promis n'est pas encore fait.
-    """ + consigneEcho
-    static let consigneSujets = """
-    Tu relis la transcription d'une réunion, ligne par ligne. Chaque ligne a un numéro. \
-    Découpe-la en sujets abordés, un à six, dans l'ordre. Un sujet réunit des lignes qui se suivent. \
-    Ne compte pas les politesses comme un sujet. Son titre reprend des mots de ces lignes, tels quels.
-    """ + consigneEcho
-    static let consigneQuestions = consigneCommune + """
-     Retiens les lignes qui posent une vraie question sur le travail, à laquelle les lignes suivantes ne répondent pas. \
-    Pas les questions de politesse, ni celles qui reçoivent une réponse.
-    """
-
-    static func decouper(_ segments: [Segment], duree: Double = dureePassage) -> [[Segment]] {
-        var passages: [[Segment]] = []
-        var courant: [Segment] = []
-        for segment in segments.sorted(by: { $0.debut < $1.debut }) {
-            if let premier = courant.first, segment.debut - premier.debut >= duree {
-                passages.append(courant)
-                courant = []
-            }
-            courant.append(segment)
-        }
-        if !courant.isEmpty { passages.append(courant) }
-        return passages
-    }
 
     /// Une phrase de la transcription, numérotée pour le modèle.
     struct Ligne {
@@ -694,97 +684,90 @@ public struct AnalysteLocal: Analyste {
         return texte
     }
 
-    static func element(_ numero: Int, dans lignes: [Ligne], responsable: String? = nil, echeance: String? = nil) -> ElementSource? {
-        guard lignes.indices.contains(numero - 1) else { return nil }
-        let ligne = lignes[numero - 1]
-        return ElementSource(texte: ligne.phrase, sources: [ligne.debut], citation: ligne.phrase, responsable: responsable, echeance: echeance)
+    /// Une puce rédigée et la phrase de sa ligne, sa preuve. Le numéro doit exister.
+    static func element(_ puce: Gabarit.Puce, dans lignes: [Ligne], responsable: String? = nil) -> ElementSource? {
+        guard lignes.indices.contains(puce.ligne - 1) else { return nil }
+        let ligne = lignes[puce.ligne - 1]
+        return ElementSource(texte: puce.texte, sources: [ligne.debut], citation: ligne.phrase, responsable: responsable)
     }
 
-    private func analyserPassage(_ passage: [Segment], notes: [LigneDeNote], type: TypeReunion) async throws -> PassageChoisi {
-        let lignes = Self.lignes(de: passage)
-        let texte = Self.invite(lignes, notes: notes, type: type)
+    /// Les lignes rangées en passages d'au plus `budget` tokens estimés, coupés entre deux lignes.
+    static func passages(_ lignes: [Ligne], budget: Int = budgetPassage) -> [[Ligne]] {
+        var sortie: [[Ligne]] = []
+        var courant: [Ligne] = []
+        var estime = 0
+        for ligne in lignes {
+            let cout = max(1, ligne.phrase.count / 3)
+            if !courant.isEmpty, estime + cout > budget {
+                sortie.append(courant)
+                courant = []
+                estime = 0
+            }
+            courant.append(ligne)
+            estime += cout
+        }
+        if !courant.isEmpty { sortie.append(courant) }
+        return sortie
+    }
+
+    /// Un passage lu par le modèle, gardé seulement s'il tient sur ses preuves.
+    struct PassageChoisi {
+        var decisions: [ElementSource] = []
+        var actions: [ElementSource] = []
+        var questions: [ElementSource] = []
+        var sujets: [Sujet] = []
+        var ecartes = 0
+    }
+
+    static func choisir(_ lu: Gabarit.PassageLu, dans lignes: [Ligne], segments: [Segment], noms: [String] = []) -> PassageChoisi {
+        var choisi = PassageChoisi()
+        func garder(_ puce: Gabarit.Puce, responsable: String? = nil) -> ElementSource? {
+            guard let brut = element(puce, dans: lignes, responsable: responsable),
+                  let valide = ValidationSources.valider(brut, dans: segments, noms: noms) else {
+                choisi.ecartes += 1
+                return nil
+            }
+            return valide
+        }
+        choisi.decisions = lu.decisions.compactMap { garder($0) }
+        choisi.actions = lu.actions.compactMap { puce in
+            let (tache, responsable) = Gabarit.action(puce.texte)
+            return garder(Gabarit.Puce(ligne: puce.ligne, texte: tache), responsable: responsable)
+        }
+        choisi.questions = lu.questions.compactMap { garder($0) }
+        let dits = Set(ValidationSources.normaliser((lignes.map(\.phrase) + lignes.compactMap(\.voix) + noms).joined(separator: " ")).split(separator: " ").map(String.init))
+        choisi.sujets = lu.sujets.compactMap { sujet in
+            let points = sujet.points.compactMap { garder($0) }
+            let temps = points.flatMap(\.sources)
+            guard let debut = temps.min(), let fin = temps.max() else { return nil }
+            let titre = DecoupageSujets.titreRedige(sujet.titre, lu: dits) ? sujet.titre : (points.first?.texte ?? sujet.titre)
+            return Sujet(titre: titre, debut: debut, fin: fin, points: points)
+        }
+        return choisi
+    }
+
+    private func repondre(_ question: String, consigne: String, maximum: Int) async throws -> String {
+        let session = LanguageModelSession(model: modele, instructions: consigne)
         // Sans tirage au hasard : la même réunion donne le même compte rendu.
-        let options = GenerationOptions(sampling: .greedy)
+        return try await session.respond(to: question, options: GenerationOptions(sampling: .greedy, maximumResponseTokens: maximum)).content
+    }
+
+    private func lirePassage(_ lignes: [Ligne], notes: [LigneDeNote], type: TypeReunion, contexte: String) async throws -> [(Gabarit.PassageLu, [Ligne])] {
+        let question = "\(contexte)\n\nVoici un passage de la transcription d'une réunion.\n\n\(Self.invite(lignes, notes: notes, type: type))\n\n\(Gabarit.passage)"
         do {
-            let decisions = try await session(Self.consigneDecisions)
-                .respond(to: texte, generating: LignesChoisies.self, options: options).content.lignes
-            let actions = try await session(Self.consigneActions)
-                .respond(to: texte, generating: ActionsChoisies.self, options: options).content.actions
-            let questions = try await session(Self.consigneQuestions)
-                .respond(to: texte, generating: LignesChoisies.self, options: options).content.lignes
-            // « Très bien » ou « ok ça marche » ne disent rien à eux seuls, même si le modèle les retient.
-            func parlante(_ numero: Int) -> Bool {
-                !lignes.indices.contains(numero - 1)
-                    || ValidationSources.normaliser(lignes[numero - 1].phrase).split(separator: " ").count >= Self.motsMinimum
-            }
-            var choisi = PassageChoisi(decisions: [], actions: [], questions: [])
-            for numero in decisions where parlante(numero) {
-                if await confirmer(numero, dans: lignes, consigne: Self.consigneDecisions, options: options) {
-                    choisi.decisions.append(Self.element(numero, dans: lignes))
-                }
-            }
-            for action in actions where parlante(action.ligne) {
-                if await confirmer(action.ligne, dans: lignes, consigne: Self.consigneActions, options: options) {
-                    choisi.actions.append(Self.element(action.ligne, dans: lignes, responsable: action.responsable, echeance: action.echeance))
-                }
-            }
-            for numero in questions where parlante(numero) {
-                if await confirmer(numero, dans: lignes, consigne: Self.consigneQuestions, options: options) {
-                    choisi.questions.append(Self.element(numero, dans: lignes))
-                }
-            }
-            // Sans sujets, le compte rendu reste utile : un refus ici ne fait pas tomber le passage.
-            if let sujets = try? await session(Self.consigneSujets).respond(to: texte, generating: SujetsChoisis.self, options: options).content.sujets {
-                let proposes = sujets.map { DecoupageSujets.Propose(titre: $0.titre, premiere: $0.premiere, derniere: $0.derniere) }
-                choisi.sujets = DecoupageSujets.valider(proposes, phrases: lignes.map(\.phrase), debuts: lignes.map(\.debut),
-                                                        fin: passage.last?.fin ?? 0)
-            }
-            return choisi
-        } catch LanguageModelSession.GenerationError.exceededContextWindowSize where passage.count > 1 {
+            if lignes.count > 1, try await modele.tokenCount(for: question) > 3_400 { throw LanguageModelSession.GenerationError.exceededContextWindowSize(.init(debugDescription: "passage trop long")) }
+            let reponse = try await repondre(question, consigne: Gabarit.secretaire + Self.consigneEcho, maximum: Self.reponsePassage)
+            return [(Gabarit.lirePassage(reponse), lignes)]
+        } catch LanguageModelSession.GenerationError.exceededContextWindowSize where lignes.count > 1 {
             // Un passage trop dense pour la fenêtre : on le coupe en deux.
-            let milieu = passage.count / 2
-            let a = try await analyserPassage(Array(passage[..<milieu]), notes: notes, type: type)
-            let b = try await analyserPassage(Array(passage[milieu...]), notes: notes, type: type)
-            return PassageChoisi(decisions: a.decisions + b.decisions, actions: a.actions + b.actions, questions: a.questions + b.questions,
-                                 sujets: a.sujets + b.sujets)
+            let milieu = lignes.count / 2
+            let a = try await lirePassage(Array(lignes[..<milieu]), notes: notes, type: type, contexte: contexte)
+            let b = try await lirePassage(Array(lignes[milieu...]), notes: notes, type: type, contexte: contexte)
+            return a + b
         }
     }
 
-    /// La phrase d'une ligne, avec sa mention d'écho probable si elle est marquée : la seconde lecture
-    /// doit la voir, comme la première passe la voit dans `invite`.
-    static func contexte(_ ligne: Ligne) -> String {
-        ligne.echoProbable ? "\(ligne.phrase) (écho probable)" : ligne.phrase
-    }
-
-    /// Seconde lecture de chaque ligne retenue, avec ses voisines : la première passe en retient trop.
-    /// Si le modèle refuse de répondre, la ligne reste : le passage entier ne doit pas tomber pour autant.
-    private func confirmer(_ numero: Int, dans lignes: [Ligne], consigne: String, options: GenerationOptions) async -> Bool {
-        guard lignes.indices.contains(numero - 1) else { return true }
-        let voisines = max(0, numero - 3)...min(lignes.count - 1, numero + 1)
-        let contexte = voisines.map { ($0 == numero - 1 ? ">>> " : "") + Self.contexte(lignes[$0]) }.joined(separator: "\n")
-        let reponse = try? await session(consigne + " La ligne à juger est marquée >>>.")
-            .respond(to: contexte, generating: Confirmation.self, options: options)
-        return reponse?.content.correspond ?? true
-    }
-
-    /// Ce qu'un passage a retenu. nil : un numéro de ligne qui n'existe pas.
-    private struct PassageChoisi {
-        var decisions: [ElementSource?]
-        var actions: [ElementSource?]
-        var questions: [ElementSource?]
-        var sujets: [Sujet] = []
-    }
-
-    /// Les lignes numérotées envoyées au modèle pour « En bref », chacune marquée « (écho probable) »
-    /// si son moment source vient d'une ligne marquée : la validation qui suit (`EnBref.valider`)
-    /// reçoit elle le texte brut, sans la mention, pour ne pas la prendre pour un mot dit.
-    static func retenusEnBref(_ retenus: [(texte: String, debut: Double)], marques: Set<Double>) -> String {
-        retenus.enumerated().map { offset, retenu in
-            let texte = marques.contains(retenu.debut) ? "\(retenu.texte) (écho probable)" : retenu.texte
-            return "\(offset + 1). \(texte)"
-        }.joined(separator: "\n")
-    }
-
+    /// Les prénoms déjà donnés aux voix comptent comme dits : ils sont dans l'invite.
     public func analyser(segments: [Segment], notes: [LigneDeNote], type: TypeReunion,
                          progression: @escaping @Sendable (Double) -> Void) async throws -> CompteRendu {
         guard !segments.isEmpty else { throw ErreurAnalyse.rienAAnalyser }
@@ -793,33 +776,27 @@ public struct AnalysteLocal: Analyste {
         case let .unavailable(raison): throw ErreurAnalyse.indisponible(String(describing: raison))
         }
 
-        let passages = Self.decouper(segments)
+        let ordonnes = segments.sorted { $0.debut < $1.debut }
+        let toutes = Self.lignes(de: ordonnes)
+        let contexte = Gabarit.contexte(lignes: toutes, type: type, moi: NSFullUserName().split(separator: " ").first.map(String.init) ?? "moi")
+        let passages = Self.passages(toutes)
         var decisions: [ElementSource] = []
         var actions: [ElementSource] = []
         var questions: [ElementSource] = []
+        var sujets: [Sujet] = []
         var echecs = 0
         var ecartes = 0
 
-        // Une ligne n'apparaît qu'une fois : une décision prime sur une action, une action sur une question.
-        var sujets: [Sujet] = []
-        var vues = Set<String>()
-        func garder(_ choisis: [ElementSource?]) -> [ElementSource] {
-            choisis.compactMap { choisi in
-                guard let choisi, let valide = ValidationSources.valider(choisi, dans: segments) else {
-                    ecartes += 1
-                    return nil
-                }
-                return vues.insert("\(valide.sources) \(valide.texte)").inserted ? valide : nil
-            }
-        }
-
         for (rang, passage) in passages.enumerated() {
             do {
-                let choisi = try await analyserPassage(passage, notes: notes, type: type)
-                decisions += garder(choisi.decisions)
-                actions += garder(choisi.actions)
-                questions += garder(choisi.questions)
-                sujets += choisi.sujets
+                for (lu, lignes) in try await lirePassage(passage, notes: notes, type: type, contexte: contexte) {
+                    let choisi = Self.choisir(lu, dans: lignes, segments: ordonnes)
+                    decisions += choisi.decisions
+                    actions += choisi.actions
+                    questions += choisi.questions
+                    sujets += choisi.sujets
+                    ecartes += choisi.ecartes
+                }
             } catch {
                 // Un passage refusé par le modèle ne bloque pas les autres, et il est compté.
                 echecs += 1
@@ -828,23 +805,67 @@ public struct AnalysteLocal: Analyste {
         }
         guard echecs < passages.count else { throw ErreurAnalyse.aucunPassage }
 
-        // « En bref » se rédige à partir de ce qui a été retenu : une longue réunion tient ainsi dans la fenêtre.
-        let retenus: [(texte: String, debut: Double)] = (decisions + actions + questions)
-            .compactMap { element in element.sources.first.map { (texte: element.texte, debut: $0) } }
-            + sujets.map { (texte: $0.titre, debut: $0.debut) }
+        let finales = Self.assembler(decisions: decisions, actions: actions, questions: questions, sujets: sujets, fin: ordonnes.last?.fin ?? 0)
+
+        // L'essentiel s'écrit à partir des sujets : le modèle ne reçoit plus la transcription.
+        let points = finales.sujets.flatMap { $0.points ?? [] }
         var enBref: [PhraseSourcee]?
-        if !retenus.isEmpty {
-            let marques = Set(segments.filter { $0.echoProbable ?? false }.map(\.debut))
-            let liste = Self.retenusEnBref(retenus, marques: marques)
-            if let genere = try? await session(Self.consigneEnBref).respond(to: liste, generating: EnBrefGenere.self, options: GenerationOptions(sampling: .greedy)).content {
-                let valides = EnBref.valider(genere.phrases.map { .init(texte: $0.texte, lignes: $0.lignes) },
-                                             phrases: retenus.map(\.0), debuts: retenus.map(\.1))
-                enBref = valides.isEmpty ? nil : valides
+        var pointsCles: [ElementSource]?
+        if !points.isEmpty {
+            let liste = points.enumerated().map { "\($0.offset + 1). \($0.element.texte)" }.joined(separator: "\n")
+            let question = "\(contexte)\n\nLes points de la réunion :\n\(liste)\n\n\(Gabarit.synthese)"
+            if let reponse = try? await repondre(question, consigne: Gabarit.secretaire, maximum: Self.reponseSynthese) {
+                let lu = Gabarit.lireSynthese(reponse)
+                enBref = Self.enBref(lu.enBref, points: points, segments: ordonnes)
+                pointsCles = Self.pointsCles(lu.points, points: points)
             }
         }
 
         progression(1)
-        return CompteRendu(fournisseur: nom, decisions: decisions, actions: actions, questions: questions, sujets: sujets, enBref: enBref,
+        return CompteRendu(fournisseur: nom, decisions: finales.decisions, actions: finales.actions, questions: finales.questions,
+                           sujets: finales.sujets, enBref: enBref, pointsCles: pointsCles,
                            passagesNonAnalyses: echecs, elementsEcartes: ecartes)
+    }
+
+    /// Fusionné ici plutôt que rendu au modèle : devant une page de notes à réécrire, il mêle qui fait quoi
+    /// et se répète. Une action prime sur une décision, une décision sur une question.
+    static func assembler(decisions: [ElementSource], actions: [ElementSource], questions: [ElementSource], sujets: [Sujet], fin: Double)
+        -> (decisions: [ElementSource], actions: [ElementSource], questions: [ElementSource], sujets: [Sujet]) {
+        let actionsGardees = Array(Gabarit.distincts(actions).prefix(Gabarit.maxActions))
+        let decisionsGardees = Array(Gabarit.distincts(decisions, autres: actionsGardees).prefix(Gabarit.maxDecisions))
+        let questionsGardees = Array(Gabarit.distincts(questions, autres: actionsGardees + decisionsGardees).prefix(Gabarit.maxQuestions))
+        var fusionnes = Array(Gabarit.fusionner(sujets).prefix(Gabarit.maxSujets)).sorted { $0.debut < $1.debut }
+        for rang in fusionnes.indices {
+            fusionnes[rang].points = fusionnes[rang].points.map { Array($0.prefix(Gabarit.maxPointsParSujet)) }
+            let suivant = rang + 1 < fusionnes.count ? fusionnes[rang + 1].debut : fin
+            fusionnes[rang].fin = max(fusionnes[rang].fin, suivant)
+        }
+        return (decisionsGardees, actionsGardees, questionsGardees, fusionnes)
+    }
+
+    /// Les sources d'une phrase de synthèse : le point dont elle reprend le plus de mots.
+    static func enBref(_ phrases: [String], points: [ElementSource], segments: [Segment]) -> [PhraseSourcee]? {
+        let lu = Set(ValidationSources.normaliser(segments.map(\.texte).joined(separator: " ")).split(separator: " ").map(String.init))
+            .union(ValidationSources.normaliser(segments.compactMap(\.voix).joined(separator: " ")).split(separator: " ").map(String.init))
+        let gardees = phrases.compactMap { phrase -> PhraseSourcee? in
+            guard EnBref.motsNonDits(phrase, lu: lu).isEmpty else { return nil }
+            let mots = Gabarit.mots(phrase)
+            let proche = points.max { Gabarit.recouvrement(mots, Gabarit.mots($0.texte)) < Gabarit.recouvrement(mots, Gabarit.mots($1.texte)) }
+            return proche.map { PhraseSourcee(texte: phrase, sources: $0.sources) }
+        }
+        return gardees.isEmpty ? nil : gardees
+    }
+
+    /// Un point clé reprend la source et la citation du point dont il porte le numéro.
+    static func pointsCles(_ puces: [Gabarit.Puce], points: [ElementSource]) -> [ElementSource]? {
+        let gardes = puces.compactMap { puce -> ElementSource? in
+            guard points.indices.contains(puce.ligne - 1) else { return nil }
+            var point = points[puce.ligne - 1]
+            point.id = UUID()
+            point.texte = puce.texte
+            return point
+        }
+        let distincts = Array(Gabarit.distincts(gardes).prefix(Gabarit.maxPointsCles))
+        return distincts.isEmpty ? nil : distincts
     }
 }
