@@ -134,3 +134,34 @@ private func dit(_ titre: String, _ phrase: String = "budget") -> Bool {
     #expect(!dit("3D", "3 D"))
     #expect(!dit("Q3", "Q 3"))
 }
+
+@Test func elisionsCourantesSontAccepteesSansExempterLesLettresSeules() {
+    for apostrophe in ["'", "’"] {
+        for (debut, suite) in [("C", "est validé"), ("J", "ai confirmé"), ("M", "organiser"),
+                               ("N", "oublie pas"), ("S", "organiser"), ("T", "organiser"), ("Qu", "on confirme")] {
+            let titre = debut + apostrophe + suite
+            #expect(dit(titre, titre))
+            #expect(dit(titre.lowercased(), suite))
+            #expect(!dit(debut + apostrophe + " " + suite, suite))
+            #expect(!dit(debut + apostrophe + "5", "5"))
+            #expect(!dit(titre, "budget"))
+        }
+    }
+    for lettre in ["C", "J", "M", "N", "S", "T", "c", "j", "m", "n", "s", "t"] {
+        #expect(!dit("Plan " + lettre, "Plan " + lettre))
+    }
+    #expect(!dit("Taille S", "Taille S"))
+}
+
+@Test func tiretsLongsSeparentSeulementDesMots() {
+    for tiret in ["—", "–"] {
+        for titre in ["Budget \(tiret) tournée", "Budget\(tiret)tournée"] {
+            #expect(dit(titre, "Budget tournée"))
+            #expect(titreValide(titre, dans: "Budget tournée confirmé.") == titre)
+        }
+        for titre in ["10 \(tiret) 12", "Budget \(tiret)5", "Budget \(tiret) 5", "5\(tiret)Budget",
+                      "5 \(tiret) Budget", "\(tiret) Budget", "Budget \(tiret)"] {
+            #expect(!dit(titre, "Budget 5 10 12"))
+        }
+    }
+}

@@ -447,7 +447,7 @@ public enum DecoupageSujets {
     private static let motsGrammaticaux: Set<String> = [
         "à", "au", "aux", "de", "des", "du", "en", "et", "la", "le", "les"
     ]
-    private static let caracteresInterdits = try! NSRegularExpression(pattern: #"[^\p{L}\p{N}\p{M}\s'’\-,.:()«»"]"#)
+    private static let caracteresInterdits = try! NSRegularExpression(pattern: #"[^\p{L}\p{N}\p{M}\s'’\-—–,.:()«»"]"#)
     private static let nombresAmbigus = try! NSRegularExpression(pattern: #"\d[^\p{L}\p{N}]+\d|-\s*\d"#)
     private static let motsTitre = try! NSRegularExpression(pattern: #"[\p{L}\p{N}\p{M}]+"#)
     private static let lettreInitiale = try! NSRegularExpression(pattern: #"^\p{L}"#)
@@ -459,6 +459,12 @@ public enum DecoupageSujets {
         let entier = NSRange(location: 0, length: texte.length)
         guard caracteresInterdits.firstMatch(in: titre, range: entier) == nil,
               nombresAmbigus.firstMatch(in: titre, range: entier) == nil else { return false }
+        // Les tirets longs séparent des mots, jamais des nombres ou un bord de titre.
+        for index in titre.indices where titre[index] == "—" || titre[index] == "–" {
+            let avant = titre[..<index].trimmingCharacters(in: .whitespacesAndNewlines)
+            let apres = titre[titre.index(after: index)...].trimmingCharacters(in: .whitespacesAndNewlines)
+            guard avant.last?.isLetter == true, apres.first?.isLetter == true else { return false }
+        }
         var porteur = false
         for correspondance in motsTitre.matches(in: titre, range: entier) {
             let brut = texte.substring(with: correspondance.range)
@@ -468,7 +474,7 @@ public enum DecoupageSujets {
             let apres = suite + 1
             let lettreApres = apres < texte.length && lettreInitiale.firstMatch(
                 in: texte.substring(from: apres), range: NSRange(location: 0, length: texte.length - apres)) != nil
-            let elision = ["l", "d"].contains(minuscule) && apostrophe && lettreApres
+            let elision = ["l", "d", "c", "j", "m", "n", "s", "t", "qu"].contains(minuscule) && apostrophe && lettreApres
             let capitales = brut == brut.uppercased()
             guard !(brut.count == 1 && brut.first!.isLetter && !["à", "À"].contains(brut) && !elision),
                   !(capitales && (motsGrammaticaux.contains(minuscule) || ["un", "une"].contains(minuscule)) && brut != "À") else { return false }
