@@ -226,3 +226,12 @@ Prévus après la v1, dans cet ordre, et dessinés sur le canvas (sauf la détec
 | 3 | Analyse locale découpée, validation des sources, relecture | Un compte rendu dont chaque ligne se vérifie |
 | 4 | PCC et le fournisseur externe | La même réunion analysée par les trois, comparée |
 | 5 | Export, finitions | Cairn n'est plus ouvert |
+
+## Arbitrages V0.5 — décision de Steven du 2026-11-05
+
+Ces choix remplacent les indications antérieures correspondantes :
+- Un clic sélectionne et montre le passage sans lancer le son. Seul « Écouter ce passage » lance l'écoute.
+- Le démarrage est en haut de la barre latérale : modes Visio et Présentiel explicites, « Préparer » secondaire. En réunion, ce bloc montre le titre, « Enregistrement en cours », le chrono et le retour, sans second démarrage.
+- Le titre du compte rendu contient uniquement le nom de la réunion ; le dossier figure dans le lien de retour. Pas de virgule en italique ni de titre automatiquement proposé par le modèle en V0.5.
+
+Le grand chrono reste réservé à l'enregistrement. Dans le compte rendu, le repère compact « Passage à 04:12 » accompagne « Écouter ce passage » (arbitrage technique de Pickle, 2026-11-05).
