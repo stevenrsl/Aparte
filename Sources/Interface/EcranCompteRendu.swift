@@ -118,12 +118,12 @@ struct EcranCompteRendu: View {
                     Button("Arrêter") { lecteur.arreter() }.buttonStyle(BoutonSignal())
                 } else {
                     Button("Écouter ce passage") { lecteur.lire(a: selection?.sources.first ?? 0) }
-                        .buttonStyle(BoutonSignal())
+                        .buttonStyle(BoutonEcouteDiscret())
                         .disabled(!lecteur.disponible)
                 }
             }
         } contenuEncre: {
-            Bulles(segments: passage, type: reunion.meta.type, sources: Set(selection?.sources ?? []), reunion: reunion, modele: modele)
+            Bulles(segments: passage, type: reunion.meta.type, sources: Set(selection?.sources ?? []), discret: true, reunion: reunion, modele: modele)
         }
         .onAppear {
             titre = reunion.meta.titre
@@ -269,7 +269,7 @@ struct EcranCompteRendu: View {
             }
             HStack(alignment: .top, spacing: 14) {
                 Color.terracotta.frame(width: 3)
-                Text(compteRendu.apercu).font(Typo.resume).textSelection(.enabled)
+                Text(compteRendu.apercu).font(Typo.resume).lineSpacing(7).textSelection(.enabled)
             }
             .fixedSize(horizontal: false, vertical: true)
             if let enBref = compteRendu.enBref, !enBref.isEmpty {
@@ -290,7 +290,7 @@ struct EcranCompteRendu: View {
                 NSPasteboard.general.setString(compteRendu.texteACopier(incidents: reunion.meta.incidentsAudio ?? []), forType: .string)
                 copie = true
             }
-            .buttonStyle(BoutonPrincipal())
+            .buttonStyle(BoutonSecondaire())
             menuRefaire
         } }
         incidentsAudio
@@ -450,5 +450,17 @@ private extension View {
         } message: {
             Text("La transcription et tes notes partent chez Mistral pour cette analyse. L'audio reste sur ce Mac.")
         }
+    }
+}
+
+// Écart local au brief : le contour réserve l'aplat argile au passage choisi.
+private struct BoutonEcouteDiscret: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(Typo.texteDemiGras)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 9)
+            .foregroundStyle(Color.colonneTexte)
+            .overlay { Rectangle().strokeBorder(Color.colonneDoux, lineWidth: 1) }
     }
 }

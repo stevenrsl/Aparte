@@ -75,6 +75,7 @@ func rendreLesEcrans() async throws {
     try await rendre("compte-rendu", .compteRendu(relue))
     try await rendre("compte-rendu-sombre", .compteRendu(relue), sombre: true)
     try await rendre("passage-selectionne", .compteRendu(relue, moment: 80))
+    try await rendre("passage-selectionne-sombre", .compteRendu(relue, moment: 80), sombre: true)
     // Une nouvelle vue sans moment présente toute la transcription.
     try await rendre("transcription-complete", .compteRendu(relue))
     let action = try #require(compteRendu.actions.first)
@@ -103,6 +104,7 @@ func rendreLesEcrans() async throws {
     try await rendre("sans-analyse", .compteRendu(aAnalyser))
     modele.analyser(aAnalyser, avec: AnalysteSuspendu(), signaler: false)
     try await rendre("redaction", .compteRendu(aAnalyser))
+    try await rendre("redaction-sombre", .compteRendu(aAnalyser), sombre: true)
     // L'analyse simulée est annulée par son propre délai, sans réseau ni moteur réel.
     while modele.analyses[aAnalyser.id] != nil { try await Task.sleep(for: .milliseconds(20)) }
     modele.analyser(aAnalyser, avec: AnalysteEnPanne(), signaler: false)

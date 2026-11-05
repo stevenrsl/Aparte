@@ -110,6 +110,7 @@ struct Bulles: View {
     let type: TypeReunion
     var sources: Set<Double> = []
     var suivre = false
+    var discret = false
     /// Pour nommer les voix, une fois la réunion relue.
     var reunion: Reunion?
     var modele: ModeleApp?
@@ -183,8 +184,8 @@ struct Bulles: View {
             Text(segment.texte)
                 .textSelection(.enabled)
                 .padding(10)
-                .background(moi ? Color.argile : Color.bulleEux)
-                .foregroundStyle(moi ? Color.encreColonne : Color.colonneTexte)
+                .background(discret ? (source ? Color.argile : (moi ? Color(red: 0x60 / 255, green: 0x4D / 255, blue: 0x43 / 255) : Color.bulleEux)) : (moi ? Color.argile : Color.bulleEux))
+                .foregroundStyle(discret ? (source ? Color.encreColonne : Color.colonneTexte) : (moi ? Color.encreColonne : Color.colonneTexte))
                 .overlay(alignment: .leading) {
                     if source { Color.argile.frame(width: 3) }
                 }

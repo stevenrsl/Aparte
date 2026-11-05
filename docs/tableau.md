@@ -32,3 +32,5 @@ dans le [plan des agents](plan-agents.md).
 | Finalisation et sélection des sources V0.5 | Panko | `v05-compte-rendu-panko` | en relecture, validation visuelle et silence à compléter | `Sources/Interface/`, `Tests/InterfaceTests/` |
 
 | Rendus des états du compte rendu V0.5 | Panko | `v05-compte-rendu-panko` | en relecture, relecture et alertes à rendre | `Tests/InterfaceTests/RendusEcrans.swift`, `docs/tableau.md` |
+
+| Hiérarchie visuelle du compte rendu | Panko | `v05-compte-rendu-panko` | en relecture | `Sources/Interface/`, `Tests/InterfaceTests/RendusEcrans.swift`, `docs/tableau.md` |
