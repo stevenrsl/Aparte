@@ -69,7 +69,7 @@ func rendreLesEcrans() async throws {
         fenetre.orderOut(nil)
         try #require(image.representation(using: .png, properties: [:])).write(to: sortie.appendingPathComponent("\(nom).png"))
     }
-    let relue = try #require(modele.reunions.first)
+    let relue = try #require(modele.reunions.first { $0.id == reunion.id })
     try await rendre("accueil", .accueil)
     try await rendre("accueil-sombre", .accueil, sombre: true)
     try await rendre("toutes", .toutes)
