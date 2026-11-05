@@ -44,15 +44,23 @@ struct EcranCompteRendu: View {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Mes notes").font(Typo.titreSection).italic()
                             ForEach(notes) { note in
-                                HStack(alignment: .firstTextBaseline, spacing: 12) {
-                                    PuceSource(temps: note.temps) { choisir(ElementSource(texte: note.texte, sources: [note.temps])) }
-                                    Text(note.texte).font(Typo.note).textSelection(.enabled)
+                                Button { choisir(ElementSource(texte: note.texte, sources: [note.temps])) } label: {
+                                    HStack(alignment: .firstTextBaseline, spacing: 12) {
+                                        Text(horodatage(note.temps)).font(Typo.horodatage)
+                                        Text(note.texte).font(Typo.note).multilineTextAlignment(.leading)
+                                        Spacer(minLength: 0)
+                                    }.contentShape(Rectangle())
                                 }
+                                .buttonStyle(.plain)
+                                .accessibilityHint("Affiche le passage de la transcription")
                             }
                         }
                     }
-                    if let compteRendu { sectionSujets(compteRendu.sujets ?? []) }
-                    if compteRendu == nil { voixANommer }
+                    if let compteRendu {
+                        sectionSujets(compteRendu.sujets ?? [])
+                        section("points clés", compteRendu.pointsCles ?? [])
+                    }
+                    voixANommer
 
                 }
                 .padding(.horizontal, 36)
@@ -82,6 +90,9 @@ struct EcranCompteRendu: View {
             notes = reunion.notes()
             lecteur.charger(reunion)
             if let moment { selectionnerMoment(moment) }
+        }
+        .onChange(of: moment) { _, nouveau in
+            if let nouveau { selectionnerMoment(nouveau) }
         }
         .onExitCommand { selection = nil; lecteur.arreter() }
         .onDisappear { lecteur.arreter() }
@@ -117,8 +128,11 @@ struct EcranCompteRendu: View {
 
     private func selectionnerMoment(_ moment: Double) {
         let elements = (compteRendu?.decisions ?? []) + (compteRendu?.actions ?? []) + (compteRendu?.questions ?? [])
-        selection = elements.first { $0.sources.contains { abs($0 - moment) < 0.01 } }
+        let element = elements.first { $0.sources.contains { abs($0 - moment) < 0.01 } }
+            ?? notes.first { abs($0.temps - moment) < 0.01 }.map { ElementSource(texte: $0.texte, sources: [$0.temps]) }
+            ?? compteRendu?.sujets?.first { $0.contient(moment) }.map { ElementSource(texte: $0.titre, sources: [$0.debut, $0.fin]) }
             ?? ElementSource(texte: "", sources: [moment])
+        choisir(element)
     }
 
     /// Le compte rendu avec les noms donnés depuis l'analyse.
@@ -134,8 +148,10 @@ struct EcranCompteRendu: View {
 
     private var sansAnalyse: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text(segments.isEmpty ? "Aucune phrase n'a été transcrite." : "\(segments.count) phrases transcrites. Pas encore d'analyse.")
-                .foregroundStyle(Color.encreDouce)
+            if !occupee {
+                Text(segments.isEmpty ? "Aucune phrase n'a été transcrite." : "\(segments.count) phrases transcrites. Pas encore de compte rendu.")
+                    .foregroundStyle(Color.encreDouce)
+            }
             // Sans phrase, analyser ne fait rien : ces boutons ne seraient que des promesses.
             if !segments.isEmpty && !occupee {
                 HStack(spacing: 10) {
@@ -208,7 +224,6 @@ struct EcranCompteRendu: View {
     }
 
     @ViewBuilder private func analyse(_ compteRendu: CompteRendu) -> some View {
-        bandeauFraicheur(compteRendu)
         VStack(alignment: .leading, spacing: 8) {
             if let enBref = compteRendu.enBref, !enBref.isEmpty {
                 Libelle("en bref · rédigé par \(compteRendu.fournisseur)")
@@ -226,6 +241,7 @@ struct EcranCompteRendu: View {
                 }
             }
         }
+        bandeauFraicheur(compteRendu)
         if compteRendu.passagesNonAnalyses > 0 || compteRendu.elementsEcartes > 0 {
             Libelle("\(accord(compteRendu.passagesNonAnalyses, "passage non analysé", "passages non analysés")) · \(accord(compteRendu.elementsEcartes, "élément écarté", "éléments écartés")) faute de source")
         }
@@ -239,8 +255,6 @@ struct EcranCompteRendu: View {
             menuRefaire
         } }
         incidentsAudio
-        section("points clés", compteRendu.pointsCles ?? [])
-        voixANommer
         section("décisions", compteRendu.decisions)
         section("actions", compteRendu.actions)
         section("questions ouvertes", compteRendu.questions)
@@ -268,6 +282,9 @@ struct EcranCompteRendu: View {
             Button("Sur ce Mac") { modele.analyser(reunion, avec: AnalysteLocal()) }
             Button("Avec Mistral…") { confirmerMistral = true }
                 .disabled(!modele.cleMistralPresente)
+            if !modele.cleMistralPresente {
+                Button("Ajoute ta clé dans les réglages") { modele.ecran = .reglages }
+            }
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
