@@ -6,6 +6,25 @@ import SwiftUI
 import Stockage
 import Transcription
 
+struct CibleDefilement: Equatable {
+    let id: UUID
+    private let demande = UUID()
+}
+
+func sourcePourMoment(_ moment: Double, compteRendu: CompteRendu?, notes: [LigneDeNote]) -> (element: ElementSource, cible: UUID?) {
+    let elements = (compteRendu?.decisions ?? []) + (compteRendu?.actions ?? []) + (compteRendu?.questions ?? [])
+    if let element = elements.first(where: { $0.sources.contains { abs($0 - moment) < 0.01 } }) {
+        return (element, element.id)
+    }
+    if let note = notes.first(where: { abs($0.temps - moment) < 0.01 }) {
+        return (ElementSource(texte: note.texte, sources: [note.temps]), note.id)
+    }
+    if let sujet = compteRendu?.sujets?.first(where: { $0.contient(moment) }) {
+        return (ElementSource(texte: sujet.titre, sources: [sujet.debut, sujet.fin]), sujet.id)
+    }
+    return (ElementSource(texte: "", sources: [moment]), nil)
+}
+
 // MARK: - Compte rendu
 
 struct EcranCompteRendu: View {
@@ -16,7 +35,7 @@ struct EcranCompteRendu: View {
     @State private var segments: [Segment] = []
     @State private var notes: [LigneDeNote] = []
     @State private var selection: ElementSource?
-    @State private var cibleDefilement: UUID?
+    @State private var cibleDefilement: CibleDefilement?
     @State private var confirmerMistral = false
     @State private var lecteur = Lecteur()
     @State private var copie = false
@@ -82,8 +101,10 @@ struct EcranCompteRendu: View {
                 .padding(.horizontal, 36)
                 .padding(.vertical, 22)
             }
-            .onChange(of: cibleDefilement) { _, cible in
-                if let cible { proxy.scrollTo(cible, anchor: .center) }
+            .task(id: cibleDefilement) {
+                guard let cibleDefilement else { return }
+                await Task.yield()
+                proxy.scrollTo(cibleDefilement.id, anchor: .center)
             }
             }
         } enteteEncre: {
@@ -148,15 +169,9 @@ struct EcranCompteRendu: View {
     }
 
     private func selectionnerMoment(_ moment: Double) {
-        let elements = (compteRendu?.decisions ?? []) + (compteRendu?.actions ?? []) + (compteRendu?.questions ?? [])
-        let element = elements.first { $0.sources.contains { abs($0 - moment) < 0.01 } }
-            ?? notes.first { abs($0.temps - moment) < 0.01 }.map { ElementSource(texte: $0.texte, sources: [$0.temps]) }
-            ?? compteRendu?.sujets?.first { $0.contient(moment) }.map { ElementSource(texte: $0.titre, sources: [$0.debut, $0.fin]) }
-            ?? ElementSource(texte: "", sources: [moment])
-        cibleDefilement = elements.first { $0.id == element.id }?.id
-            ?? notes.first { abs($0.temps - moment) < 0.01 }?.id
-            ?? compteRendu?.sujets?.first { $0.contient(moment) }?.id
-        choisir(element)
+        let resultat = sourcePourMoment(moment, compteRendu: compteRendu, notes: notes)
+        cibleDefilement = resultat.cible.map { CibleDefilement(id: $0) }
+        choisir(resultat.element)
     }
 
     /// Le compte rendu avec les noms donnés depuis l'analyse.

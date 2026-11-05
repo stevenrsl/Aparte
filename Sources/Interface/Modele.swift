@@ -117,7 +117,7 @@ public final class ModeleApp {
     /// prochain essai, clic compris.
     public private(set) var echecsAnalyseAuto: [String: String] = [:]
     /// Une clé Mistral est dans le trousseau. Elle-même n'est lue qu'au moment d'envoyer.
-    public private(set) var cleMistralPresente = Trousseau.mistral.presente()
+    public private(set) var cleMistralPresente: Bool
     @ObservationIgnored private var compteRendus: [String: CompteRendu] = [:]
     @ObservationIgnored private var comptesRendusLus: [String: (signature: String, compteRendu: CompteRendu)] = [:]
     @ObservationIgnored private var faites: [String: Set<UUID>] = [:]
@@ -127,9 +127,12 @@ public final class ModeleApp {
     @ObservationIgnored private var recuperationsRelues: Set<String> = []
     @ObservationIgnored private static let cleRacine = "racine"
 
-    public init() {
+    public init(verifierCle: Bool = true, racineInitiale: URL? = nil) {
+        cleMistralPresente = verifierCle ? Trousseau.mistral.presente() : false
         // Pour essayer l'app dans un dossier de test, sans toucher au choix de Steven.
-        if let chemin = ProcessInfo.processInfo.environment["APARTE_RACINE"] ?? UserDefaults.standard.string(forKey: Self.cleRacine) {
+        if let racineInitiale {
+            racine = racineInitiale
+        } else if let chemin = ProcessInfo.processInfo.environment["APARTE_RACINE"] ?? UserDefaults.standard.string(forKey: Self.cleRacine) {
             racine = URL(fileURLWithPath: chemin)
         }
         recharger()
@@ -594,6 +597,7 @@ public final class SessionReunion {
     @ObservationIgnored private var duree = 0.0
     @ObservationIgnored private var pistes: [PisteAudio] = []
     @ObservationIgnored private var transcripteurs: [TranscripteurDirect] = []
+    @ObservationIgnored var terminerTranscriptionSimulee: (@MainActor () async -> Void)?
 
     init(reunion: Reunion) {
         self.reunion = reunion
@@ -772,6 +776,7 @@ public final class SessionReunion {
             if let activite { ProcessInfo.processInfo.endActivity(activite) }
             activite = nil
             for transcripteur in transcripteurs { await transcripteur.terminer() }
+            if let terminerTranscriptionSimulee { await terminerTranscriptionSimulee() }
             etat = ""
             finalisationAchevee = true
         }

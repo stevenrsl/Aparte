@@ -66,3 +66,30 @@ import Testing
     let resultat = try session.appliquerTitre(dans: bibliotheque)
     #expect(resultat.meta.titre == "Après")
 }
+
+@Test @MainActor func finalisationConcurrenteAttendLaTranscription() async throws {
+    let racine = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: racine) }
+    let bibliotheque = Bibliotheque(racine: racine)
+    let reunion = try bibliotheque.creerReunion(titre: "Avant", type: .presentiel, dossier: nil)
+    let session = SessionReunion(reunion: reunion)
+    session.titre = "Après"
+    var suspension: CheckedContinuation<Void, Never>?
+    session.terminerTranscriptionSimulee = { await withCheckedContinuation { suspension = $0 } }
+    let premiere = Task { try await session.terminer() }
+    while suspension == nil { await Task.yield() }
+    #expect(session.finalisationEnCours)
+    await #expect(throws: (any Error).self) { _ = try await session.terminer() }
+    #expect(throws: (any Error).self) { try session.appliquerTitre(dans: bibliotheque) }
+    #expect(FileManager.default.fileExists(atPath: reunion.url.path))
+    suspension?.resume()
+    _ = try await premiere.value
+    #expect(!session.finalisationEnCours)
+    _ = try await session.terminer()
+    #expect(try session.appliquerTitre(dans: bibliotheque).meta.titre == "Après")
+}
+
+@Test func demandesSuccessivesVersLaMemeLigneSontDistinctes() {
+    let id = UUID()
+    #expect(CibleDefilement(id: id) != CibleDefilement(id: id))
+}
