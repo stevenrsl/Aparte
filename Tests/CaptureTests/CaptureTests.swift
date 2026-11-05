@@ -1,5 +1,5 @@
 import AVFoundation
-import Capture
+@testable import Capture
 import Foundation
 import Testing
 
@@ -65,4 +65,65 @@ private final class Erreurs: @unchecked Sendable {
     source.onBuffer?(tampon)
     piste.arreter()
     #expect(erreurs.total == 1)
+}
+
+// MARK: - La fréquence réelle du son du Mac
+
+@Suite struct FrequenceMesureeTests {
+    private func mesurer(annoncee: Double, reelle: Double, secondes: Double, depart: Double = 100,
+                         _ mesure: inout FrequenceMesuree) -> Double? {
+        let images = 512
+        var temps = depart
+        var derniere: Double?
+        while temps < depart + secondes {
+            derniere = mesure.observer(images: images, a: temps)
+            temps += Double(images) / reelle
+        }
+        return derniere
+    }
+
+    @Test func unFluxA16kHzAnnonceA48kHzEstDemasque() {
+        var mesure = FrequenceMesuree(annoncee: 48000)
+        #expect(mesurer(annoncee: 48000, reelle: 16000, secondes: 1, &mesure) == 16000)
+    }
+
+    @Test func unFluxConformeGardeSaFrequence() {
+        var mesure = FrequenceMesuree(annoncee: 48000)
+        #expect(mesurer(annoncee: 48000, reelle: 48000, secondes: 2, &mesure) == 48000)
+    }
+
+    @Test func rienNestRetenuAvantLaPremiereFenetre() {
+        var mesure = FrequenceMesuree(annoncee: 48000)
+        #expect(mesurer(annoncee: 48000, reelle: 16000, secondes: 0.1, &mesure) == nil)
+    }
+
+    @Test func unCasquePasseEnModeAppelEnCoursDeReunionEstSuivi() {
+        var mesure = FrequenceMesuree(annoncee: 48000)
+        #expect(mesurer(annoncee: 48000, reelle: 48000, secondes: 1, &mesure) == 48000)
+        #expect(mesurer(annoncee: 48000, reelle: 16000, secondes: 4, depart: 101, &mesure) == 16000)
+    }
+
+    @Test func unBlancNeFaitPasCroireAUneFrequenceBasse() {
+        var mesure = FrequenceMesuree(annoncee: 48000)
+        _ = mesurer(annoncee: 48000, reelle: 48000, secondes: 1, &mesure)
+        #expect(mesurer(annoncee: 48000, reelle: 48000, secondes: 2, depart: 130, &mesure) == 48000)
+    }
+
+    @Test func unSeulAcoupNeChangeRien() {
+        var mesure = FrequenceMesuree(annoncee: 48000)
+        _ = mesurer(annoncee: 48000, reelle: 48000, secondes: 1, &mesure)
+        #expect(mesurer(annoncee: 48000, reelle: 16000, secondes: 1.1, depart: 101, &mesure) == 48000)
+        #expect(mesurer(annoncee: 48000, reelle: 48000, secondes: 2, depart: 102.1, &mesure) == 48000)
+    }
+
+    @Test func unTamponReetiqueteGardeSesEchantillons() throws {
+        let format = try #require(AVAudioFormat(standardFormatWithSampleRate: 48000, channels: 1))
+        let tampon = try #require(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 4))
+        tampon.frameLength = 4
+        for i in 0..<4 { tampon.floatChannelData![0][i] = Float(i) }
+        let juste = try #require(SystemAudioSource.reetiqueter(tampon, a: 16000))
+        #expect(juste.format.sampleRate == 16000)
+        #expect(juste.frameLength == 4)
+        #expect(juste.floatChannelData![0][3] == 3)
+    }
 }

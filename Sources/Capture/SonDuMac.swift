@@ -1,5 +1,6 @@
 import AVFoundation
 import CoreAudio
+import os
 
 // MARK: - The Mac's sound
 
@@ -20,6 +21,9 @@ public final class SystemAudioSource: AudioSource {
     private var aggregateID = AudioObjectID(kAudioObjectUnknown)
     private var procID: AudioDeviceIOProcID?
     private let queue = DispatchQueue(label: "eu.stevenrsl.aparte.system-audio", qos: .userInitiated)
+    private var mesure = FrequenceMesuree(annoncee: 48000)
+    private var enAttente: [AVAudioPCMBuffer] = []
+    private var formats: [Double: AVAudioFormat] = [:]
 
     public init() {}
 
@@ -45,6 +49,10 @@ public final class SystemAudioSource: AudioSource {
             stop()
             throw ErreurCapture.sonDuMac("format du tap", status)
         }
+        mesure = FrequenceMesuree(annoncee: format.sampleRate)
+        enAttente = []
+        formats = [format.sampleRate: format]
+        let formatDuTap = streamDescription
 
         let outputUID = try Self.defaultOutputDeviceUID()
         let aggregate: [String: Any] = [
@@ -68,11 +76,13 @@ public final class SystemAudioSource: AudioSource {
         }
         aggregateID = aggregateDevice
 
-        status = AudioDeviceCreateIOProcIDWithBlock(&procID, aggregateID, queue) { [weak self] _, input, _, _, _ in
+        status = AudioDeviceCreateIOProcIDWithBlock(&procID, aggregateID, queue) { [weak self] _, input, inputTime, _, _ in
             guard let self,
-                  let buffer = AVAudioPCMBuffer(pcmFormat: format, bufferListNoCopy: input, deallocator: nil)
+                  let brut = AVAudioPCMBuffer(pcmFormat: format, bufferListNoCopy: input, deallocator: nil)
             else { return }
-            self.onBuffer?(buffer)
+            let horloge = inputTime.pointee.mFlags.contains(.hostTimeValid) ? inputTime.pointee.mHostTime : AudioGetCurrentHostTime()
+            let temps = Double(AudioConvertHostTimeToNanos(horloge)) / 1_000_000_000
+            self.remettre(brut, input: input, a: temps, description: formatDuTap)
         }
         guard status == noErr else {
             stop()
@@ -83,6 +93,44 @@ public final class SystemAudioSource: AudioSource {
             stop()
             throw ErreurCapture.sonDuMac("démarrage", status)
         }
+    }
+
+    /// Le tap annonce son format une fois pour toutes : chaque tampon repart sous la fréquence mesurée.
+    /// Le temps de la première mesure, le son attend : mal étiqueté, il serait déjà écrit trop vite.
+    private func remettre(_ brut: AVAudioPCMBuffer, input: UnsafePointer<AudioBufferList>, a temps: Double,
+                          description: AudioStreamBasicDescription) {
+        guard let frequence = mesure.observer(images: Int(brut.frameLength), a: temps) else {
+            if let copie = AudioBuffers.mono(brut) { enAttente.append(copie) }
+            return
+        }
+        if frequence != mesure.annoncee, formats[frequence] == nil {
+            Logger(subsystem: "eu.stevenrsl.aparte", category: "capture")
+                .notice("Son du Mac annoncé à \(self.mesure.annoncee, privacy: .public) Hz, mesuré à \(frequence, privacy: .public) Hz")
+        }
+        for copie in enAttente {
+            if let reetiquete = Self.reetiqueter(copie, a: frequence) { onBuffer?(reetiquete) }
+        }
+        enAttente = []
+        if formats[frequence] == nil {
+            var corrigee = description
+            corrigee.mSampleRate = frequence
+            formats[frequence] = AVAudioFormat(streamDescription: &corrigee)
+        }
+        guard let juste = formats[frequence] else { return }
+        if juste == brut.format {
+            onBuffer?(brut)
+        } else if let tampon = AVAudioPCMBuffer(pcmFormat: juste, bufferListNoCopy: input, deallocator: nil) {
+            onBuffer?(tampon)
+        }
+    }
+
+    static func reetiqueter(_ mono: AVAudioPCMBuffer, a frequence: Double) -> AVAudioPCMBuffer? {
+        guard let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: frequence, channels: 1, interleaved: false),
+              let sortie = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: mono.frameLength),
+              let source = mono.floatChannelData?[0], let cible = sortie.floatChannelData?[0] else { return nil }
+        sortie.frameLength = mono.frameLength
+        cible.update(from: source, count: Int(mono.frameLength))
+        return sortie
     }
 
     public func stop() {
