@@ -84,8 +84,13 @@ public final class ModeleApp {
         for reunion in reunions {
             // Un enregistrement coupé par un plantage se termine ici.
             if session?.reunion.id != reunion.id {
+                let dejaRecuperee = [reunion.micro, reunion.systeme].contains { FileManager.default.fileExists(atPath: $0.path) }
                 for aac in [reunion.microEnCours, reunion.systemeEnCours]
                 where FileManager.default.fileExists(atPath: aac.path) {
+                    // Une piste restée vide, signalée au lancement qui a récupéré l'autre : le redire à chaque
+                    // ouverture n'aide personne. Sans aucun son récupéré, l'échec reste signalé.
+                    let taille = (try? FileManager.default.attributesOfItem(atPath: aac.path)[.size] as? Int) ?? nil
+                    if taille == 0, dejaRecuperee { continue }
                     do {
                         try terminerEnregistrement(aac)
                         recuperees.append(reunion)

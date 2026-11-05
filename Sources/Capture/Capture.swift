@@ -375,12 +375,23 @@ public func terminerEnregistrement(_ aac: URL) throws {
         guard let existant = Recording.seconds(of: m4a), abs(existant - duree) < 0.5 else {
             throw ErreurCapture.enregistrementEnDouble(aac.lastPathComponent, m4a.lastPathComponent)
         }
-        try FileManager.default.trashItem(at: aac, resultingItemURL: nil)
+        mettreAACALaCorbeille(aac)
         return
     }
     try Recording.remux(aac, to: m4a)
     guard let relu = Recording.seconds(of: m4a), relu > 0 else {
         throw ErreurCapture.enregistrementIllisible(aac.lastPathComponent)
     }
-    try FileManager.default.trashItem(at: aac, resultingItemURL: nil)
+    mettreAACALaCorbeille(aac)
+}
+
+/// Le son est déjà sauf dans le `.m4a` relu : un refus de la corbeille ne doit pas empêcher la relecture de
+/// la réunion. Le `.aac` reste à sa place, et un prochain lancement réessaiera.
+private func mettreAACALaCorbeille(_ aac: URL) {
+    do {
+        try FileManager.default.trashItem(at: aac, resultingItemURL: nil)
+    } catch {
+        Logger(subsystem: "eu.stevenrsl.aparte", category: "capture")
+            .error("\(aac.lastPathComponent, privacy: .public) reste à sa place : \(String(describing: error), privacy: .public)")
+    }
 }
