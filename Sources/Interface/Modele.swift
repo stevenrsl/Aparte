@@ -460,6 +460,12 @@ public final class ModeleApp {
         }
     }
 
+    /// Pour les rendus d'écran seulement : une relecture ou une rédaction figée à une avancée donnée.
+    func simulerPreparation(_ reunion: Reunion, relecture: Double? = nil, redaction: Double? = nil) {
+        relectures[reunion.id] = relecture
+        analyses[reunion.id] = redaction
+    }
+
     /// Change quand un réglage de dossier change, pour que les écrans le relisent.
     public private(set) var dossiersVersion = 0
 

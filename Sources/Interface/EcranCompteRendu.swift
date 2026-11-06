@@ -194,26 +194,29 @@ struct EcranCompteRendu: View {
         .tint(Couleur.surAplat)
     }
 
-    /// Relecture puis rédaction : une phrase et une barre, sur l'aplat.
+    /// Relecture puis rédaction, sur l'aplat : les étapes nommées et cochées, et la frise de la réunion qui
+    /// se remplit au rythme de l'avancée. Rien d'autre n'est inventé : seule l'avancée (0 à 1) est connue.
     @ViewBuilder private var enPreparation: some View {
-        let etape: (String, Double)? = {
-            if let avancee = modele.relectures[reunion.id] { return ("Relecture de l’enregistrement", avancee) }
-            if let avancee = modele.analyses[reunion.id] {
-                let local = modele.gardeeSurCeMac(courante) || !modele.cleMistralPresente
-                return (local ? "Rédaction du compte rendu sur ce Mac" : "Mistral rédige le compte rendu", avancee)
-            }
-            return nil
-        }()
-        if let etape {
-            VStack(alignment: .leading, spacing: Espace.s2) {
-                Text(etape.0.uppercased(with: francais)).font(Ecriture.etiquette).tracking(0.8)
-                ProgressView(value: min(max(etape.1, 0), 1))
-                    .progressViewStyle(.linear)
-                    .frame(maxWidth: 360)
-                    .accessibilityLabel(etape.0)
+        let relecture = modele.relectures[reunion.id]
+        let redaction = modele.analyses[reunion.id]
+        if relecture != nil || redaction != nil {
+            let local = modele.gardeeSurCeMac(courante) || !modele.cleMistralPresente
+            VStack(alignment: .leading, spacing: Espace.s4) {
+                HStack(spacing: Espace.s8) {
+                    EtapePreparation(numero: 1, titre: "Relecture et séparation des voix",
+                                     etat: relecture != nil ? .enCours : .faite)
+                    EtapePreparation(numero: 2, titre: local ? "Rédaction sur ce Mac" : "Rédaction par Mistral",
+                                     etat: redaction != nil ? .enCours : .aVenir)
+                }
+                if reunion.meta.duree > 0 {
+                    let avancee = min(max(relecture ?? redaction ?? 0, 0), 1)
+                    FriseDirect(temps: avancee * reunion.meta.duree, notes: notes.map(\.temps), echelle: reunion.meta.duree / 60)
+                        .animation(animationsReduites ? nil : .easeInOut(duration: Duree.moyenne * 2), value: avancee)
+                        .accessibilityLabel(relecture != nil ? "Relecture" : "Rédaction")
+                        .accessibilityValue("\(Int((avancee * 100).rounded())) %")
+                }
                 Text("Ton compte rendu arrive, tu peux fermer cet écran. Tes notes et la transcription sont déjà là.")
                     .font(Ecriture.interface)
-                    .foregroundStyle(Couleur.surAplat.opacity(0.85))
             }
             .padding(.vertical, Espace.s2)
         }
@@ -260,8 +263,10 @@ struct EcranCompteRendu: View {
                 ForEach(Array(sections(compteRendu).enumerated()), id: \.offset) { rang, section in
                     sectionVue(numero: chiffreRomain(rang + 1), section)
                 }
-            } else if !occupee {
-                // Pendant la préparation, l'aplat dit déjà que le compte rendu arrive : le corps commence par « Qui parle ».
+            } else if occupee {
+                // L'aplat dit déjà que le compte rendu arrive : le corps montre ce qui est déjà là.
+                ApercuPreparation(duree: reunion.meta.duree, segments: segments, notes: notes, reunion: courante)
+            } else {
                 sansCompteRendu
             }
             voixANommer
@@ -716,6 +721,125 @@ struct EcranCompteRendu: View {
     private func choisir(_ element: ElementSource) {
         withAnimation(animationsReduites ? nil : .easeOut(duration: Duree.moyenne)) { selection = element }
         lecteur.arreter()
+    }
+}
+
+// MARK: - La préparation
+
+/// Une étape de la préparation : à venir, en cours (un point qui respire), faite (cochée).
+struct EtapePreparation: View {
+    enum Etat { case aVenir, enCours, faite }
+    let numero: Int
+    let titre: String
+    let etat: Etat
+
+    var body: some View {
+        HStack(spacing: Espace.s2) {
+            ZStack {
+                switch etat {
+                case .faite:
+                    Image(systemName: "checkmark").font(.system(size: 11, weight: .heavy))
+                        .frame(width: 22, height: 22).background(Circle().fill(Couleur.surAplat)).foregroundStyle(Couleur.aplat)
+                case .enCours:
+                    Circle().strokeBorder(Couleur.surAplat, lineWidth: 1.5).frame(width: 22, height: 22)
+                        .overlay(Circle().fill(Couleur.surAplat).frame(width: 9, height: 9).respire())
+                case .aVenir:
+                    Text("\(numero)").font(Ecriture.etiquette).frame(width: 22, height: 22)
+                        .overlay(Circle().strokeBorder(Couleur.surAplat.opacity(0.6), lineWidth: 1))
+                }
+            }
+            Text(titre.uppercased(with: francais)).font(Ecriture.etiquette).tracking(0.8)
+                .opacity(etat == .aVenir ? 0.7 : 1)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(titre) : \(etat == .faite ? "fait" : etat == .enCours ? "en cours" : "à venir")")
+    }
+}
+
+/// Une respiration lente, qui s'arrête si Réduire les animations est activé.
+private struct Respiration: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduit
+    @State private var haut = false
+    func body(content: Content) -> some View {
+        content
+            .opacity(reduit ? 1 : (haut ? 1 : 0.3))
+            .onAppear {
+                guard !reduit else { return }
+                withAnimation(.easeInOut(duration: 1.4).repeatForever(autoreverses: true)) { haut = true }
+            }
+    }
+}
+
+extension View {
+    func respire() -> some View { modifier(Respiration()) }
+}
+
+/// Pendant la préparation, ce qui est déjà là : la durée, les phrases, tes notes, et les phrases de la
+/// transcription qui défilent doucement, trois à la fois, en serif.
+struct ApercuPreparation: View {
+    let duree: Double
+    let segments: [Segment]
+    let notes: [LigneDeNote]
+    let reunion: Reunion
+    @Environment(\.accessibilityReduceMotion) private var reduit
+
+    private func qui(_ segment: Segment) -> String {
+        if let voix = segment.voix { return reunion.nom(de: voix) }
+        if reunion.meta.type == .visio { return segment.piste == .micro ? "Moi" : "Eux" }
+        return ""
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Espace.s8) {
+            HStack(alignment: .firstTextBaseline, spacing: Espace.s10) {
+                chiffre("\(Int((duree / 60).rounded()))", duree >= 120 ? "minutes enregistrées" : "minute enregistrée")
+                chiffre("\(segments.count)", segments.count > 1 ? "phrases transcrites" : "phrase transcrite")
+                chiffre("\(notes.count)", notes.count > 1 ? "notes de toi" : "note de toi")
+            }
+            VStack(alignment: .leading, spacing: Espace.s3) {
+                Etiquette("Ce qui a été dit")
+                if segments.isEmpty {
+                    Text("La transcription arrive avec la relecture.").font(Ecriture.citation).foregroundStyle(Couleur.texteDoux)
+                } else if reduit {
+                    extrait(depuis: 0)
+                } else {
+                    TimelineView(.periodic(from: .now, by: 5)) { contexte in
+                        let rang = Int(contexte.date.timeIntervalSinceReferenceDate / 5) % max(1, segments.count)
+                        extrait(depuis: rang)
+                            .id(rang)
+                            .transition(.opacity.combined(with: .offset(y: 6)))
+                            .animation(.easeInOut(duration: 0.8), value: rang)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func chiffre(_ nombre: String, _ libelle: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(nombre).font(Ecriture.une(48))
+            Etiquette(libelle)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private func extrait(depuis rang: Int) -> some View {
+        VStack(alignment: .leading, spacing: Espace.s3) {
+            ForEach(0..<min(3, segments.count), id: \.self) { decalage in
+                let segment = segments[(rang + decalage) % segments.count]
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: Espace.s2) {
+                        Text(horodatage(segment.debut)).font(Ecriture.horodatage).foregroundStyle(Couleur.texteDiscret)
+                        if !qui(segment).isEmpty { Etiquette(qui(segment), couleur: Couleur.texteDoux) }
+                    }
+                    Text("« \(segment.texte) »").font(Ecriture.chapo).foregroundStyle(decalage == 0 ? Couleur.texte : Couleur.texteDoux)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .opacity(decalage == 2 ? 0.6 : 1)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
