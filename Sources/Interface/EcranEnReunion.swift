@@ -121,7 +121,8 @@ struct EcranEnReunion: View {
     /// Les niveaux d'entrée, sobres : une barre par source, le dernier niveau entendu.
     private var niveaux: some View {
         HStack(spacing: Espace.s8) {
-            Niveau(nom: "Micro", valeur: session.niveauxMoi.last ?? 0)
+            Niveau(nom: "Micro", valeur: session.niveauxMoi.last ?? 0, entree: session.entreeUtilisee ?? "Micro par défaut",
+                   faible: session.alerteMicroFaible != nil)
             if session.reunion.meta.type == .visio {
                 Niveau(nom: "Son du Mac", valeur: session.niveauxEux.last ?? 0)
             }
@@ -178,10 +179,19 @@ struct EcranEnReunion: View {
 private struct Niveau: View {
     let nom: String
     let valeur: Float
+    /// L'entrée qui enregistre, dite en clair : un micro Bluetooth choisi par défaut se voit tout de suite.
+    var entree: String? = nil
+    var faible = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: Espace.s1) {
-            Etiquette(nom, couleur: Couleur.surAplat)
+            HStack(spacing: Espace.s1) {
+                if faible { Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 10)).respire() }
+                Etiquette(nom, couleur: Couleur.surAplat)
+            }
+            if let entree {
+                Text(entree).font(Ecriture.detail).lineLimit(1).truncationMode(.middle).frame(maxWidth: 220, alignment: .leading)
+            }
             ZStack(alignment: .leading) {
                 Capsule().fill(Couleur.surAplat.opacity(0.25))
                 Capsule().fill(Couleur.surAplat).frame(width: 140 * CGFloat(min(max(valeur, 0.03), 1)))
@@ -189,8 +199,8 @@ private struct Niveau: View {
             .frame(width: 140, height: 4)
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Niveau \(nom.lowercased())")
-        .accessibilityValue(valeur > 0.05 ? "on t’entend" : "silence")
+        .accessibilityLabel("Niveau \(nom.lowercased())\(entree.map { ", \($0)" } ?? "")")
+        .accessibilityValue(faible ? "n’entend presque rien" : (valeur > 0.05 ? "on t’entend" : "silence"))
     }
 }
 
@@ -199,10 +209,12 @@ private struct Niveau: View {
 struct FriseDirect: View {
     let temps: Double
     let notes: [Double]
+    /// La longueur de la règle, en minutes. Sans elle : l'heure pleine qui suit, au moins 60.
+    var echelle: Double? = nil
     @State private var largeur: CGFloat = 600
 
     var body: some View {
-        let echelle = max(60.0, (temps / 60 / 15).rounded(.up) * 15)
+        let echelle = max(1, self.echelle ?? max(60.0, (temps / 60 / 15).rounded(.up) * 15))
         let x: (Double) -> CGFloat = { CGFloat(min(max($0 / 60 / echelle, 0), 1)) * largeur }
         let base: CGFloat = 26
         let pas = echelle > 120 ? 5 : 1
@@ -226,6 +238,11 @@ struct FriseDirect: View {
             ForEach(Array(stride(from: 0, through: Int(echelle), by: 15)), id: \.self) { minute in
                 Text("\(minute)′").font(Ecriture.etiquette).fixedSize()
                     .offset(x: min(x(Double(minute) * 60) + 3, largeur - 30), y: base + 6)
+            }
+            if Int(echelle) % 15 > 5 {
+                Text("\(Int(echelle))′").font(Ecriture.etiquette).fixedSize()
+                    .frame(width: 30, alignment: .trailing)
+                    .offset(x: largeur - 30, y: base + 6)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

@@ -460,6 +460,12 @@ public final class ModeleApp {
         }
     }
 
+    /// Pour les rendus d'écran seulement : une relecture ou une rédaction figée à une avancée donnée.
+    func simulerPreparation(_ reunion: Reunion, relecture: Double? = nil, redaction: Double? = nil) {
+        relectures[reunion.id] = relecture
+        analyses[reunion.id] = redaction
+    }
+
     /// Change quand un réglage de dossier change, pour que les écrans le relisent.
     public private(set) var dossiersVersion = 0
 
@@ -670,14 +676,22 @@ public final class SessionReunion {
         self.titre = reunion.meta.titre
     }
 
-    /// Pour les rendus d'écran seulement : une réunion qui semble enregistrer depuis `debut`, sans capture.
-    func simulerDebut(_ debut: Date) { self.debut = debut; etat = "" }
-
     /// L'entrée qui enregistre, pour le dire à l'écran.
     public private(set) var entreeUtilisee: String?
     /// Le micro n'entend presque rien depuis un moment : pas un incident, mais Steven doit le savoir tout de suite.
     public private(set) var alerteMicroFaible: String?
     private var detecteurMicro = DetecteurMicroFaible()
+
+    /// Pour les rendus d'écran seulement : une réunion qui semble enregistrer depuis `debut`, sans capture,
+    /// avec l'entrée et l'alerte « micro faible » qu'on veut montrer.
+    func simulerDebut(_ debut: Date, entree: String? = nil, microFaible: Bool = false) {
+        self.debut = debut
+        etat = ""
+        entreeUtilisee = entree
+        alerteMicroFaible = microFaible
+            ? "Attention : le micro (\(entree ?? "par défaut")) n'entend presque rien. Rapproche-le, ou choisis une autre entrée dans Réglages Système."
+            : nil
+    }
 
     public var alerte: String? {
         let alertes = alertesAudio.keys.sorted().compactMap { alertesAudio[$0] } + [alerteMicroFaible, alerteSauvegarde, alerteSysteme].compactMap { $0 }
