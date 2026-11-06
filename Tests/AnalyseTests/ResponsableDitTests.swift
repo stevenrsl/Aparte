@@ -36,3 +36,21 @@ private func action(_ responsable: String) -> ElementSource {
     let valide = ValidationSources.valider(element, dans: segments, noms: ["Voix 1": "Clémence", "Voix 9": "Sophie"])
     #expect(valide?.texte == "Je m'occupe d'envoyer le contrat.")
 }
+
+// En visio, le micro sans voix, c'est Steven : il peut être le responsable de ce qu'il y dit.
+private let visio = [
+    Segment(debut: 0, fin: 4, piste: .micro, texte: "Je prépare la liste des interviews."),
+    Segment(debut: 5, fin: 9, piste: .systeme, texte: "Parfait, merci.", voix: "Voix 2"),
+]
+
+@Test func enVisioStevenEstResponsableDeCeQuIlDitAuMicro() {
+    let action = ElementSource(texte: "Préparer la liste des interviews", sources: [0], citation: "Je prépare la liste des interviews.", responsable: "Steven")
+    #expect(ValidationSources.valider(action, dans: visio, moi: "Steven")?.responsable == "Steven")
+    // Sans `moi` (présentiel, ou rien de connu), personne ne peut être déclaré responsable.
+    #expect(ValidationSources.valider(action, dans: visio)?.responsable == nil)
+}
+
+@Test func StevenNEstPasResponsableDeCeQueDitUneAutreVoix() {
+    let action = ElementSource(texte: "Remercier", sources: [5], citation: "Parfait, merci.", responsable: "Steven")
+    #expect(ValidationSources.valider(action, dans: visio, moi: "Steven")?.responsable == nil)
+}

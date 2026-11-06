@@ -212,7 +212,7 @@ public final class ModeleApp {
         guard let data = reunion.analyseJSON() else { return nil }
         let decodeur = JSONDecoder()
         decodeur.dateDecodingStrategy = .iso8601
-        return (try? decodeur.decode(CompteRendu.self, from: data))?.revalide(dans: reunion.segments(), noms: reunion.meta.nomsDesVoix ?? [:], notes: reunion.notes())
+        return (try? decodeur.decode(CompteRendu.self, from: data))?.revalide(dans: reunion.segments(), noms: reunion.meta.nomsDesVoix ?? [:], notes: reunion.notes(), moi: reunion.meta.type == .visio ? ValidationSources.prenomDeMoi : nil)
     }
 
     func resumeEnregistre(de reunion: Reunion) -> CompteRendu? { compteRendus[reunion.id] }
@@ -225,7 +225,7 @@ public final class ModeleApp {
         let encodeur = JSONEncoder()
         encodeur.outputFormatting = [.prettyPrinted, .sortedKeys]
         encodeur.dateEncodingStrategy = .iso8601
-        let revalidee = compteRendu.revalide(dans: reunion.segments(), noms: reunion.meta.nomsDesVoix ?? [:], notes: reunion.notes())
+        let revalidee = compteRendu.revalide(dans: reunion.segments(), noms: reunion.meta.nomsDesVoix ?? [:], notes: reunion.notes(), moi: reunion.meta.type == .visio ? ValidationSources.prenomDeMoi : nil)
         try reunion.enregistrer(analyseJSON: encodeur.encode(compteRendu), markdown: revalidee.markdown(incidents: reunion.meta.incidentsAudio ?? []))
         var meta = reunion
         if !meta.meta.fournisseurs.contains(compteRendu.fournisseur) {
@@ -353,7 +353,7 @@ public final class ModeleApp {
         guard let brute = try? decodeur.decode(CompteRendu.self, from: donnees) else { return }
         let segments = reunion.segments()
         guard brute.etat(selon: segments) == .perimee else { return }
-        let revalidee = brute.revalide(dans: segments, noms: reunion.meta.nomsDesVoix ?? [:], notes: reunion.notes())
+        let revalidee = brute.revalide(dans: segments, noms: reunion.meta.nomsDesVoix ?? [:], notes: reunion.notes(), moi: reunion.meta.type == .visio ? ValidationSources.prenomDeMoi : nil)
         let markdown = revalidee.markdown(incidents: reunion.meta.incidentsAudio ?? [])
         do {
             try reunion.enregistrer(analyseJSON: donnees, markdown: markdown)
