@@ -1,209 +1,136 @@
-# Brief DA : Aparté, l'outil de réunions
+# Brief DA : Aparté, « Affiche »
 
-Rédigé le 2 novembre 2026. À lire avec la [fiche de travail](fiche-reunions-2026-11.md) avant toute
-session qui touche à l'interface. La référence visuelle est la rangée « Définitive » du canvas
-*Réunions — directions DA* (six écrans, de l'accueil aux réglages). Si ce brief et le canvas
-divergent, montrer l'écart à Steven plutôt que trancher.
+Choisi par Steven le 6 novembre 2026, parmi les pistes de `aparte-directions/v2` : la direction E
+« Affiche », avec les pastilles de couleur par personne de la direction D. Ce brief remplace l'ancien
+en entier : le grain, l'argile, la colonne encre, les libellés `//` et la chasse fixe partout sont
+abandonnés. Les jetons vivent dans `Sources/DA/DA.swift`. Une vue n'utilise que ces jetons, jamais une
+couleur ou une taille en dur.
 
 ## L'intention
 
-Un outil qu'on ouvre en pleine réunion client et qui se fait oublier. Calme, chaud, organique,
-avec un seul moment d'audace : l'enregistrement en cours. La DA mêle quatre sources que Steven a
-validées une à une :
+Chaque réunion a sa une, comme un magazine : le titre devient l'image, et le compte rendu se lit comme
+un article. On voit en trois secondes ce qui a été décidé et qui fait quoi.
 
-- **la structure de Lisière** : deux colonnes franches, alignées sur les mêmes filets ;
-- **l'esprit des pixels** (direction « Mistral ») : angles carrés, libellés en chasse fixe avec
-  « // », une colonne sombre ;
-- **le chrono de Signal** : chiffres matriciels et niveaux sonores en points ;
-- **la conversation de Galets** : la transcription en bulles, eux à gauche, moi à droite.
-
-Le tout dans la palette argile de Steven, avec du grain sur toute l'interface.
-
-## La fenêtre
-
-Deux charpentes, décidées par Steven le 5 novembre 2026 après comparaison avec Cairn : la colonne encre
-n'apparaît que lorsqu'elle montre quelque chose de vivant ou une source à vérifier.
-
-- **La charpente à deux colonnes** : Nouvelle réunion, En réunion, Compte rendu, Réglages. Mesures
-  ci-dessous.
-- **La charpente de lecture** : Accueil, Toutes les réunions, Dossier. Une seule colonne, plus dense :
-  voir plus bas.
-
-La barre de titre et la barre latérale sont les mêmes partout.
-
-| Zone | Mesure | Contenu |
-|---|---|---|
-| Barre de titre | 42 pt, fond `surface` | Feux de la fenêtre ; à droite, au besoin, un réglage en `mono` |
-| Barre latérale | 228 pt, fond `surface`, filet à droite | Logo, Accueil, Toutes les réunions, la réunion en cours s'il y en a une, les dossiers, Réglages en bas |
-| Colonne principale | le reste | En-tête de 172 pt, puis le contenu |
-| Colonne encre | 420 pt, fond `encre`, collée au bord droit, pleine hauteur | En-tête de 172 pt (chrono, source, chiffres), puis la transcription ou une liste |
-
-- Les deux en-têtes font **exactement 172 pt** et se ferment sur le même filet. C'est ce qui donne
-  l'alignement que Steven a demandé ; rien ne doit flotter ni avoir de marge propre.
-- Marges intérieures : 36 pt dans la colonne principale, 28 pt dans la colonne encre (24 pt pour la
-  transcription en bulles).
-- Séparations par **filets de 1 pt**, jamais par des ombres ou des cartes.
-- **Angles carrés partout.** Seuls les feux de la fenêtre sont ronds.
-- La bande de pixels en haut de la fenêtre a été **retirée** par Steven. Ne pas la remettre.
-
-### La charpente de lecture
-
-- Pas de colonne encre, pas de chrono au repos, pas de grand chiffre décoratif.
-- Un en-tête à la hauteur de son contenu, fermé par un filet : libellé `//`, titre d'écran, commandes à
-  droite, puis au besoin une phrase d'état.
-- Marges de 36 pt, contenu limité à 1 040 pt de large et aligné à gauche, sur le même bord que l'en-tête.
-- La phrase d'état ne dit que des faits comptés dans les fichiers : jamais d'estimation ni de conseil.
+- **Une affiche par réunion.** Un aplat de couleur porte le titre en New York Black, très grand. Au pied
+  de l'aplat, la frise-règle du déroulé.
+- **Une lecture éditoriale.** Le texte courant est en New York, avec des sections numérotées en chiffres
+  romains, un chapô, et une marge pour tes notes.
+- **Un seul moment d'audace en plus** : l'écran en réunion (à trancher par Steven : tout en couleur ou
+  non).
+- **Une app Mac native.** Polices du système, mode sombre, contrôles natifs (interrupteurs, menus),
+  VoiceOver, et Réduire les animations respecté.
 
 ## Les couleurs
 
-La palette de Steven, plus quelques valeurs dérivées pour la lisibilité et le mode sombre. À
-déclarer en couleurs d'asset avec une variante claire et une variante sombre.
+Chaque couleur a sa variante sombre. Les contrastes sont mesurés selon WCAG 2.x : 4,5:1 au minimum pour
+le texte, 3:1 pour les grands textes et les objets graphiques.
 
-### Clair
+| Jeton | Rôle | Clair | Sombre | Contraste (clair / sombre) |
+|---|---|---|---|---|
+| `papier` | fond de lecture | `#F4EFE5` | `#16140F` | |
+| `marge` | marge, champs, citation | `#EAE3D5` | `#211E17` | |
+| `texte` | texte courant | `#1B1915` | `#EFE8DA` | 15,3 / 15,1 sur papier |
+| `texteDoux` | chapô, citations, détails | `#4D473D` | `#C0B7A6` | 8,0 / 9,3 |
+| `texteDiscret` | horodatages, étiquettes | `#6B6457` | `#9C927F` | 5,1 / 6,0 ; **4,59** / 5,4 sur marge |
+| `filet` | filets et séparations | `#D9D1C1` | `#37322A` | (décor) |
+| `aplat` | l'affiche, les actions principales | `#1F35B5` | `#3149C9` | |
+| `surAplat` | texte sur l'aplat | `#F4EFE5` | `#F4EFE5` | 8,2 / 6,3 ; à 80 % d'opacité : 5,8 / **4,58** |
+| `lien` | lien, élément choisi | `#1F35B5` | `#8FA2FF` | 8,2 / 7,7 |
+| `ocre` | numéros de section, échéances | `#8F5A12` | `#E0A64E` | 5,0 / 8,5 ; **4,52** / 7,7 sur marge |
+| `direct` | l'enregistrement, une alerte | `#C8371B` | `#FF6A47` | **4,56** / 6,5 sur papier, jamais sur marge en clair |
+| `selection` | ligne choisie | `#E3E4F2` | `#23253A` | texte 13,9 / 12,3 ; discret **4,64** / 4,9 |
 
-| Token | Valeur | Rôle |
-|---|---|---|
-| `creme` | `#F5EEE6` | Fond de la colonne principale |
-| `surface` | `#E9D8C9` | Barre latérale, barre de titre, puces d'horodatage, encadrés |
-| `encre` | `#40332D` | Texte, colonne sombre, bouton principal, élément sélectionné |
-| `terracotta` | `#A65F46` | Aplats seulement : curseur de saisie, repère du résumé, carré du logo, carré de l'enregistrement |
-| `terracotta-texte` | `#8E4E38` | Terracotta pour du texte : horodatages des notes, italique des titres, liens |
-| `argile` | `#D4A88B` | Le signal sur fond encre : enregistrement, « Terminer », mes bulles, puce active |
-| `encre-douce` | `#6E5A50` | Texte secondaire, libellés `//` |
-| `filet` | `#DCC7B6` | Filets sur fond crème |
-| `champ` | `#FBF7F2` | Fond des champs de saisie |
+`aplat` est **un jeton unique**. S'il faut une couleur par dossier, on la déclinera là, en mesurant
+chaque couleur contre `surAplat` (au moins 4,5:1 à 80 % d'opacité).
 
-### Sur la colonne encre (identique en clair et en sombre)
+## Les pastilles des personnes
 
-| Token | Valeur | Rôle |
-|---|---|---|
-| `colonne-texte` | `#F5EEE6` | Texte courant |
-| `colonne-doux` | `#E9D8C9` | Texte secondaire |
-| `colonne-signal` | `#D4A88B` | Libellés `//`, horodatages, signal |
-| `bulle-eux` | `#54443C` | Fond des bulles des autres participants |
-| `colonne-filet` | `#5A4A42` | Filets et cases vides de la barre de progression |
-| `chrono-repos` | `#A08A7D` | Chrono à `00:00`, avant l'enregistrement |
+Chaque responsable a une pastille ronde, de la même couleur dans toutes les réunions. La couleur dépend
+du nom, par un hachage stable (`Pastille.couleurs(pour:)`), et l'initiale est écrite dedans. La
+pastille n'apparaît que si le responsable a été dit (règle 1).
 
-### Sombre
+| Couleur | Fond | Initiale | Contraste |
+|---|---|---|---|
+| bleu | `#1D55E0` | blanc | 6,1 |
+| orange | `#FF7A1A` | noir `#0A0A0A` | 7,6 |
+| violet | `#6C3BEB` | blanc | 6,1 |
+| vert | `#0E7A4E` | blanc | 5,4 |
+| framboise | `#C81E5B` | blanc | 5,5 |
+| moutarde | `#E8B21C` | noir | 10,2 |
+| pétrole | `#0B6E7A` | blanc | 6,0 |
 
-| Token | Valeur |
-|---|---|
-| `creme` → fond | `#2A211D` |
-| `surface` | `#231B18` |
-| `encre` (texte) | `#F5EEE6` |
-| `encre` (colonne, boutons) | `#40332D` |
-| `encre-douce`, `terracotta-texte` | `#D4A88B` |
-| `filet` | `#4A3C35` |
-| `champ` | `#231B18` |
-
-### Règles
-
-- **Le terracotta est rare.** Un ou deux aplats par écran au plus. Il ne passe pas en petit texte
-  sur la crème (4,3:1) : utiliser `terracotta-texte`.
-- **Sur la colonne encre, le signal est l'argile**, jamais le terracotta (illisible).
-- Sur un aplat argile, le texte est `encre`, jamais crème.
-- Tout texte respecte 4,5:1 (3:1 au-dessus de 24 pt) dans les deux thèmes.
-- Pas de dégradés, pas d'ombres portées, pas d'emoji.
+Le nom est toujours écrit à côté de la pastille : sa couleur aide à repérer la personne, elle ne
+porte jamais seule l'information. En sombre, le bleu, le violet et le pétrole n'atteignent qu'environ
+3:1 contre le papier, ce qui suffit pour un objet graphique.
 
 ## La typographie
 
-| Rôle | Police | Taille | Notes |
-|---|---|---|---|
-| Titre d'écran | New York | 38 pt, interligne 1,05 | La fin du titre en italique `terracotta-texte` (« Point montage, *documentaire voile* ») |
-| Titre de section | New York italique | 22 pt | « *Mes notes* », « *Transcription* » |
-| Titre de réunion dans une liste | New York | 17 pt | |
-| Phrase d'état | New York italique | 16 pt | Charpente de lecture seulement |
-| Résumé du compte rendu | New York | 20 pt, interligne 1,5 | Précédé d'un trait terracotta de 3 pt |
-| Texte courant | Zalando Sans | 14 pt ; 16 pt pour les notes | Interligne 1,45 à 1,55 |
-| Libellé | JetBrains Mono | 11 pt, approche +0,02 em | En minuscules, préfixé par `//` : « // décisions » |
-| Horodatage | JetBrains Mono | 11 pt | `04:12`, `22:20 · moi` |
-| Chrono et grands chiffres | Doto 800 | 68 pt (chrono), 52 à 56 pt (source, compteurs) | Chiffres tabulaires, interligne 0,82 |
+Uniquement des polices du système, sans téléchargement.
 
-- **New York est une police système** : rien à embarquer, `Font.system(.title, design: .serif)`.
-- **Zalando Sans, JetBrains Mono et Doto sont à embarquer** dans l'app. Les trois sont sous licence
-  libre sur Google Fonts : garder leur fichier de licence dans le repo.
-- Pas de quatrième famille. Doto ne sert qu'aux chiffres.
+| Jeton | Police | Usage |
+|---|---|---|
+| `Ecriture.une(taille)` | New York Black, 40 à 54 pt, interlignage serré | titre de la réunion sur l'aplat |
+| `Ecriture.section` | New York Black 28 pt, numéro en italique `ocre` | « I Décidé », « II À faire » |
+| `Ecriture.chapo` | New York italique 17 pt | le résumé « en bref » |
+| `Ecriture.lecture` / `lectureForte` | New York 16 pt, regular ou semibold | décisions, actions, sujets |
+| `Ecriture.personne` | New York Black italique 16 pt | le nom d'un responsable |
+| `Ecriture.citation` | New York italique 14,5 pt | la citation ouverte, tes notes |
+| `Ecriture.etiquette` | SF Pro Expanded semibold 10 pt, capitales, espacement 0,8 | les surtitres |
+| `Ecriture.horodatage` | SF Pro Expanded medium 10,5 pt, chiffres tabulaires | toutes les heures |
+| `Ecriture.interface` / `interfaceForte` | SF Pro 13 pt | boutons, interrupteurs, messages |
 
-## Le grain
+## L'espace et les formes
 
-Il rend l'interface organique. Il doit se sentir, pas se voir.
+- **Grille de 4 pt** : `Espace.s1` (4), `s2` (8), `s3` (12), `s4` (16), `s6` (24), `s8` (32), `s10` (40).
+- **Rayons** : `Rayon.petit` (4) pour les étiquettes et les blocs numérotés, `Rayon.moyen` (8) pour la
+  citation ; les boutons sont en capsule.
+- **Animations** : `Duree.courte` (0,15 s) pour une sélection, `Duree.moyenne` (0,25 s) pour ouvrir une
+  citation. Rien ne bouge si Réduire les animations est activé.
 
-- Une **texture de bruit** en niveaux de gris, générée une fois (256 × 256 px, se répète sans
-  couture), posée par-dessus toute la fenêtre.
-- Clair : fusion **multiplication**, opacité **16 %**. Sombre : fusion **écran**, opacité **8 %**.
-- En SwiftUI : une `Image` en mosaïque en `.overlay`, `.blendMode(…)`, `.allowsHitTesting(false)`.
-  Pas de shader recalculé à chaque image.
-- Désactivé quand « Augmenter le contraste » ou « Réduire la transparence » est actif dans les
-  réglages d'accessibilité de macOS.
+## Le compte rendu
 
-## Les composants
+```
+┌ barre latérale ┬────────────── aplat (l'affiche) ───────────────┬─ marge 320 pt ─┐
+│                │ surtitre : dossier · date · horaire · durée      │ Garder sur     │
+│                │ Titre en New York Black, éditable                │ ce Mac         │
+│                │ Rédigé par Mistral · Copier · Refaire · Gérer    │ En suspens     │
+│                │ ─┼──┼── frise-règle (0′ → durée) ──┼──┼─         │ Tes notes      │
+│                ├──────────────────────────────────────────────────┤  ou            │
+│                │ chapô (en bref)                                  │ Transcription  │
+│                │ I Décidé    1  texte …………………………… 12:40      │                │
+│                │ II À faire  ☐ ● Karim  texte  échéance  18:22    │                │
+│                │ III Sujets, puis Qui parle                       │                │
+└────────────────┴──────────────────────────────────────────────────┴────────────────┘
+```
 
-- **Libellé `//`** : JetBrains Mono 11 pt, `encre-douce` (ou `colonne-signal` sur l'encre).
-- **Puce d'horodatage** : fond `surface`, texte `encre`, carrée. Active : fond `argile`, texte
-  `encre`. Un clic ouvre la source.
-- **Élément sélectionné** (décision, dossier, entrée de la barre latérale) : bloc `encre`, texte
-  crème, petit carré argile de 7 pt devant.
-- **Bulles de transcription** : carrées. Eux à gauche sur `bulle-eux`, texte crème ; moi à droite
-  sur `argile`, texte encre. Phrase en cours de transcription : bordure argile en tirets, sans fond.
-  Bulle source d'une décision : filet argile de 3 pt à gauche.
-- **Chrono** : Doto 68 pt, avec à côté les niveaux de Moi (points argile) et d'Eux (points crème).
-  Pas de clignotement.
-- **Niveaux sonores** : colonnes de points de 5 pt (7 pt pour le test du micro).
-- **Barre de progression d'écoute** : rangée de carrés pleins argile, vides `colonne-filet`.
-- **Case à cocher** : carré de 14 pt, bordure 2 pt.
-- **Boutons** : principal en aplat `encre`, texte crème ; signal en aplat `argile`, texte encre, sur
-  la colonne encre uniquement ; secondaire en bordure 1 pt, fond transparent. Carrés, sans ombre.
-- **Logo** : les cinq colonnes de points de l'icône (argile, la centrale en crème) sur un carré
-  `encre`, suivies du nom, « Aparté », en New York. Source de l'icône : `Support/Icone/`.
-- **Alerte de réunion détectée** (seulement si la détection est retenue, voir la fiche) : un bandeau
-  carré sur fond `encre`, sans ombre, fermé par un filet `colonne-filet`. Libellé
-  « // réunion détectée », la phrase « Zoom utilise le micro », un bouton signal « Démarrer
-  l'enregistrement » et de quoi fermer. Jamais de pastille ronde ni de rouge. Pas encore dessinée
-  sur le canvas.
+- **La frise-règle.** Une graduation par minute, plus longue tous les quarts d'heure, en `surAplat`.
+  Au-dessus, à leur moment : les décisions en blocs numérotés, les actions en pastilles de personne,
+  les questions en « ? ». Deux marques trop proches passent sur une seconde rangée. Cliquer une marque
+  choisit l'élément.
+- **Chaque ligne garde son horodatage** (règle 1), à droite, en `horodatage`. Cliquer la ligne ouvre la
+  citation dessous, avec « Écouter ce passage » et « Voir dans la transcription ». Choisir ne lance
+  jamais le son.
+- **Qui a rédigé** est toujours visible sur l'aplat : « Rédigé par Mistral » ou « Rédigé sur ce Mac ».
+  Si Mistral a échoué, une phrase le dit sous l'aplat.
+- **L'interrupteur « Garder sur ce Mac »** est en haut de la marge. Si le dossier est gardé, il est
+  activé, grisé, et une phrase dit pourquoi.
+- **La marge** montre tes notes (jamais réécrites, règle 3) et « En suspens » (les questions). Elle
+  bascule sur la transcription quand on la demande, ou quand on choisit une note ou un sujet.
+- **Les états** : relecture et rédaction (une phrase et une barre de progression sur l'aplat), échec
+  (la raison, puis « Rédiger le compte rendu »), pas encore de compte rendu, aucune phrase transcrite,
+  compte rendu périmé (une ligne `ocre` sous l'aplat).
 
-## Les écrans
+## Les textes
 
-1. **Accueil** (charpente de lecture) : salutation, phrase d'état, démarrage en un clic (Visio ou
-   Présentiel) et « Préparer une réunion » (⌘N). Puis « À faire », chaque action renvoyant à sa réunion :
-   d'abord celles dont une échéance a été dite, puis les autres, repliées au-delà de cinq. L'échéance reste
-   les mots prononcés : Aparté ne calcule ni date ni retard. C'est une liste à cocher, pas un gestionnaire
-   de tâches. Puis les cinq dernières réunions et un lien vers toutes.
-   **Toutes les réunions** : la même ligne de réunion, sans limite, y compris celles sans dossier.
-2. **Nouvelle réunion** : facultatif depuis l'accueil, pour régler le titre, le dossier ou le micro. Un
-   écran de la charpente, jamais une fenêtre par-dessus. Titre, dossier,
-   type, micro (une liste bien visible, avec les micros externes), analyste. Colonne encre : test du
-   micro et du son du Mac, chacun avec un verdict en mots sous ses niveaux (« Le micro t'entend
-   bien. »), puis `// l'audio ne quitte jamais ce Mac` juste au-dessus du bouton « Démarrer
-   l'enregistrement » (⌘↩). Cette dernière ligne n'est pas encore sur le canvas. Le rappel de
-   prévenir les participants est un encadré, jamais une fenêtre de confirmation.
-3. **En réunion** : mes notes horodatées à gauche, avec une ligne discrète qui rappelle de prévenir les
-   participants ; chrono, niveaux et transcription en bulles à droite.
-4. **Compte rendu** : résumé, décisions, actions, question ouverte, chacune avec sa puce de source.
-   Colonne encre : écoute du passage source, l'échange en bulles, ma note à ce moment.
-5. **Dossier** (charpente de lecture) : phrase d'état, les actions ouvertes, les dernières décisions avec
-   leur source, puis le fil chronologique des réunions du dossier. **Un dossier n'est qu'un dossier sur le disque** : pas de
-   statut, pas d'échéance, rien à gérer.
-6. **Réglages** : analyste par défaut, micro, emplacement des réunions. Colonne encre : ce qui
-   quitte le Mac, en clair (l'audio jamais, la transcription seulement sur choix, aucune
-   télémétrie).
+Les règles d'`AGENTS.md` :
 
-## Les textes de l'interface
-
-- Tutoiement, phrases courtes, le vocabulaire de Steven (« réunion », « dossier », « compte
-  rendu »), jamais celui du code.
-- Les libellés `//` en minuscules ; les titres en phrase normale.
+- Tutoiement, phrases courtes.
+- Le vocabulaire de Steven (« réunion », « dossier », « compte rendu »), jamais celui du code.
+- Les titres en phrase normale. Les surtitres en capitales (`etiquette`), sans `//`.
 - Un bouton dit ce qu'il fait : « Démarrer l'enregistrement », « Copier le compte rendu ».
 
-## À Steven
+## Encore à faire
 
-- **Le logo et l'icône** : piste « niveaux sonores » retenue par Steven le 2 novembre 2026.
-- **L'intensité du grain** : 16 % est un point de départ, à juger sur son écran réel.
-
-## Arbitrages V0.5 — décision de Steven du 2026-11-05
-
-Ces choix remplacent les indications antérieures correspondantes :
-- Un clic sélectionne et montre le passage sans lancer le son. Seul « Écouter ce passage » lance l'écoute.
-- Le démarrage est en haut de la barre latérale : modes Visio et Présentiel explicites, « Préparer » secondaire. En réunion, ce bloc montre le titre, « Enregistrement en cours », le chrono et le retour, sans second démarrage.
-- Le titre du compte rendu contient uniquement le nom de la réunion ; le dossier figure dans le lien de retour. Pas de virgule en italique ni de titre automatiquement proposé par le modèle en V0.5.
-
-Le grand chrono reste réservé à l'enregistrement. Dans le compte rendu, le repère compact « Passage à 04:12 » accompagne « Écouter ce passage » (arbitrage technique de Pickle, 2026-11-05).
+L'accueil, l'écran en réunion, le dossier, les réglages et la barre latérale gardent l'ancienne DA
+jusqu'à leur refonte, un écran à la fois. Les anciens jetons (`Color.creme`, `argile`, `Typo`,
+`Libelle`, `GrainOverlay`, les polices embarquées) seront retirés avec le dernier écran qui s'en sert.
