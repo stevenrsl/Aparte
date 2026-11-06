@@ -260,7 +260,8 @@ struct EcranCompteRendu: View {
                 ForEach(Array(sections(compteRendu).enumerated()), id: \.offset) { rang, section in
                     sectionVue(numero: chiffreRomain(rang + 1), section)
                 }
-            } else {
+            } else if !occupee {
+                // Pendant la préparation, l'aplat dit déjà que le compte rendu arrive : le corps commence par « Qui parle ».
                 sansCompteRendu
             }
             voixANommer
@@ -312,7 +313,10 @@ struct EcranCompteRendu: View {
                             if let responsable = element.responsable {
                                 PastillePersonne(responsable)
                             } else {
-                                Color.clear.frame(width: 22, height: 22)
+                                // Une action sans responsable dit : un cercle vide, discret, sans nom.
+                                Circle().strokeBorder(Couleur.texteDiscret, style: StrokeStyle(lineWidth: 1, dash: [3, 2]))
+                                    .frame(width: 22, height: 22)
+                                    .accessibilityHidden(true)
                             }
                         }
                     }
@@ -502,10 +506,7 @@ struct EcranCompteRendu: View {
 
     private var sansCompteRendu: some View {
         VStack(alignment: .leading, spacing: Espace.s4) {
-            if occupee {
-                Text("Ton compte rendu arrive. Tes notes et la transcription sont déjà dans la marge.")
-                    .font(Ecriture.chapo).foregroundStyle(Couleur.texteDoux)
-            } else if segments.isEmpty {
+            if segments.isEmpty {
                 Text("Aucune phrase n’a été transcrite.").font(Ecriture.chapo).foregroundStyle(Couleur.texteDoux)
             } else {
                 Text("\(segments.count) phrases transcrites. Pas encore de compte rendu.").font(Ecriture.chapo).foregroundStyle(Couleur.texteDoux)
@@ -898,9 +899,13 @@ struct FriseRegle: View {
         case let .action(responsable):
             Group {
                 if let responsable { PastillePersonne(responsable, taille: Self.cote) }
-                else { Circle().strokeBorder(Couleur.surAplat, lineWidth: 1.5).frame(width: Self.cote, height: Self.cote) }
+                else {
+                    Circle().strokeBorder(Couleur.surAplat.opacity(0.7), style: StrokeStyle(lineWidth: 1.2, dash: [3, 2]))
+                        .frame(width: Self.cote - 6, height: Self.cote - 6)
+                        .frame(width: Self.cote, height: Self.cote)
+                }
             }
-            .overlay(Circle().strokeBorder(Couleur.surAplat, lineWidth: actif ? 2.5 : 1.5).padding(actif ? -3 : 0))
+            .overlay(Circle().strokeBorder(Couleur.surAplat, lineWidth: actif ? 2.5 : (responsable == nil ? 0 : 1.5)).padding(actif ? -3 : 0))
         case .question:
             Text("?").font(Ecriture.une(20).italic())
                 .frame(width: Self.cote, height: Self.cote)
