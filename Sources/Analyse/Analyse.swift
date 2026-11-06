@@ -199,12 +199,13 @@ public struct CompteRendu: Codable, Sendable, Hashable {
     /// actuelle décide ensuite du sort d'« En bref » et des sujets (règle 1 : rien n'est affiché sans preuve).
     /// `noms` : le nom donné à chaque voix (voix → nom), pour reconnaître un responsable nommé depuis.
     /// `notes` : les notes de Steven, qui comptent comme connues pour les noms et les chiffres d'une reformulation.
-    public func revalide(dans segments: [Segment], noms: [String: String] = [:], notes: [LigneDeNote] = []) -> CompteRendu {
+    /// `moi` : en visio seulement, le prénom de Steven (voir `ValidationSources.valider`).
+    public func revalide(dans segments: [Segment], noms: [String: String] = [:], notes: [LigneDeNote] = [], moi: String? = nil) -> CompteRendu {
         var copie = self
         let connus = ValidationSources.connus(segments: segments, noms: noms, notes: notes)
         // Une reformulation qui ne tient plus est écartée : l'oral brut n'a rien à faire dans un compte rendu.
         func valider(_ element: ElementSource) -> ElementSource? {
-            ValidationSources.valider(element, dans: segments, noms: noms, connus: connus, citationSiRefus: false)
+            ValidationSources.valider(element, dans: segments, noms: noms, connus: connus, citationSiRefus: false, moi: moi)
         }
         func garder(_ elements: [ElementSource]) -> [ElementSource] {
             let gardes = elements.compactMap(valider)
@@ -410,6 +411,9 @@ public enum ValidationSources {
         return !mots.isDisjoint(with: ["ne", "n", "pas", "jamais", "aucun", "aucune"])
     }
 
+    /// Le prénom de Steven, tel que le Mac le connaît.
+    public static let prenomDeMoi: String = NSFullUserName().split(separator: " ").first.map(String.init) ?? "moi"
+
     /// Tout ce qui a été dit dans la réunion, les noms donnés aux voix et les notes de Steven.
     public static func connus(segments: [Segment], noms: [String: String] = [:], notes: [LigneDeNote] = []) -> String {
         (segments.map(\.texte) + Array(noms.values) + notes.map(\.texte)).joined(separator: " ")
@@ -427,8 +431,10 @@ public enum ValidationSources {
     /// `connus` : ce qui a été dit ailleurs dans la réunion et ce que Steven a noté. Un nom ou un chiffre de la
     /// reformulation qui s'y trouve n'est pas inventé, même s'il a été dit loin de la source.
     /// `citationSiRefus` : faux, une reformulation refusée fait écarter l'élément au lieu d'afficher l'oral brut.
+    /// `moi` : en visio, le prénom de Steven. Une phrase du micro sans voix est la sienne : il peut en être
+    /// le responsable. Jamais en présentiel, où le micro entend tout le monde.
     public static func valider(_ element: ElementSource, dans segments: [Segment], noms: [String: String] = [:],
-                               connus: String = "", citationSiRefus: Bool = true) -> ElementSource? {
+                               connus: String = "", citationSiRefus: Bool = true, moi: String? = nil) -> ElementSource? {
         guard !element.sources.isEmpty else { return nil }
         let passages = element.sources.map { segmentsSources(de: $0, dans: segments) }
         guard !passages.contains(where: \.isEmpty) else { return nil }
@@ -445,10 +451,16 @@ public enum ValidationSources {
         let autour = segments.filter { segment in
             temps.contains { $0 >= segment.debut - voisinage && $0 <= segment.fin + voisinage }
         }
-        let voix = Set(autour.compactMap(\.voix)).union(autour.compactMap { $0.voix.flatMap { noms[$0] } })
+        func qui(_ segment: Segment) -> String? { segment.voix ?? (segment.piste == .micro ? moi : nil) }
+        let voix = Set(autour.compactMap(qui)).union(autour.compactMap { $0.voix.flatMap { noms[$0] } })
         let lu = normaliser(([phrases] + autour.map(\.texte) + Array(voix) + [connus]).joined(separator: " "))
         // Un voisin nommé n'est pas pour autant responsable : il faut sa voix, ou son nom dans la phrase.
-        let voixCitees = cites.compactMap(\.voix)
+        // Seules les voix qui disent une phrase de la citation, pas un voisin pris dans la marge de temps.
+        let citation = " \(normaliser(phrases)) "
+        let disent = cites.filter { segment in
+            ValidationSources.phrases(de: segment.texte).contains { citation.contains(" \(normaliser($0)) ") }
+        }
+        let voixCitees = disent.compactMap(qui)
         let porte = normaliser(([phrases] + voixCitees + voixCitees.compactMap { noms[$0] }).joined(separator: " "))
 
         func dit(_ valeur: String?) -> String? {
@@ -740,13 +752,13 @@ public struct AnalysteLocal: Analyste {
         var ecartes = 0
     }
 
-    static func choisir(_ lu: Gabarit.PassageLu, dans lignes: [Ligne], segments: [Segment], noms: [String: String] = [:]) -> PassageChoisi {
+    static func choisir(_ lu: Gabarit.PassageLu, dans lignes: [Ligne], segments: [Segment], noms: [String: String] = [:], moi: String? = nil) -> PassageChoisi {
         var choisi = PassageChoisi()
         func garder(_ puce: Gabarit.Puce, responsable: String? = nil) -> ElementSource? {
             // Une reformulation refusée revient à la citation : du parlé brut, qui n'a rien à faire dans un résumé.
             guard puce.texte.split(separator: " ").count >= Gabarit.motsMinimum,
                   let brut = element(puce, dans: lignes, responsable: responsable),
-                  let valide = ValidationSources.valider(brut, dans: segments, noms: noms),
+                  let valide = ValidationSources.valider(brut, dans: segments, noms: noms, moi: moi),
                   valide.citationAffichee != nil else {
                 choisi.ecartes += 1
                 return nil
@@ -808,7 +820,7 @@ public struct AnalysteLocal: Analyste {
 
         let ordonnes = segments.sorted { $0.debut < $1.debut }
         let toutes = Self.lignes(de: ordonnes)
-        let contexte = Gabarit.contexte(lignes: toutes, type: type, moi: NSFullUserName().split(separator: " ").first.map(String.init) ?? "moi")
+        let contexte = Gabarit.contexte(lignes: toutes, type: type, moi: ValidationSources.prenomDeMoi)
         let passages = Self.passages(toutes)
         var decisions: [ElementSource] = []
         var actions: [ElementSource] = []
@@ -820,7 +832,7 @@ public struct AnalysteLocal: Analyste {
         for (rang, passage) in passages.enumerated() {
             do {
                 for (lu, lignes) in try await lirePassage(passage, notes: notes, type: type, contexte: contexte) {
-                    let choisi = Self.choisir(lu, dans: lignes, segments: ordonnes)
+                    let choisi = Self.choisir(lu, dans: lignes, segments: ordonnes, moi: type == .visio ? ValidationSources.prenomDeMoi : nil)
                     decisions += choisi.decisions.prefix(Gabarit.maxDecisionsParPassage)
                     actions += choisi.actions.prefix(Gabarit.maxActionsParPassage)
                     questions += choisi.questions.prefix(Gabarit.maxQuestionsParPassage)
