@@ -20,3 +20,9 @@ func chaquePoliceGardeSaLicence(fichier: String) throws {
     let dossier = try #require(Polices.dossier)
     #expect(FileManager.default.fileExists(atPath: dossier.appendingPathComponent(fichier).path))
 }
+
+@Test func unePersonneGardeSaCouleur() {
+    #expect(Pastille.rang("Karim") == Pastille.rang(" karim "))
+    #expect(Pastille.rang("Léa") == Pastille.rang("Léa"))
+    #expect((0..<Pastille.palette.count).contains(Pastille.rang("Steven")))
+}
