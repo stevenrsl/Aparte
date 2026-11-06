@@ -223,6 +223,7 @@ public enum Ecriture {
     public static let personne = Font.system(size: 16, weight: .black, design: .serif).italic()
     public static let echeance = Font.system(size: 14, weight: .semibold, design: .serif).italic()
     public static let citation = Font.system(size: 14.5, design: .serif).italic()
+    public static let transcription = Font.system(size: 14.5, design: .serif)
     public static let numero = Font.system(size: 17, weight: .black, design: .serif)
     public static let etiquette = Font.system(size: 10, weight: .semibold).width(.expanded)
     public static let horodatage = Font.system(size: 10.5, weight: .medium).width(.expanded).monospacedDigit()

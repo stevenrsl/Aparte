@@ -37,22 +37,38 @@ public struct FenetreAparte: View {
         self.modele = modele
     }
 
+    /// Le compte rendu suit le brief « Affiche » : son aplat monte jusqu'en haut de la fenêtre, sans grain.
+    /// Les autres écrans gardent l'ancienne charpente jusqu'à leur refonte.
+    private var affiche: Bool {
+        if case .compteRendu = modele.ecran, modele.racine != nil { return true }
+        return false
+    }
+
+    private var barreDeTitre: some View {
+        Color.surface.frame(height: 42)
+            .overlay(alignment: .bottom) { Color.filet.frame(height: 1) }
+    }
+
     public var body: some View {
-        VStack(spacing: 0) {
-            Color.surface.frame(height: 42)
-                .overlay(alignment: .bottom) { Color.filet.frame(height: 1) }
-            HStack(spacing: 0) {
-                if modele.racine != nil {
+        HStack(spacing: 0) {
+            if modele.racine != nil {
+                VStack(spacing: 0) {
+                    barreDeTitre
                     BarreLaterale(modele: modele)
                 }
+                .frame(width: 228)
+                .overlay { if !affiche { GrainOverlay().ignoresSafeArea() } }
+            }
+            VStack(spacing: 0) {
+                if !affiche { barreDeTitre }
                 contenu
             }
+            .overlay { if !affiche { GrainOverlay().ignoresSafeArea() } }
         }
         .ignoresSafeArea()
         .background(Color.creme)
         .foregroundStyle(Color.encre)
         .font(Typo.texte)
-        .overlay { GrainOverlay().ignoresSafeArea() }
         .alert("Un problème est survenu", isPresented: Binding(get: { modele.erreur != nil }, set: { if !$0 { modele.erreur = nil } })) {
             Button("Compris", role: .cancel) {}
         } message: {
