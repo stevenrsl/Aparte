@@ -48,6 +48,40 @@ public enum ErreurCapture: LocalizedError {
 public struct EntreeAudio: Identifiable, Hashable, Sendable {
     public let id: AudioDeviceID
     public let nom: String
+    /// `kAudioDeviceTransportType…` : intégré, Bluetooth, USB…
+    public var transport: UInt32 = 0
+
+    public init(id: AudioDeviceID, nom: String, transport: UInt32 = 0) {
+        self.id = id
+        self.nom = nom
+        self.transport = transport
+    }
+
+    public var estBluetooth: Bool {
+        transport == kAudioDeviceTransportTypeBluetooth || transport == kAudioDeviceTransportTypeBluetoothLE
+    }
+
+    public var estIntegree: Bool { transport == kAudioDeviceTransportTypeBuiltIn }
+
+    /// L'entrée par défaut du Mac, telle que la voit le système en ce moment.
+    public static func parDefaut() -> EntreeAudio? {
+        var adresse = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyDefaultInputDevice,
+                                                 mScope: kAudioObjectPropertyScopeGlobal,
+                                                 mElement: kAudioObjectPropertyElementMain)
+        var id = AudioDeviceID(0)
+        var taille = UInt32(MemoryLayout<AudioDeviceID>.size)
+        guard AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &adresse, 0, nil, &taille, &id) == noErr else { return nil }
+        return liste().first { $0.id == id }
+    }
+
+    /// L'entrée à utiliser. Un choix de Steven passe toujours. Sinon, en présentiel, un micro Bluetooth
+    /// par défaut (des écouteurs) n'entend que celui qui le porte, voire rien s'il est rangé : le micro
+    /// intégré du Mac écoute la pièce. Le 6 novembre 2026, une réunion de 27 minutes a ainsi donné 98 mots.
+    public static func choisir(choisie: EntreeAudio?, parDefaut: EntreeAudio?, toutes: [EntreeAudio], presentiel: Bool) -> EntreeAudio? {
+        if let choisie { return choisie }
+        guard presentiel, parDefaut?.estBluetooth == true, let integree = toutes.first(where: \.estIntegree) else { return parDefaut }
+        return integree
+    }
 
     /// Les périphériques qui ont au moins un canal d'entrée.
     public static func liste() -> [EntreeAudio] {
@@ -77,7 +111,13 @@ public struct EntreeAudio: Identifiable, Hashable, Sendable {
             var tailleNom = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
             guard AudioObjectGetPropertyData(id, &nomAdresse, 0, nil, &tailleNom, &nom) == noErr,
                   let valeur = nom?.takeRetainedValue() else { return nil }
-            return EntreeAudio(id: id, nom: valeur as String)
+            var transportAdresse = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyTransportType,
+                                                              mScope: kAudioObjectPropertyScopeGlobal,
+                                                              mElement: kAudioObjectPropertyElementMain)
+            var transport: UInt32 = 0
+            var tailleTransport = UInt32(MemoryLayout<UInt32>.size)
+            _ = AudioObjectGetPropertyData(id, &transportAdresse, 0, nil, &tailleTransport, &transport)
+            return EntreeAudio(id: id, nom: valeur as String, transport: transport)
         }
     }
 }
@@ -393,5 +433,30 @@ private func mettreAACALaCorbeille(_ aac: URL) {
     } catch {
         Logger(subsystem: "eu.stevenrsl.aparte", category: "capture")
             .error("\(aac.lastPathComponent, privacy: .public) reste à sa place : \(String(describing: error), privacy: .public)")
+    }
+}
+
+
+/// Un micro qui n'entend presque rien : pas une coupure (les tampons arrivent), mais un souffle. Rien ne le
+/// disait, et une réunion entière pouvait partir à la poubelle. Faible si, sur la fenêtre, moins d'une part
+/// des niveaux dépasse le seuil d'une voix, même lointaine.
+public struct DetecteurMicroFaible: Sendable {
+    public var fenetre: TimeInterval = 30
+    /// Le niveau 0…1 de `AudioBuffers.level` : 0,25 vaut environ -44 dBFS.
+    public var seuil: Float = 0.25
+    public var partMinimum: Double = 0.05
+    private var mesures: [(Date, Float)] = []
+    private var depuis: Date?
+
+    public init() {}
+
+    /// Ajoute une mesure ; vrai si le micro est faible sur toute la fenêtre écoulée.
+    public mutating func ajouter(_ niveau: Float, a date: Date) -> Bool {
+        if depuis == nil { depuis = date }
+        mesures.append((date, niveau))
+        mesures.removeAll { date.timeIntervalSince($0.0) > fenetre }
+        guard let depuis, date.timeIntervalSince(depuis) >= fenetre, !mesures.isEmpty else { return false }
+        let fortes = mesures.filter { $0.1 >= seuil }.count
+        return Double(fortes) / Double(mesures.count) < partMinimum
     }
 }
