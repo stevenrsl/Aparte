@@ -121,7 +121,8 @@ struct EcranEnReunion: View {
     /// Les niveaux d'entrée, sobres : une barre par source, le dernier niveau entendu.
     private var niveaux: some View {
         HStack(spacing: Espace.s8) {
-            Niveau(nom: "Micro", valeur: session.niveauxMoi.last ?? 0)
+            Niveau(nom: "Micro", valeur: session.niveauxMoi.last ?? 0, entree: session.entreeUtilisee ?? "Micro par défaut",
+                   faible: session.alerteMicroFaible != nil)
             if session.reunion.meta.type == .visio {
                 Niveau(nom: "Son du Mac", valeur: session.niveauxEux.last ?? 0)
             }

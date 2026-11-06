@@ -120,3 +120,66 @@ private struct AnalyseLente: Analyste {
         throw ErreurAnalyse.rienAAnalyser
     }
 }
+
+/// La préparation du compte rendu à 10, 60 et 95 %, et l'alerte micro faible en réunion.
+/// Lancement : APARTE_RENDUS=/un/dossier swift test --filter rendreLaPreparation
+@MainActor
+@Test(.enabled(if: ProcessInfo.processInfo.environment["APARTE_RENDUS"] != nil))
+func rendreLaPreparation() async throws {
+    let sortie = URL(fileURLWithPath: ProcessInfo.processInfo.environment["APARTE_RENDUS"]!)
+    let racine = FileManager.default.temporaryDirectory.resolvingSymlinksInPath().appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: racine, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: racine) }
+    let bibliotheque = Bibliotheque(racine: racine)
+    let modele = ModeleApp(verifierCle: false, racineInitiale: racine)
+
+    func rendre(_ nom: String, _ ecran: Ecran) async throws {
+        for sombre in [false, true] {
+            modele.ecran = ecran
+            let fenetre = NSWindow(contentRect: NSRect(x: -4000, y: -4000, width: 1280, height: 800), styleMask: [.borderless], backing: .buffered, defer: false)
+            fenetre.appearance = NSAppearance(named: sombre ? .darkAqua : .aqua)
+            let hote = NSHostingView(rootView: FenetreAparte(modele: modele).frame(width: 1280, height: 800))
+            hote.frame = NSRect(x: 0, y: 0, width: 1280, height: 800)
+            fenetre.contentView = hote
+            fenetre.orderFrontRegardless()
+            for _ in 0..<6 {
+                try await Task.sleep(for: .milliseconds(150))
+                hote.layoutSubtreeIfNeeded()
+            }
+            let image = try #require(hote.bitmapImageRepForCachingDisplay(in: hote.bounds))
+            hote.cacheDisplay(in: hote.bounds, to: image)
+            fenetre.orderOut(nil)
+            try #require(image.representation(using: .png, properties: [:])).write(to: sortie.appendingPathComponent("\(nom)\(sombre ? "-sombre" : "").png"))
+        }
+    }
+
+    let r = try bibliotheque.creerReunion(titre: "Captation des Rencontres du vin", type: .visio, dossier: try bibliotheque.creerDossier("Rencontres du vin"))
+    let lignes = RendusCompteRendu.phrasesDemo.map { Segment(debut: $0.0, fin: $0.0 + 12, piste: $0.1 == nil ? .micro : .systeme, texte: $0.2, voix: $0.1) }
+    try r.enregistrer(segments: lignes)
+    try r.enregistrer(notes: RendusCompteRendu.notesDemo.map { LigneDeNote(temps: $0.0, texte: $0.1) })
+    var meta = r
+    meta.meta.duree = 59 * 60
+    try meta.enregistrerMeta()
+    modele.recharger()
+    let reunion = try #require(modele.reunions.first)
+    modele.simulerPreparation(reunion, relecture: 0.1)
+    try await rendre("preparation-10", .compteRendu(reunion))
+    modele.simulerPreparation(reunion, relecture: 0.6)
+    try await rendre("preparation-60", .compteRendu(reunion))
+    modele.simulerPreparation(reunion, redaction: 0.95)
+    try await rendre("preparation-95", .compteRendu(reunion))
+    modele.simulerPreparation(reunion)
+
+    let enCours = try bibliotheque.creerReunion(titre: "Point tournage, jour J", type: .presentiel, dossier: nil)
+    let session = SessionReunion(reunion: enCours)
+    session.simulerDebut(Date().addingTimeInterval(-(4 * 60 + 12)), entree: "AirPods Pro de Steven", microFaible: true)
+    session.lignes = [LigneDeNote(temps: 95, texte: "on commence par le planning"), LigneDeNote(temps: 252, texte: "")]
+    modele.session = session
+    try await rendre("en-reunion-micro-faible", .enReunion)
+    let normale = SessionReunion(reunion: enCours)
+    normale.simulerDebut(Date().addingTimeInterval(-(4 * 60 + 12)), entree: "MacBook Pro Microphone")
+    modele.session = normale
+    try await rendre("en-reunion-entree", .enReunion)
+    modele.session = nil
+    modele.ecran = .accueil
+}
