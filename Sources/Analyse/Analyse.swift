@@ -198,17 +198,23 @@ public struct CompteRendu: Codable, Sendable, Hashable {
     /// place à la transcription, et ce qui n'est plus prouvé est écarté. Son état face à la transcription
     /// actuelle décide ensuite du sort d'« En bref » et des sujets (règle 1 : rien n'est affiché sans preuve).
     /// `noms` : le nom donné à chaque voix (voix → nom), pour reconnaître un responsable nommé depuis.
-    public func revalide(dans segments: [Segment], noms: [String: String] = [:]) -> CompteRendu {
+    /// `notes` : les notes de Steven, qui comptent comme connues pour les noms et les chiffres d'une reformulation.
+    public func revalide(dans segments: [Segment], noms: [String: String] = [:], notes: [LigneDeNote] = []) -> CompteRendu {
         var copie = self
+        let connus = ValidationSources.connus(segments: segments, noms: noms, notes: notes)
+        // Une reformulation qui ne tient plus est écartée : l'oral brut n'a rien à faire dans un compte rendu.
+        func valider(_ element: ElementSource) -> ElementSource? {
+            ValidationSources.valider(element, dans: segments, noms: noms, connus: connus, citationSiRefus: false)
+        }
         func garder(_ elements: [ElementSource]) -> [ElementSource] {
-            let gardes = elements.compactMap { ValidationSources.valider($0, dans: segments, noms: noms) }
+            let gardes = elements.compactMap(valider)
             copie.elementsEcartes += elements.count - gardes.count
             return gardes
         }
         copie.decisions = garder(decisions)
         copie.actions = garder(actions)
         copie.questions = garder(questions)
-        let pointsClesValides = pointsCles.map { $0.compactMap { ValidationSources.valider($0, dans: segments, noms: noms) } }
+        let pointsClesValides = pointsCles.map { $0.compactMap(valider) }
 
         // Un sujet n'est retiré que si son début ne tombe plus sur un segment. Une fin au-delà de la
         // transcription (et de la tolérance) est ramenée à sa fin : une relecture qui finit plus tôt, ou
@@ -404,6 +410,11 @@ public enum ValidationSources {
         return !mots.isDisjoint(with: ["ne", "n", "pas", "jamais", "aucun", "aucune"])
     }
 
+    /// Tout ce qui a été dit dans la réunion, les noms donnés aux voix et les notes de Steven.
+    public static func connus(segments: [Segment], noms: [String: String] = [:], notes: [LigneDeNote] = []) -> String {
+        (segments.map(\.texte) + Array(noms.values) + notes.map(\.texte)).joined(separator: " ")
+    }
+
     /// Autour d'une source, ce qui compte comme dit pour un responsable, une échéance ou une reformulation.
     static let voisinage = 30.0
 
@@ -413,7 +424,11 @@ public enum ValidationSources {
     /// absent de ce passage laisse place à la citation. Seules les sources où la citation se trouve restent,
     /// et un responsable ou une échéance doit être dans la phrase citée, ou être la voix qui la dit.
     /// `noms` (voix → nom) : seul le nom d'une voix présente compte, jamais celui d'un autre participant.
-    public static func valider(_ element: ElementSource, dans segments: [Segment], noms: [String: String] = [:]) -> ElementSource? {
+    /// `connus` : ce qui a été dit ailleurs dans la réunion et ce que Steven a noté. Un nom ou un chiffre de la
+    /// reformulation qui s'y trouve n'est pas inventé, même s'il a été dit loin de la source.
+    /// `citationSiRefus` : faux, une reformulation refusée fait écarter l'élément au lieu d'afficher l'oral brut.
+    public static func valider(_ element: ElementSource, dans segments: [Segment], noms: [String: String] = [:],
+                               connus: String = "", citationSiRefus: Bool = true) -> ElementSource? {
         guard !element.sources.isEmpty else { return nil }
         let passages = element.sources.map { segmentsSources(de: $0, dans: segments) }
         guard !passages.contains(where: \.isEmpty) else { return nil }
@@ -431,7 +446,7 @@ public enum ValidationSources {
             temps.contains { $0 >= segment.debut - voisinage && $0 <= segment.fin + voisinage }
         }
         let voix = Set(autour.compactMap(\.voix)).union(autour.compactMap { $0.voix.flatMap { noms[$0] } })
-        let lu = normaliser(([phrases] + autour.map(\.texte) + Array(voix)).joined(separator: " "))
+        let lu = normaliser(([phrases] + autour.map(\.texte) + Array(voix) + [connus]).joined(separator: " "))
         // Un voisin nommé n'est pas pour autant responsable : il faut sa voix, ou son nom dans la phrase.
         let voixCitees = cites.compactMap(\.voix)
         let porte = normaliser(([phrases] + voixCitees + voixCitees.compactMap { noms[$0] }).joined(separator: " "))
@@ -445,6 +460,7 @@ public enum ValidationSources {
         let propose = element.texte.trimmingCharacters(in: .whitespacesAndNewlines)
         let tient = !propose.isEmpty && EnBref.motsNonDits(propose, lu: Set(lu.split(separator: " ").map(String.init))).isEmpty
             && negative(phrases) == negative(propose)
+        guard tient || citationSiRefus else { return nil }
         valide.texte = tient ? propose : phrases
         valide.citation = phrases
         valide.sources = prouvants.map(\.0)
@@ -689,9 +705,9 @@ public struct AnalysteLocal: Analyste {
 
     /// Une puce rédigée et la phrase qui la prouve, sa citation. Rien si le numéro n'existe pas, ou si aucune
     /// phrase du passage ne reprend assez ses mots.
-    static func element(_ puce: Gabarit.Puce, dans lignes: [Ligne], responsable: String? = nil) -> ElementSource? {
+    static func element(_ puce: Gabarit.Puce, dans lignes: [Ligne], responsable: String? = nil, rayon: Int? = nil) -> ElementSource? {
         guard lignes.indices.contains(puce.ligne - 1),
-              let numero = Gabarit.ligneQuiProuve(puce.texte, numero: puce.ligne, dans: lignes.map(\.phrase)) else { return nil }
+              let numero = Gabarit.ligneQuiProuve(puce.texte, numero: puce.ligne, dans: lignes.map(\.phrase), rayon: rayon) else { return nil }
         let ligne = lignes[numero - 1]
         return ElementSource(texte: puce.texte, sources: [ligne.debut], citation: ligne.phrase, responsable: responsable)
     }

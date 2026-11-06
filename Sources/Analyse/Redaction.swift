@@ -217,6 +217,8 @@ enum Gabarit {
     /// Assez pour qu'une phrase de quelques mots ne se prouve pas par hasard, assez peu pour admettre
     /// une reformulation qui change les temps et l'ordre.
     static let preuveMinimum = 0.5
+    /// Pour une ligne jugée avec ses voisines, près du numéro donné.
+    static let preuveVoisine = 0.25
 
     /// Les racines qui portent le sens : « envoyer » et « envoies » se rejoignent, pas « le » ni « pour ».
     static func racines(_ texte: String) -> Set<String> {
@@ -233,8 +235,36 @@ enum Gabarit {
     /// Le numéro donné par le petit modèle est peu fiable : sur une vraie réunion, « Envoyer un mail » pointait
     /// vers une phrase sur les images d'ambiance. La ligne retenue est celle du passage qui prouve le mieux le
     /// texte, la plus proche de ce numéro à égalité. Aucune ne le prouve assez : rien (règle 1).
-    static func ligneQuiProuve(_ texte: String, numero: Int, dans phrases: [String]) -> Int? {
+    ///
+    /// `rayon` : pour un modèle dont les numéros sont fiables (Mistral), la ligne est cherchée à `rayon` lignes
+    /// au plus du numéro donné, et chacune est jugée avec ses voisines : une bonne reformulation résume
+    /// souvent deux ou trois phrases, sans en reprendre la moitié des mots. Il faut alors au moins deux
+    /// racines communes (ou la moitié) et un quart des racines de la reformulation.
+    static func ligneQuiProuve(_ texte: String, numero: Int, dans phrases: [String], rayon: Int? = nil) -> Int? {
         let cherchees = racines(texte)
+        if let rayon {
+            guard phrases.indices.contains(numero - 1), !cherchees.isEmpty else { return nil }
+            var meilleure: (ligne: Int, score: Double)?
+            for rang in max(0, numero - 1 - rayon)...min(phrases.count - 1, numero - 1 + rayon) {
+                let fenetre = phrases[max(0, rang - 1)...min(phrases.count - 1, rang + 1)].joined(separator: " ")
+                let communes = cherchees.intersection(racines(fenetre)).count
+                let score = Double(communes) / Double(cherchees.count)
+                // « envoyer » et « envoie » n'ont pas la même racine : la moitié des mots suffit aussi.
+                guard communes >= 2 || score >= preuveMinimum, score >= preuveVoisine else { continue }
+                // À score égal, la plus proche du numéro ; un écart d'une ligne vaut un peu de score.
+                let note = score - Double(abs(rang + 1 - numero)) * 0.01
+                if let actuelle = meilleure, actuelle.score >= note { continue }
+                meilleure = (rang + 1, note)
+            }
+            // La citation est la phrase de la fenêtre qui reprend le plus de mots, pas un fragment voisin
+            // (« Alors, ») : à égalité, la plus longue.
+            guard let centre = meilleure?.ligne else { return nil }
+            let voisines = max(1, centre - 1)...min(phrases.count, centre + 1)
+            return voisines.max { a, b in
+                let (pa, pb) = (cherchees.intersection(racines(phrases[a - 1])).count, cherchees.intersection(racines(phrases[b - 1])).count)
+                return pa != pb ? pa < pb : phrases[a - 1].count < phrases[b - 1].count
+            }
+        }
         guard cherchees.count >= 2 else { return phrases.indices.contains(numero - 1) && preuve(cherchees, dans: phrases[numero - 1]) >= 1 ? numero : nil }
         var meilleure: (ligne: Int, score: Double)?
         for (rang, phrase) in phrases.enumerated() {

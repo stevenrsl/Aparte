@@ -77,9 +77,16 @@ private let citationMarie = "Marie envoie la musique avant vendredi."
         ElementSource(texte: "Sans preuve", sources: [11], citation: "On annule tout."),
     ], actions: [], questions: [])
     let relue = ancienne.revalide(dans: segments)
-    #expect(relue.decisions.map(\.texte) == ["On valide la version longue."])
-    #expect(relue.decisions.first?.id == ancienne.decisions.first?.id)
-    #expect(relue.elementsEcartes == 1)
+    // Une reformulation qui inverse la négation est écartée : l'oral brut ne la remplace plus (6 novembre 2026).
+    #expect(relue.decisions.isEmpty)
+    #expect(relue.elementsEcartes == 2)
+
+    let juste = CompteRendu(fournisseur: "Test", decisions: [
+        ElementSource(texte: "Valider la version longue", sources: [11], citation: "On valide la version longue."),
+    ], actions: [], questions: [])
+    let gardee = juste.revalide(dans: segments)
+    #expect(gardee.decisions.map(\.texte) == ["Valider la version longue"])
+    #expect(gardee.decisions.first?.id == juste.decisions.first?.id)
 }
 
 @Test func unResponsableOuUneEcheanceNonDitsSontRetires() throws {

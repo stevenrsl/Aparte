@@ -161,8 +161,10 @@ de ce qu'elle contient n'est réécrit, sauf le titre dans `meta.json`.
   la citation seule retenue le 2 novembre, après l'essai sur une vraie réunion de 59 minutes : 59 « décisions » illisibles
   face aux 3 actions de Cairn). Une phrase courte à la façon de Cairn, puis la phrase entière de la transcription, qui
   reste affichée comme preuve. Une reformulation peut se tromper : le modèle doit donner le numéro de la ligne qui la
-  prouve, sans quoi l'élément est écarté, et elle laisse place à la citation si elle nomme une personne, un chiffre ou un
-  moment absent de ce passage, ou si elle change le sens d'une négation. Ce contrôle ne prouve pas qu'elle dit vrai : la
+  prouve, sans quoi l'élément est écarté. Depuis le 6 novembre 2026, l'élément est aussi écarté (et non plus remplacé
+  par l'oral brut) s'il nomme une personne, un chiffre ou un moment jamais dit dans la réunion ni écrit dans les notes
+  de Steven, ou s'il change le sens d'une négation. Avec Mistral, la ligne qui prouve est cherchée à 8 lignes au plus
+  du numéro donné, jugée avec ses voisines. Ce contrôle ne prouve pas qu'elle dit vrai : la
   citation dessous permet de vérifier d'un coup d'œil. Plafonds : 8 décisions, 10 actions, 6 questions, 5 points clés.
 - **Les sujets et les points clés** (sujets demandés par Steven le 2 novembre 2026, repris de Cairn ; rédaction étendue
   le 5 novembre 2026 avec la décision ci-dessus) : au plus 8 sujets, titrés par le modèle, chacun avec ses points et leurs
