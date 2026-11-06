@@ -43,10 +43,12 @@ struct EnteteAffiche<Droite: View, Dessous: View>: View {
             HStack(alignment: .bottom, spacing: Espace.s6) {
                 VStack(alignment: .leading, spacing: Espace.s2) {
                     Etiquette(surtitre, couleur: Couleur.surAplat)
-                    Text(titre).font(Ecriture.une(tailleTitreAffiche(titre, grand: grand)))
-                        .lineSpacing(-6)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .accessibilityAddTraits(.isHeader)
+                    if !titre.isEmpty {
+                        Text(titre).font(Ecriture.une(tailleTitreAffiche(titre, grand: grand)))
+                            .lineSpacing(-6)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityAddTraits(.isHeader)
+                    }
                 }
                 Spacer(minLength: Espace.s4)
                 droite

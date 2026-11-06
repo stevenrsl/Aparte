@@ -744,8 +744,8 @@ struct TitreSection: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: Espace.s3) {
             Text(numero).font(Ecriture.numeroSection).foregroundStyle(Couleur.ocre)
-            Text(titre).font(Ecriture.section)
-            Couleur.texte.frame(height: 1).alignmentGuide(.firstTextBaseline) { $0[.bottom] + 8 }
+            Text(titre).font(Ecriture.section).fixedSize().layoutPriority(1)
+            Couleur.texte.frame(minWidth: Espace.s4).frame(height: 1).alignmentGuide(.firstTextBaseline) { $0[.bottom] + 8 }
         }
         .padding(.bottom, Espace.s2)
         .accessibilityElement(children: .ignore)
