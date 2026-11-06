@@ -166,6 +166,10 @@ struct EcranCompteRendu: View {
             Text("Le compte rendu n’a pas pu être rédigé : \(raison)")
         } else if compteRendu != nil {
             Libelle("compte rendu prêt")
+            if let raison = modele.relaisLocal[reunion.id] {
+                Text("Mistral n’a pas pu le rédiger (\(raison)). Il a été rédigé sur ce Mac.")
+                    .foregroundStyle(Color.encreDouce)
+            }
         } else {
             Libelle("réunion enregistrée")
         }
@@ -197,8 +201,13 @@ struct EcranCompteRendu: View {
             // Sans phrase, analyser ne fait rien : ces boutons ne seraient que des promesses.
             if !segments.isEmpty && !occupee {
                 HStack(spacing: 10) {
-                    boutonAnalyser("Rédiger le compte rendu sur ce Mac", style: BoutonPrincipal())
-                    boutonMistral
+                    Button("Rédiger le compte rendu") { modele.rediger(reunion) }
+                        .buttonStyle(BoutonPrincipal())
+                    if modele.gardeeSurCeMac(reunion) || !modele.cleMistralPresente {
+                        Text("Rédigé sur ce Mac").foregroundStyle(Color.encreDouce)
+                    } else {
+                        boutonAnalyser("Rédiger sur ce Mac", style: BoutonSecondaire())
+                    }
                 }
             }
             if !modele.cleMistralPresente && !segments.isEmpty && !occupee {
@@ -216,15 +225,6 @@ struct EcranCompteRendu: View {
         }
         .buttonStyle(style)
         .disabled(occupee || segments.isEmpty)
-    }
-
-    /// Mistral : un envoi hors du Mac, confirmé à chaque fois, pour cette réunion seule (règle 2).
-    private var boutonMistral: some View {
-        Button("Rédiger avec Mistral…") { confirmerMistral = true }
-            .buttonStyle(BoutonSecondaire())
-            .disabled(occupee || segments.isEmpty || !modele.cleMistralPresente)
-            .help(modele.cleMistralPresente ? "" : "Ajoute ta clé Mistral dans les réglages.")
-            .confirmationMistral(presente: $confirmerMistral) { modele.analyserAvecMistral(reunion) }
     }
 
     /// Les personnes à nommer, juste sous le résumé : les noms changent toute la lecture qui suit.
@@ -318,12 +318,14 @@ struct EcranCompteRendu: View {
         }
     }
 
-    /// Refaire l'analyse : sur ce Mac, ou chez Mistral après confirmation.
+    /// Refaire l'analyse : chez Mistral (une réunion gardée sur ce Mac demande confirmation), ou sur ce Mac.
     private var menuRefaire: some View {
         Menu("Refaire le compte rendu") {
+            Button(modele.gardeeSurCeMac(reunion) ? "Avec Mistral…" : "Avec Mistral") {
+                if modele.gardeeSurCeMac(reunion) { confirmerMistral = true } else { modele.analyserAvecMistral(reunion) }
+            }
+            .disabled(!modele.cleMistralPresente)
             Button("Sur ce Mac") { modele.analyser(reunion, avec: AnalysteLocal()) }
-            Button("Avec Mistral…") { confirmerMistral = true }
-                .disabled(!modele.cleMistralPresente)
             if !modele.cleMistralPresente {
                 Button("Ajoute ta clé dans les réglages") { modele.ecran = .reglages }
             }
@@ -453,11 +455,11 @@ struct EcranCompteRendu: View {
 
 private extension View {
     func confirmationMistral(presente: Binding<Bool>, envoyer: @escaping () -> Void) -> some View {
-        alert("Envoyer cette réunion à Mistral ?", isPresented: presente) {
+        alert("Cette réunion est gardée sur ce Mac. L'envoyer quand même à Mistral ?", isPresented: presente) {
             Button("Envoyer cette réunion", action: envoyer)
             Button("Annuler", role: .cancel) {}
         } message: {
-            Text("La transcription et tes notes partent chez Mistral pour cette analyse. L'audio reste sur ce Mac.")
+            Text("La transcription et tes notes partent chez Mistral pour ce compte rendu. L'audio reste sur ce Mac.")
         }
     }
 }

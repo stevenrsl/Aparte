@@ -31,9 +31,9 @@ struct EcranReglages: View {
         } contenu: {
             VStack(alignment: .leading, spacing: 22) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Libelle("analyste par défaut")
-                    Text("Local · Apple Intelligence")
-                    Text("Une réunion ne part chez Mistral que si tu le demandes, une par une.").foregroundStyle(Color.encreDouce)
+                    Libelle("qui rédige tes comptes rendus")
+                    Text(modele.cleMistralPresente ? "Mistral, et ce Mac s'il ne répond pas" : "Ce Mac · Apple Intelligence")
+                    Text("Une réunion ou un dossier marqués « Garder sur ce Mac » ne partent jamais chez Mistral.").foregroundStyle(Color.encreDouce)
                 }
                 VStack(alignment: .leading, spacing: 8) {
                     Libelle("clé mistral")
@@ -89,7 +89,7 @@ struct EcranReglages: View {
         } contenuEncre: {
             VStack(alignment: .leading, spacing: 14) {
                 Text("L'audio : jamais.")
-                Text("La transcription et tes notes : seulement si tu lances toi-même une analyse avec Mistral, pour cette réunion.")
+                Text("La transcription et tes notes : chez Mistral, pour rédiger le compte rendu, sauf ce que tu gardes sur ce Mac.")
                 Text("Aucune télémétrie, aucun compte.")
             }
             .padding(.horizontal, 28)

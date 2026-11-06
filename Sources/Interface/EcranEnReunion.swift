@@ -19,6 +19,12 @@ struct EcranEnReunion: View {
             Libelle(session.reunion.dossier?.lowercased() ?? "réunion en cours")
             TextField("Titre de la réunion", text: Bindable(session).titre)
                 .textFieldStyle(.plain).font(Typo.titreEcran)
+            Toggle("Garder sur ce Mac", isOn: Binding(
+                get: { modele.gardeeSurCeMac(session.reunion) },
+                set: { modele.garderSurCeMac(session.reunion, $0) }))
+                .toggleStyle(.checkbox)
+                .disabled(session.reunion.dossier.map(modele.dossierGardeSurCeMac) == true)
+                .help("Le compte rendu de cette réunion sera rédigé sur ce Mac, jamais chez Mistral.")
         } contenu: {
             VStack(alignment: .leading, spacing: 0) {
                 ScrollView {

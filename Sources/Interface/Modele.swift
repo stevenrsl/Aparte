@@ -116,6 +116,8 @@ public final class ModeleApp {
     /// Une analyse lancée sans clic qui n'a pas abouti, avec sa raison lisible. Elle s'efface au
     /// prochain essai, clic compris.
     public private(set) var echecsAnalyseAuto: [String: String] = [:]
+    /// Mistral n'a pas pu rédiger, et le compte rendu a été rédigé sur ce Mac : la raison lisible.
+    public private(set) var relaisLocal: [String: String] = [:]
     /// Une clé Mistral est dans le trousseau. Elle-même n'est lue qu'au moment d'envoyer.
     public private(set) var cleMistralPresente: Bool
     @ObservationIgnored private var compteRendus: [String: CompteRendu] = [:]
@@ -210,7 +212,7 @@ public final class ModeleApp {
         guard let data = reunion.analyseJSON() else { return nil }
         let decodeur = JSONDecoder()
         decodeur.dateDecodingStrategy = .iso8601
-        return (try? decodeur.decode(CompteRendu.self, from: data))?.revalide(dans: reunion.segments())
+        return (try? decodeur.decode(CompteRendu.self, from: data))?.revalide(dans: reunion.segments(), noms: reunion.meta.nomsDesVoix ?? [:], notes: reunion.notes())
     }
 
     func resumeEnregistre(de reunion: Reunion) -> CompteRendu? { compteRendus[reunion.id] }
@@ -223,7 +225,7 @@ public final class ModeleApp {
         let encodeur = JSONEncoder()
         encodeur.outputFormatting = [.prettyPrinted, .sortedKeys]
         encodeur.dateEncodingStrategy = .iso8601
-        let revalidee = compteRendu.revalide(dans: reunion.segments(), noms: reunion.meta.nomsDesVoix ?? [:])
+        let revalidee = compteRendu.revalide(dans: reunion.segments(), noms: reunion.meta.nomsDesVoix ?? [:], notes: reunion.notes())
         try reunion.enregistrer(analyseJSON: encodeur.encode(compteRendu), markdown: revalidee.markdown(incidents: reunion.meta.incidentsAudio ?? []))
         var meta = reunion
         if !meta.meta.fournisseurs.contains(compteRendu.fournisseur) {
@@ -315,7 +317,9 @@ public final class ModeleApp {
                 let resultat = try await Relecture.relire(reunion, vocabulaire: vocabulaire) { [weak self] avancee in
                     Task { @MainActor in if self?.relectures[reunion.id] != nil { self?.relectures[reunion.id] = avancee } }
                 }
-                var relue = reunion
+                // Repartir de la réunion telle qu'elle est maintenant : un choix fait pendant la relecture
+                // (« Garder sur ce Mac », un nom de voix) ne doit pas être écrasé par la copie du départ.
+                var relue = reunions.first(where: { $0.id == reunion.id }) ?? reunion
                 relue.meta.relue = true
                 try relue.remplacer(segments: resultat.segments)
                 try relue.enregistrerMeta()
@@ -330,7 +334,7 @@ public final class ModeleApp {
             if let relue = reunions.first(where: { $0.id == reunion.id }) {
                 // Le compte rendu est prêt sans clic, mais seulement sur ce Mac : rien ne part jamais tout seul.
                 if compteRendu(de: relue) == nil {
-                    analyser(relue, avec: AnalysteLocal(), signaler: false)
+                    rediger(relue, signaler: false)
                 } else {
                     marquerSiPerimee(relue)
                 }
@@ -349,7 +353,7 @@ public final class ModeleApp {
         guard let brute = try? decodeur.decode(CompteRendu.self, from: donnees) else { return }
         let segments = reunion.segments()
         guard brute.etat(selon: segments) == .perimee else { return }
-        let revalidee = brute.revalide(dans: segments)
+        let revalidee = brute.revalide(dans: segments, noms: reunion.meta.nomsDesVoix ?? [:], notes: reunion.notes())
         let markdown = revalidee.markdown(incidents: reunion.meta.incidentsAudio ?? [])
         do {
             try reunion.enregistrer(analyseJSON: donnees, markdown: markdown)
@@ -367,7 +371,8 @@ public final class ModeleApp {
 
     /// Analyse une réunion. `signaler` : une analyse lancée sans clic n'interrompt pas pour dire
     /// qu'Apple Intelligence n'est pas disponible, le bouton reste là.
-    public func analyser(_ reunion: Reunion, avec analyste: any Analyste, signaler: Bool = true) {
+    /// `relais` : si `analyste` échoue, celui-ci rédige à sa place, et `relaisLocal` dit pourquoi.
+    public func analyser(_ reunion: Reunion, avec analyste: any Analyste, relais: (any Analyste)? = nil, signaler: Bool = true) {
         guard session?.reunion.id != reunion.id, analyses[reunion.id] == nil, relectures[reunion.id] == nil else { return }
         // Le modèle lit les noms donnés aux voix. Les temps et les mots ne changent pas.
         var segments = reunion.segments()
@@ -378,12 +383,21 @@ public final class ModeleApp {
         for i in segments.indices { segments[i].voix = segments[i].voix.map { reunion.nom(de: $0) } }
         analyses[reunion.id] = 0
         echecsAnalyseAuto[reunion.id] = nil
+        relaisLocal[reunion.id] = nil
         let notes = reunion.notes()
         let type = reunion.meta.type
         Task {
+            let avancer: @Sendable (Double) -> Void = { [weak self] avancee in
+                Task { @MainActor in if self?.analyses[reunion.id] != nil { self?.analyses[reunion.id] = avancee } }
+            }
             do {
-                var resultat = try await analyste.analyser(segments: segments, notes: notes, type: type) { [weak self] avancee in
-                    Task { @MainActor in if self?.analyses[reunion.id] != nil { self?.analyses[reunion.id] = avancee } }
+                var resultat: CompteRendu
+                do {
+                    resultat = try await analyste.analyser(segments: segments, notes: notes, type: type, progression: avancer)
+                } catch {
+                    guard let relais else { throw error }
+                    relaisLocal[reunion.id] = error.localizedDescription
+                    resultat = try await relais.analyser(segments: segments, notes: notes, type: type, progression: avancer)
                 }
                 resultat.empreinte = empreinte
                 try enregistrer(resultat, pour: reunion)
@@ -396,6 +410,58 @@ public final class ModeleApp {
             actualiser(reunion)
         }
     }
+
+    /// Rédige le compte rendu avec le rédacteur par défaut (règle 2, décidée le 6 novembre 2026) : Mistral,
+    /// sauf pour une réunion gardée sur ce Mac ou sans clé, et le modèle local prend le relais si Mistral échoue.
+    public func rediger(_ reunion: Reunion, signaler: Bool = true) {
+        if !gardeeSurCeMac(reunion), cleMistralPresente, let cle = Trousseau.mistral.lire() {
+            analyser(reunion, avec: AnalysteMistral(cle: cle), relais: AnalysteLocal(), signaler: signaler)
+        } else {
+            analyser(reunion, avec: AnalysteLocal(), signaler: signaler)
+        }
+    }
+
+    /// Vrai si la réunion, ou son dossier, ne doit jamais quitter le Mac.
+    public func gardeeSurCeMac(_ reunion: Reunion) -> Bool {
+        if session?.reunion.id == reunion.id, session?.reunion.meta.gardeSurCeMac == true { return true }
+        if reunion.meta.gardeSurCeMac == true { return true }
+        guard let dossier = reunion.dossier, let bibliotheque else { return false }
+        return bibliotheque.reglages(dossier: dossier).gardeSurCeMac == true
+    }
+
+    public func dossierGardeSurCeMac(_ dossier: String) -> Bool {
+        bibliotheque?.reglages(dossier: dossier).gardeSurCeMac == true
+    }
+
+    public func garderSurCeMac(_ reunion: Reunion, _ valeur: Bool) {
+        if let session, session.reunion.id == reunion.id {
+            session.garderSurCeMac(valeur)
+            return
+        }
+        var modifiee = reunion
+        modifiee.meta.gardeSurCeMac = valeur ? true : nil
+        do {
+            try modifiee.enregistrerMeta()
+            if let rang = reunions.firstIndex(where: { $0.id == reunion.id }) { reunions[rang] = modifiee }
+        } catch {
+            erreur = "Ce choix n'a pas pu être enregistré : \(error.localizedDescription)"
+        }
+    }
+
+    public func garderSurCeMac(dossier: String, _ valeur: Bool) {
+        guard let bibliotheque else { return }
+        var reglages = bibliotheque.reglages(dossier: dossier)
+        reglages.gardeSurCeMac = valeur ? true : nil
+        do {
+            try bibliotheque.enregistrer(reglages, dossier: dossier)
+            dossiersVersion += 1
+        } catch {
+            erreur = "Ce choix n'a pas pu être enregistré : \(error.localizedDescription)"
+        }
+    }
+
+    /// Change quand un réglage de dossier change, pour que les écrans le relisent.
+    public private(set) var dossiersVersion = 0
 
     /// Envoie cette réunion à Mistral. Seul un clic de Steven, confirmé, arrive ici (règle 2).
     public func analyserAvecMistral(_ reunion: Reunion) {
@@ -687,6 +753,12 @@ public final class SessionReunion {
             }
             sauvegarder(.meta)
         }
+    }
+
+    /// Pendant la réunion, la session écrit `meta.json` elle-même : le choix passe donc par elle.
+    public func garderSurCeMac(_ valeur: Bool) {
+        reunion.meta.gardeSurCeMac = valeur ? true : nil
+        sauvegarder(.meta)
     }
 
     private func ajouterIncident(_ incident: IncidentAudio) {

@@ -85,6 +85,11 @@ struct GestionReunion: View {
             Button("Réécouter l’enregistrement pour séparer les voix") { modele.relire(reunion) }
                 .disabled(!FileManager.default.fileExists(atPath: reunion.micro.path))
             Divider()
+            Toggle("Garder sur ce Mac", isOn: Binding(
+                get: { reunion.meta.gardeSurCeMac == true },
+                set: { modele.garderSurCeMac(reunion, $0) }))
+                .help("Le compte rendu de cette réunion est rédigé sur ce Mac, jamais chez Mistral.")
+            Divider()
             Button("Mettre à la corbeille…", role: .destructive) { corbeille = true }
         } label: {
             Text("Gérer…")
@@ -141,7 +146,12 @@ struct EcranDossier: View {
             Libelle("dossier · \(accord(reunions.count, "réunion"))")
             TitreEcran(debut: nom, fin: "")
         } commandes: {
-            EmptyView()
+            let _ = modele.dossiersVersion
+            Toggle("Garder sur ce Mac", isOn: Binding(
+                get: { modele.dossierGardeSurCeMac(nom) },
+                set: { modele.garderSurCeMac(dossier: nom, $0) }))
+                .toggleStyle(.checkbox)
+                .help("Les comptes rendus de ce dossier sont rédigés sur ce Mac, jamais chez Mistral.")
         } contenu: {
             SectionActions(modele: modele, actions: actions, montrerReunion: reunions.count > 1)
             if !decisions.isEmpty {

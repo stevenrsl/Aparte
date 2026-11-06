@@ -24,6 +24,8 @@ public struct MetaReunion: Codable, Sendable, Hashable {
     public var relue: Bool?
     /// Pour un extrait : le titre de la réunion dont il vient. L'original n'est pas modifié.
     public var origine: String?
+    /// Steven veut que cette réunion ne quitte jamais le Mac : son compte rendu est rédigé ici.
+    public var gardeSurCeMac: Bool?
 
     public init(titre: String, date: Date, type: TypeReunion) {
         self.titre = titre
@@ -275,6 +277,26 @@ public struct Bibliotheque: Sendable {
             }
         }
         return trouvees.sorted { $0.meta.date > $1.meta.date }
+    }
+
+    /// Ce que Steven a décidé pour tout un dossier, rangé dans `dossier.json`, lisible sans l'app.
+    public struct ReglagesDossier: Codable, Sendable, Hashable {
+        /// Aucune réunion de ce dossier ne quitte le Mac.
+        public var gardeSurCeMac: Bool?
+        public init(gardeSurCeMac: Bool? = nil) { self.gardeSurCeMac = gardeSurCeMac }
+    }
+
+    private func reglagesURL(_ dossier: String) -> URL {
+        racine.appendingPathComponent(dossier).appendingPathComponent("dossier.json")
+    }
+
+    public func reglages(dossier: String) -> ReglagesDossier {
+        guard let data = try? Data(contentsOf: reglagesURL(dossier)) else { return ReglagesDossier() }
+        return (try? Self.decodeur.decode(ReglagesDossier.self, from: data)) ?? ReglagesDossier()
+    }
+
+    public func enregistrer(_ reglages: ReglagesDossier, dossier: String) throws {
+        try Self.encodeur.encode(reglages).write(to: reglagesURL(dossier), options: .atomic)
     }
 
     /// Les dossiers : ceux du disque qui ne sont pas eux-mêmes des réunions.
