@@ -122,6 +122,58 @@ func rendreLesEcrans() async throws {
     modele.erreur = nil
     modele.session = nil
     modele.ecran = .accueil
+
+    // Le compte rendu « Affiche » sur une réunion de 59 minutes, en clair et en sombre.
+    func lesDeux(_ nom: String, _ ecran: Ecran) async throws {
+        try await rendre("cr-\(nom)", ecran)
+        try await rendre("cr-\(nom)-sombre", ecran, sombre: true)
+    }
+    func reunionDemo(_ titre: String, dossier: String?, compteRendu: (([Segment]) -> CompteRendu)?, garder: Bool = false) throws -> Reunion {
+        let r = try bibliotheque.creerReunion(titre: titre, type: .visio, dossier: dossier.map { try bibliotheque.creerDossier($0) })
+        let lignes = RendusCompteRendu.phrasesDemo.map { Segment(debut: $0.0, fin: $0.0 + 12, piste: $0.1 == nil ? .micro : .systeme, texte: $0.2, voix: $0.1) }
+        try r.enregistrer(segments: lignes)
+        try r.enregistrer(notes: RendusCompteRendu.notesDemo.map { LigneDeNote(temps: $0.0, texte: $0.1) })
+        var meta = r
+        meta.meta.duree = 59 * 60
+        meta.meta.nomsDesVoix = ["Voix 1": "Léa Morel", "Voix 2": "Karim Benali", "Voix 3": "Julie Faure"]
+        meta.meta.gardeSurCeMac = garder ? true : nil
+        try meta.enregistrerMeta()
+        if let compteRendu {
+            var cr = compteRendu(lignes)
+            cr.empreinte = CompteRendu.empreinte(de: lignes)
+            try modele.enregistrer(cr, pour: meta)
+        }
+        return meta
+    }
+    func relu(_ r: Reunion) throws -> Reunion {
+        modele.recharger()
+        return try #require(modele.reunions.first { $0.meta.titre == r.meta.titre })
+    }
+    let demo = try relu(reunionDemo("Captation des Rencontres du vin", dossier: "Rencontres du vin", compteRendu: { RendusCompteRendu.demo($0) }))
+    try await lesDeux("mistral", .compteRendu(demo))
+    try await lesDeux("citation-ouverte", .compteRendu(demo, moment: 760))
+    try await lesDeux("transcription", .compteRendu(demo, moment: 930))
+    let local = try relu(reunionDemo("Captation des Rencontres du vin, sur ce Mac", dossier: nil, compteRendu: { RendusCompteRendu.demo($0, fournisseur: "Local · Apple Intelligence") }, garder: true))
+    try await lesDeux("sur-ce-mac", .compteRendu(local))
+    let long = try relu(reunionDemo("Point de production avec l’agence Lumen sur la captation multicaméra des Rencontres du vin et le teaser", dossier: "Clients",
+                                    compteRendu: { RendusCompteRendu.demo($0, beaucoup: true) }))
+    try await lesDeux("titre-long-beaucoup-actions", .compteRendu(long))
+    let vide = try relu(reunionDemo("Repérage Hangar 14", dossier: nil, compteRendu: { RendusCompteRendu.demo($0, actions: false) }))
+    try await lesDeux("aucune-action", .compteRendu(vide))
+    // Mistral échoue, le modèle local prend le relais : l'écran le dit.
+    let relais = try relu(reunionDemo("Brief musique avec Théo", dossier: nil, compteRendu: nil))
+    modele.analyser(relais, avec: AnalysteEnPanne(), relais: AnalysteFixe(compteRendu: RendusCompteRendu.demo(relais.segments(), fournisseur: "Local · Apple Intelligence")), signaler: false)
+    while modele.analyses[relais.id] != nil { try await Task.sleep(for: .milliseconds(20)) }
+    try await lesDeux("relais-local", .compteRendu(try relu(relais)))
+    let attente = try relu(reunionDemo("Point montage, épisode 3", dossier: nil, compteRendu: nil))
+    try await lesDeux("pas-encore", .compteRendu(attente))
+    modele.analyser(attente, avec: AnalysteSuspendu(), signaler: false)
+    try await lesDeux("redaction", .compteRendu(attente))
+    while modele.analyses[attente.id] != nil { try await Task.sleep(for: .milliseconds(20)) }
+    modele.analyser(attente, avec: AnalysteEnPanne(), signaler: false)
+    while modele.analyses[attente.id] != nil { try await Task.sleep(for: .milliseconds(20)) }
+    try await lesDeux("echec", .compteRendu(try relu(attente)))
+    modele.ecran = .accueil
 }
 
 enum RendusCompteRendu {
@@ -134,6 +186,58 @@ enum RendusCompteRendu {
                            enBref: [PhraseSourcee(texte: "L'équipe garde la version longue pour le festival.", sources: [segments[2].debut]),
                                     PhraseSourcee(texte: "Marie envoie la musique à Paul avant vendredi, et les photos de plateau restent à attribuer.", sources: [segments[3].debut, segments[4].debut])])
     }
+}
+
+extension RendusCompteRendu {
+    /// La réunion de démonstration des directions : un tournage d'événement, 59 minutes.
+    static let phrasesDemo: [(Double, String?, String)] = [
+        (60, "Voix 1", "Bonjour à tous, on fait le point sur la captation des Rencontres du vin."),
+        (252, "Voix 3", "Je voudrais quelque chose de vivant, pas de plans figés."),
+        (760, "Voix 1", "Bon, on part sur deux caméras. Et Karim, tu prends le drone pour les extérieurs, on en a besoin pour l’arrivée du public."),
+        (930, nil, "Pour le drone, il faudra sans doute une autorisation de la mairie."),
+        (1102, "Voix 2", "Je réserve le drone et je demande l’autorisation de vol avant vendredi."),
+        (1670, "Voix 1", "J’envoie le planning de la journée à l’équipe demain."),
+        (1865, "Voix 3", "Le teaser de soixante secondes, on le veut pour le lundi 23 novembre."),
+        (2658, "Voix 1", "Pas d’interview pendant la plénière, on les fait dans le salon VIP."),
+        (2762, nil, "Je prépare la liste des quatre interviews."),
+        (3130, "Voix 3", "Par contre, qui s’occupe de la musique du teaser ?"),
+    ]
+    static let notesDemo: [(Double, String)] = [
+        (252, "Julie veut du « vivant », pas de plans figés"), (930, "drone → autorisation mairie ?"),
+        (1860, "teaser 60 s, lundi 23"), (2840, "interviews : salon VIP, 4 personnes max"), (3302, "musique ??"),
+    ]
+
+    static func demo(_ s: [Segment], fournisseur: String = "Mistral · Medium", beaucoup: Bool = false, actions: Bool = true) -> CompteRendu {
+        func e(_ i: Int, _ texte: String, responsable: String? = nil, echeance: String? = nil) -> ElementSource {
+            ElementSource(texte: texte, sources: [s[i].debut], citation: s[i].texte, responsable: responsable, echeance: echeance)
+        }
+        var liste = [e(4, "Réserver le drone et demander l’autorisation de vol", responsable: "Karim Benali", echeance: "avant vendredi"),
+                     e(5, "Envoyer le planning de la journée à l’équipe", responsable: "Léa Morel", echeance: "demain"),
+                     e(8, "Préparer la liste des quatre interviews", responsable: "Steven")]
+        if beaucoup {
+            liste += [e(3, "Vérifier auprès de la mairie si une déclaration suffit pour le vol en ville, ou s’il faut une autorisation préfectorale complète", responsable: "Karim Benali"),
+                      e(6, "Monter une première version du teaser", responsable: "Steven", echeance: "lundi 23 novembre"),
+                      e(7, "Réserver le salon VIP pour les interviews", responsable: "Julie Faure"),
+                      e(9, "Trouver un compositeur pour la musique du teaser"),
+                      e(1, "Envoyer des références de plans « vivants »", responsable: "Julie Faure", echeance: "mercredi")]
+        }
+        return CompteRendu(fournisseur: fournisseur,
+                           decisions: [e(2, "On tourne à deux caméras, plus un drone pour les extérieurs."),
+                                       e(6, "Le teaser de 60 secondes est livré le lundi 23 novembre."),
+                                       e(7, "Pas d’interview pendant la plénière : on les fait dans le salon VIP.")],
+                           actions: actions ? liste : [], questions: [e(9, "Qui s’occupe de la musique du teaser ?")],
+                           sujets: beaucoup ? [Sujet(titre: "Le dispositif de tournage", debut: 600, fin: 1200), Sujet(titre: "Le teaser", debut: 1800, fin: 2400)] : nil,
+                           enBref: [PhraseSourcee(texte: "Le tournage se fait à deux caméras plus un drone. Le teaser de 60 secondes est attendu le 23 novembre.", sources: [s[2].debut, s[6].debut]),
+                                    PhraseSourcee(texte: "Il reste à trouver qui s’occupe de la musique.", sources: [s[9].debut])])
+    }
+}
+
+/// Une analyse qui rend un compte rendu tout prêt, pour simuler le relais local.
+private struct AnalysteFixe: Analyste {
+    let nom = "Fixe"
+    let compteRendu: CompteRendu
+    func analyser(segments: [Segment], notes: [LigneDeNote], type: TypeReunion,
+                  progression: @escaping @Sendable (Double) -> Void) async throws -> CompteRendu { compteRendu }
 }
 
 /// Une analyse qui échoue sur commande, pour rendre la ligne d'échec sans vrai moteur.
