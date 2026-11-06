@@ -670,6 +670,9 @@ public final class SessionReunion {
         self.titre = reunion.meta.titre
     }
 
+    /// Pour les rendus d'écran seulement : une réunion qui semble enregistrer depuis `debut`, sans capture.
+    func simulerDebut(_ debut: Date) { self.debut = debut; etat = "" }
+
     public var alerte: String? {
         let alertes = alertesAudio.keys.sorted().compactMap { alertesAudio[$0] } + [alerteSauvegarde, alerteSysteme].compactMap { $0 }
         return alertes.isEmpty ? nil : alertes.joined(separator: " ")

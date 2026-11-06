@@ -38,6 +38,7 @@ le texte, 3:1 pour les grands textes et les objets graphiques.
 | `lien` | lien, élément choisi | `#1F35B5` | `#8FA2FF` | 8,2 / 7,7 |
 | `ocre` | numéros de section, échéances | `#8F5A12` | `#E0A64E` | 5,0 / 8,5 ; **4,52** / 7,7 sur marge |
 | `direct` | l'enregistrement, une alerte | `#C8371B` | `#FF6A47` | **4,56** / 6,5 sur papier, jamais sur marge en clair |
+| `aplatDirect` | l'affiche de l'écran en réunion | `#B8301A` | `#9E2B15` | `surAplat` dessus : 5,3 / 6,5 ; à 85 % : **4,2** / 5,1 (grands textes seulement) |
 | `selection` | ligne choisie | `#E3E4F2` | `#23253A` | texte 13,9 / 12,3 ; discret **4,64** / 4,9 |
 
 `aplat` est **un jeton unique**. S'il faut une couleur par dossier, on la déclinera là, en mesurant
@@ -129,8 +130,23 @@ Les règles d'`AGENTS.md` :
 - Les titres en phrase normale. Les surtitres en capitales (`etiquette`), sans `//`.
 - Un bouton dit ce qu'il fait : « Démarrer l'enregistrement », « Copier le compte rendu ».
 
-## Encore à faire
+## Les autres écrans
 
-L'accueil, l'écran en réunion, le dossier, les réglages et la barre latérale gardent l'ancienne DA
-jusqu'à leur refonte, un écran à la fois. Les anciens jetons (`Color.creme`, `argile`, `Typo`,
-`Libelle`, `GrainOverlay`, les polices embarquées) seront retirés avec le dernier écran qui s'en sert.
+Même grammaire partout : un aplat de titre, puis la lecture sur le papier, avec des sections numérotées.
+
+- **La barre latérale** (`marge`) : le nom « Aparté » en New York Black italique, « Démarrer en visio »
+  toujours là (⌘N), « En présentiel » et « Préparer… » dessous. Pendant une réunion, une carte
+  `aplatDirect` avec le chrono la remplace. Les dossiers gardés sur ce Mac portent un cadenas.
+- **L'accueil** : « Bonjour, Steven. » sur l'aplat, la grande action « Démarrer l'enregistrement », puis
+  À faire (actions ouvertes, avec leurs pastilles) et le Sommaire des réunions. Un compte rendu en
+  préparation y montre sa barre.
+- **En réunion** : l'affiche `aplatDirect` (un seul jeton, pour une version plus sobre si l'écran est
+  partagé), le titre modifiable, le chrono en New York Black, la frise qui se remplit (tes notes posées
+  dessus), les niveaux d'entrée, Terminer, « Garder sur ce Mac ». À droite, tes notes et la transcription
+  en direct.
+- **Dossier** : « Garder sur ce Mac » pour tout le dossier dans l'en-tête ; À faire, Décisions, Le fil.
+- **Toutes les réunions** : le sommaire, mois par mois.
+- **Nouvelle réunion** : le titre se tape sur l'aplat ; dossier, type, micro, test du micro.
+- **Réglages** : qui rédige, la clé Mistral, où vivent les réunions, ce qui quitte le Mac.
+
+Les polices embarquées (Zalando Sans, JetBrains Mono, Doto) sont retirées : tout est en polices du système.
