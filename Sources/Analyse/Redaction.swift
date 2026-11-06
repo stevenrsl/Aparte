@@ -10,15 +10,15 @@ import Transcription
 /// puce sans numéro est écartée, et la phrase de cette ligne devient la citation affichée dessous.
 enum Gabarit {
     /// Les plafonds d'un compte rendu : assez pour tout dire, trop peu pour tout recopier.
-    static let maxDecisions = 8
-    static let maxActions = 10
-    static let maxQuestions = 6
+    static let maxDecisions = 5
+    static let maxActions = 8
+    static let maxQuestions = 4
     static let maxSujets = 8
     static let maxPointsParSujet = 5
     static let maxPointsCles = 5
     /// Par passage : sans cela, les premières minutes bavardes prennent toute la place.
     static let maxDecisionsParPassage = 2
-    static let maxActionsParPassage = 3
+    static let maxActionsParPassage = 2
     static let maxQuestionsParPassage = 1
     static let maxSujetsParPassage = 2
     /// Sous ce nombre de mots, une reformulation ne dit rien (« Cool », « Après ? »).
@@ -43,11 +43,11 @@ enum Gabarit {
     SUJET : (titre court)
     - [numéro] (ce qui a été dit, deux à quatre puces par sujet)
     DÉCISIONS
-    - [numéro] (un choix arrêté par ligne, ou « aucune »)
+    - [numéro] (un choix clairement arrêté par ligne ; le plus souvent « aucune »)
     ACTIONS
-    - [numéro] (Prénom : tâche à l'infinitif, avec l'échéance si elle a été dite ; ou « aucune »)
+    - [numéro] (Prénom : tâche à l'infinitif que cette personne s'engage à faire, avec l'échéance si elle a été dite ; le plus souvent « aucune »)
     QUESTIONS
-    - [numéro] (une question restée sans réponse par ligne, ou « aucune »)
+    - [numéro] (une question posée et restée sans réponse par ligne ; le plus souvent « aucune »)
 
     Exemple de réponse, pour un tout autre passage :
     SUJET : Les deux devis

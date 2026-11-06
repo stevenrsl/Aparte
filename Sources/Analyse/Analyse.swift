@@ -753,16 +753,21 @@ public struct AnalysteLocal: Analyste {
             }
             return valide
         }
-        choisi.decisions = lu.decisions.compactMap { garder($0) }
+        // Le format « Prénom : tâche » des actions déborde parfois sur les autres puces : il n'y a pas sa place.
+        func sansQui(_ puce: Gabarit.Puce) -> Gabarit.Puce {
+            let (texte, qui) = Gabarit.action(puce.texte)
+            return qui == nil ? puce : Gabarit.Puce(ligne: puce.ligne, texte: texte)
+        }
+        choisi.decisions = lu.decisions.map(sansQui).compactMap { garder($0) }
         choisi.actions = lu.actions.compactMap { puce in
             let (tache, responsable) = Gabarit.action(puce.texte)
             return garder(Gabarit.Puce(ligne: puce.ligne, texte: tache), responsable: responsable)
         }
         // Une question ouverte a été posée : sa citation le montre.
-        choisi.questions = lu.questions.compactMap { garder($0) }.filter { $0.citation?.contains("?") == true }
+        choisi.questions = lu.questions.map(sansQui).compactMap { garder($0) }.filter { $0.citation?.contains("?") == true }
         let dits = Set(ValidationSources.normaliser((lignes.map(\.phrase) + lignes.compactMap(\.voix) + lignes.compactMap { $0.voix.flatMap { noms[$0] } }).joined(separator: " ")).split(separator: " ").map(String.init))
         choisi.sujets = lu.sujets.compactMap { sujet in
-            let points = sujet.points.compactMap { garder($0) }
+            let points = sujet.points.map(sansQui).compactMap { garder($0) }
             let temps = points.flatMap(\.sources)
             guard let debut = temps.min(), let fin = temps.max() else { return nil }
             let titre = DecoupageSujets.titreRedige(sujet.titre, lu: dits) ? sujet.titre : (points.first?.texte ?? sujet.titre)
