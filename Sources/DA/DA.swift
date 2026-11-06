@@ -209,6 +209,8 @@ public enum Couleur {
     public static let lien = dynamique("lien", clair: 0x1F35B5, sombre: 0x8FA2FF)
     public static let ocre = dynamique("ocre", clair: 0x8F5A12, sombre: 0xE0A64E)
     public static let direct = dynamique("direct", clair: 0xC8371B, sombre: 0xFF6A47)
+    /// L'affiche de l'enregistrement en cours : un seul jeton, pour pouvoir l'adoucir si l'écran est partagé.
+    public static let aplatDirect = dynamique("aplatDirect", clair: 0xB8301A, sombre: 0x9E2B15)
     public static let selection = dynamique("selection", clair: 0xE3E4F2, sombre: 0x23253A)
 }
 

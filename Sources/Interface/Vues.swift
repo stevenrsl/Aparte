@@ -37,38 +37,19 @@ public struct FenetreAparte: View {
         self.modele = modele
     }
 
-    /// Le compte rendu suit le brief « Affiche » : son aplat monte jusqu'en haut de la fenêtre, sans grain.
-    /// Les autres écrans gardent l'ancienne charpente jusqu'à leur refonte.
-    private var affiche: Bool {
-        if case .compteRendu = modele.ecran, modele.racine != nil { return true }
-        return false
-    }
-
-    private var barreDeTitre: some View {
-        Color.surface.frame(height: 42)
-            .overlay(alignment: .bottom) { Color.filet.frame(height: 1) }
-    }
-
     public var body: some View {
         HStack(spacing: 0) {
             if modele.racine != nil {
-                VStack(spacing: 0) {
-                    barreDeTitre
-                    BarreLaterale(modele: modele)
-                }
-                .frame(width: 228)
-                .overlay { if !affiche { GrainOverlay().ignoresSafeArea() } }
+                BarreLaterale(modele: modele)
+                Couleur.filet.frame(width: 1)
             }
-            VStack(spacing: 0) {
-                if !affiche { barreDeTitre }
-                contenu
-            }
-            .overlay { if !affiche { GrainOverlay().ignoresSafeArea() } }
+            contenu
         }
         .ignoresSafeArea()
-        .background(Color.creme)
-        .foregroundStyle(Color.encre)
-        .font(Typo.texte)
+        .background(Couleur.papier)
+        .foregroundStyle(Couleur.texte)
+        .font(Ecriture.interface)
+        .tint(Couleur.lien)
         .alert("Un problème est survenu", isPresented: Binding(get: { modele.erreur != nil }, set: { if !$0 { modele.erreur = nil } })) {
             Button("Compris", role: .cancel) {}
         } message: {
@@ -98,31 +79,38 @@ public struct FenetreAparte: View {
     }
 }
 
+/// Le nom de l'app, en New York Black italique : la marque tient dans sa typographie.
+struct MarqueAparte: View {
+    var taille: CGFloat = 26
+    var body: some View {
+        Text("Aparté").font(Ecriture.une(taille).italic()).accessibilityLabel("Aparté")
+    }
+}
+
 struct PremierLancement: View {
     let modele: ModeleApp
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            LogoApparte()
-            Text("Où ranger tes réunions ?").font(Typo.titreEcran)
-            Text("Chaque réunion est un dossier lisible sans l'app. Tu peux choisir un dossier dans iCloud Drive : ça reste ton choix, Aparté ne synchronise rien.")
-                .frame(maxWidth: 480, alignment: .leading)
-            Button("Choisir un dossier") { modele.choisirEmplacement() }
-                .buttonStyle(BoutonPrincipal())
+        VStack(spacing: 0) {
+            EnteteAffiche(surtitre: "Bienvenue dans Aparté", titre: "Où ranger tes réunions ?") { EmptyView() }
+            VStack(alignment: .leading, spacing: Espace.s4) {
+                Text("Chaque réunion est un dossier lisible sans l’app. Tu peux choisir un dossier dans iCloud Drive : ça reste ton choix, Aparté ne synchronise rien.")
+                    .font(Ecriture.chapo).foregroundStyle(Couleur.texteDoux)
+                    .frame(maxWidth: 560, alignment: .leading)
+                Button("Choisir un dossier") { modele.choisirEmplacement() }
+                    .buttonStyle(BoutonAplat())
+            }
+            .padding(Espace.s10)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        .padding(36)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .background(Couleur.papier)
     }
 }
 
+/// La barre latérale : démarrer, toujours à portée, puis où aller. Un dossier gardé sur ce Mac porte un cadenas.
 struct BarreLaterale: View {
     @Bindable var modele: ModeleApp
     @State private var demarrage = false
-
-    private var compteRenduOuvert: Bool {
-        if case .compteRendu = modele.ecran { return true }
-        return false
-    }
 
     private func demarrer(_ type: TypeReunion) {
         demarrage = true
@@ -134,88 +122,126 @@ struct BarreLaterale: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            LogoApparte()
-            VStack(alignment: .leading, spacing: 8) {
-                if let session = modele.session {
-                    Text(session.titre).font(Typo.titreLigne).lineLimit(2)
-                    Text(session.captureArretee ? (session.finalisationEnCours ? "Finalisation en cours" : "Enregistrement arrêté") : "Enregistrement en cours").font(Typo.horodatage)
-                    if session.captureArretee {
-                        Text(horodatage(session.temps)).font(Typo.horodatage).monospacedDigit()
-                    } else {
-                        TimelineView(.periodic(from: .now, by: 1)) { _ in
-                            Text(horodatage(session.temps)).font(Typo.horodatage).monospacedDigit()
-                        }
+        let _ = modele.dossiersVersion
+        VStack(alignment: .leading, spacing: 0) {
+            MarqueAparte()
+                .padding(.top, Espace.s10 + Espace.s4)
+                .padding(.bottom, Espace.s6)
+                .padding(.horizontal, Espace.s2)
+            if let session = modele.session {
+                reunionEnCours(session)
+            } else {
+                demarrage(modele.dossierCourant)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                EntreeLaterale(titre: "Accueil", icone: "house", active: modele.origineNavigation == .accueil) { modele.ecran = .accueil }
+                EntreeLaterale(titre: "Toutes les réunions", icone: "list.bullet", active: modele.origineNavigation == .toutes,
+                               compte: modele.reunions.count) { modele.ecran = .toutes }
+            }
+            .padding(.top, Espace.s6)
+            Etiquette("Dossiers").padding(.horizontal, Espace.s2).padding(.top, Espace.s6).padding(.bottom, Espace.s2)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 2) {
+                    if modele.dossiers.isEmpty {
+                        Text("Pas encore de dossier.").font(Ecriture.detail).foregroundStyle(Couleur.texteDiscret).padding(.horizontal, Espace.s2)
                     }
-                    Button("Revenir à la réunion") { modele.ouvrirReunionEnCours() }
-                } else {
-                    if let dossier = modele.dossierCourant { Libelle("dans \(dossier)") }
-                    Button("Démarrer en visio") { demarrer(.visio) }
-                    Button("Démarrer en présentiel") { demarrer(.presentiel) }
-                    Button("Préparer…") { modele.preparerReunion() }
-                        .foregroundStyle(Color.terracottaTexte)
-                }
-            }
-            .disabled(demarrage)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            VStack(alignment: .leading, spacing: 2) {
-                EntreeLaterale(titre: "Accueil", active: modele.origineNavigation == .accueil, discrete: compteRenduOuvert) { modele.ecran = .accueil }
-                EntreeLaterale(titre: "Toutes les réunions", active: modele.origineNavigation == .toutes, compte: modele.reunions.count) { modele.ecran = .toutes }
-            }
-            VStack(alignment: .leading, spacing: 2) {
-                Libelle("dossiers").padding(.bottom, 4)
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 2) {
-                        ForEach(modele.dossiers, id: \.self) { nom in
-                            EntreeLaterale(titre: nom, active: modele.origineNavigation == .dossier(nom),
-                                           compte: modele.reunions.filter { $0.dossier == nom }.count) { modele.ecran = .dossier(nom) }
-                        }
+                    ForEach(modele.dossiers, id: \.self) { nom in
+                        EntreeLaterale(titre: nom, icone: "folder", active: modele.origineNavigation == .dossier(nom),
+                                       compte: modele.reunions.filter { $0.dossier == nom }.count,
+                                       garde: modele.dossierGardeSurCeMac(nom)) { modele.ecran = .dossier(nom) }
                     }
                 }
             }
             Spacer(minLength: 0)
-            EntreeLaterale(titre: "Réglages", active: modele.origineNavigation == .reglages) { modele.ecran = .reglages }
+            EntreeLaterale(titre: "Réglages", icone: "gearshape", active: modele.origineNavigation == .reglages) { modele.ecran = .reglages }
+                .padding(.bottom, Espace.s4)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 22)
-        .frame(width: 228)
+        .padding(.horizontal, Espace.s3)
+        .frame(width: 236)
         .frame(maxHeight: .infinity, alignment: .top)
-        .background(Color.surface)
-        .overlay(alignment: .trailing) { Color.filet.frame(width: 1) }
+        .background(Couleur.marge)
+    }
+
+    /// Démarrer en visio d'un clic ; le présentiel et la préparation juste dessous.
+    private func demarrage(_ dossier: String?) -> some View {
+        VStack(alignment: .leading, spacing: Espace.s2) {
+            Button { demarrer(.visio) } label: {
+                Label("Démarrer en visio", systemImage: "record.circle").frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(BoutonAplat())
+            .keyboardShortcut("n", modifiers: .command)
+            HStack(spacing: Espace.s4) {
+                Button("En présentiel") { demarrer(.presentiel) }.buttonStyle(BoutonLien())
+                Button("Préparer…") { modele.preparerReunion() }.buttonStyle(BoutonLien())
+            }
+            .padding(.horizontal, Espace.s2)
+            if let dossier {
+                Text("Dans « \(dossier) »").font(Ecriture.detail).foregroundStyle(Couleur.texteDiscret).padding(.horizontal, Espace.s2)
+            }
+        }
+        .disabled(demarrage)
+    }
+
+    /// La réunion en cours : son chrono, et le chemin pour y revenir.
+    private func reunionEnCours(_ session: SessionReunion) -> some View {
+        Button { modele.ouvrirReunionEnCours() } label: {
+            VStack(alignment: .leading, spacing: Espace.s1) {
+                HStack(spacing: Espace.s2) {
+                    Circle().fill(Couleur.surAplat).frame(width: 8, height: 8)
+                    Etiquette(session.captureArretee ? (session.finalisationEnCours ? "Finalisation" : "Arrêté") : "En cours", couleur: Couleur.surAplat)
+                    Spacer(minLength: 0)
+                    TimelineView(.periodic(from: .now, by: 1)) { _ in
+                        Text(horodatage(session.temps)).font(Ecriture.horodatageFort)
+                    }
+                }
+                Text(session.titre.isEmpty ? "Réunion" : session.titre).font(Ecriture.lectureForte).lineLimit(2).multilineTextAlignment(.leading)
+                Text("Revenir à la réunion").font(Ecriture.detail).opacity(0.85)
+            }
+            .padding(Espace.s3)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: Rayon.moyen).fill(Couleur.aplatDirect))
+            .foregroundStyle(Couleur.surAplat)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Réunion en cours : \(session.titre). Revenir à la réunion")
     }
 }
 
 struct EntreeLaterale: View {
     let titre: String
+    var icone: String? = nil
     let active: Bool
     var compte: Int?
-    var enCours = false
-    var discrete = false
+    var garde = false
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 8) {
-                Rectangle()
-                    .fill(active ? (discrete ? Color.encre : Color.argile) : (enCours ? Color.terracotta : Color.clear))
-                    .frame(width: active && discrete ? 3 : 7, height: active && discrete ? 16 : 7)
-                Text(titre).lineLimit(1)
+            HStack(spacing: Espace.s2) {
+                if let icone {
+                    Image(systemName: icone).font(.system(size: 12)).frame(width: 18)
+                        .foregroundStyle(active ? Couleur.lien : Couleur.texteDoux)
+                }
+                Text(titre).font(active ? Ecriture.interfaceForte : Ecriture.interface).lineLimit(1)
+                if garde {
+                    Image(systemName: "lock.fill").font(.system(size: 9)).foregroundStyle(Couleur.texteDiscret)
+                        .help("Gardé sur ce Mac")
+                }
                 Spacer(minLength: 0)
                 if let compte {
-                    Text("\(compte)").font(Typo.horodatage)
-                        .foregroundStyle(active ? Color.colonneTexte : Color.encreDouce)
+                    Text("\(compte)").font(Ecriture.horodatage).foregroundStyle(Couleur.texteDiscret)
                 }
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            // Écart local au brief : dans le compte rendu, la navigation s'efface devant le contenu.
-            .background(active ? (discrete ? Color.creme : Color.encreColonne) : Color.clear)
-            .foregroundStyle(active && !discrete ? Color.colonneTexte : Color.encre)
+            .padding(.horizontal, Espace.s2)
+            .frame(height: 28)
+            .background(RoundedRectangle(cornerRadius: Rayon.petit + 2).fill(active ? Couleur.selection : .clear))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .foregroundStyle(Couleur.texte)
         .accessibilityAddTraits(active ? .isSelected : [])
-        .accessibilityValue(enCours ? "enregistrement en cours" : "")
+        .accessibilityValue(garde ? "gardé sur ce Mac" : "")
     }
 }
 
