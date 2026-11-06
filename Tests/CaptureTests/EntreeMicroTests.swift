@@ -8,19 +8,37 @@ private let integre = EntreeAudio(id: 20, nom: "MacBook Pro Microphone", transpo
 private let usb = EntreeAudio(id: 30, nom: "Rode", transport: kAudioDeviceTransportTypeUSB)
 
 @Test func enPresentielDesEcouteursParDefautCedentLaPlaceAuMicroDuMac() {
-    #expect(EntreeAudio.choisir(choisie: nil, parDefaut: ecouteurs, toutes: [ecouteurs, integre], presentiel: true) == integre)
+    let choix = EntreeAudio.choisir(choisie: nil, parDefaut: ecouteurs, toutes: [ecouteurs, integre], presentiel: true)
+    #expect(choix.entree == integre && choix.fixer)
+}
+
+/// Le 6 novembre, macOS a basculé vers les écouteurs au moment où le micro s'ouvrait : l'entrée par défaut
+/// était encore le micro du Mac quand Aparté l'a lue. Elle doit être fixée, pas seulement lue.
+@Test func enPresentielAvecDesEcouteursConnectesLeMicroDuMacEstFixe() {
+    let choix = EntreeAudio.choisir(choisie: nil, parDefaut: integre, toutes: [ecouteurs, integre], presentiel: true)
+    #expect(choix.entree == integre && choix.fixer)
+}
+
+@Test func sansBluetoothLeMicroSuitLEntreeParDefaut() {
+    let choix = EntreeAudio.choisir(choisie: nil, parDefaut: integre, toutes: [integre, usb], presentiel: true)
+    #expect(choix.entree == integre && !choix.fixer)
 }
 
 @Test func enVisioLesEcouteursRestent() {
-    #expect(EntreeAudio.choisir(choisie: nil, parDefaut: ecouteurs, toutes: [ecouteurs, integre], presentiel: false) == ecouteurs)
+    let choix = EntreeAudio.choisir(choisie: nil, parDefaut: ecouteurs, toutes: [ecouteurs, integre], presentiel: false)
+    #expect(choix.entree == ecouteurs && !choix.fixer)
 }
 
 @Test func unChoixDeStevenPasseToujours() {
-    #expect(EntreeAudio.choisir(choisie: ecouteurs, parDefaut: usb, toutes: [ecouteurs, integre, usb], presentiel: true) == ecouteurs)
+    let choix = EntreeAudio.choisir(choisie: ecouteurs, parDefaut: usb, toutes: [ecouteurs, integre, usb], presentiel: true)
+    #expect(choix.entree == ecouteurs && choix.fixer)
 }
 
 @Test func unMicroFilaireParDefautResteEnPresentiel() {
-    #expect(EntreeAudio.choisir(choisie: nil, parDefaut: usb, toutes: [usb, integre], presentiel: true) == usb)
+    // Un micro filaire par défaut reste, et il est fixé si des écouteurs sont connectés à côté.
+    #expect(EntreeAudio.choisir(choisie: nil, parDefaut: usb, toutes: [usb, integre], presentiel: true) == (usb, false))
+    let choix = EntreeAudio.choisir(choisie: nil, parDefaut: usb, toutes: [usb, integre, ecouteurs], presentiel: true)
+    #expect(choix.entree == usb && choix.fixer)
 }
 
 @Test func unMicroQuiNEntendQuUnSouffleEstSignaleApresTrenteSecondes() {

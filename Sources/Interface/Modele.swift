@@ -707,12 +707,11 @@ public final class SessionReunion {
         debut = origine
         etat = ""
 
-        let parDefaut = EntreeAudio.parDefaut()
-        let utilisee = EntreeAudio.choisir(choisie: entree, parDefaut: parDefaut, toutes: EntreeAudio.liste(),
-                                           presentiel: reunion.meta.type == .presentiel)
-        entreeUtilisee = utilisee?.nom
-        // Sans choix ni remplacement, le micro suit l'entrée par défaut du système, comme avant.
-        let forcee = entree != nil || utilisee?.id != parDefaut?.id ? utilisee?.id : nil
+        let choix = EntreeAudio.choisir(choisie: entree, parDefaut: EntreeAudio.parDefaut(), toutes: EntreeAudio.liste(),
+                                        presentiel: reunion.meta.type == .presentiel)
+        entreeUtilisee = choix.entree?.nom
+        // Sans raison de la fixer, le micro suit l'entrée par défaut du système, comme avant.
+        let forcee = choix.fixer ? choix.entree?.id : nil
         let pisteMicro = PisteAudio(source: MicrophoneSource(entree: forcee), fichier: reunion.microEnCours,
                                     formatCible: micro.formatAttendu,
                                     surConverti: { micro.alimenter($0) },
