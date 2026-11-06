@@ -167,7 +167,9 @@ public struct AnalysteMistral: Analyste {
         let ordonnes = segments.sorted { $0.debut < $1.debut }
         let lignes = AnalysteLocal.lignes(de: ordonnes)
         progression(0.1)
-        let (reponse, modele): (Reponse, Modele) = try await demander(texte: AnalysteLocal.invite(lignes, notes: notes, type: type))
+        let contexte = Gabarit.contexte(lignes: lignes, type: type, moi: ValidationSources.prenomDeMoi)
+        let (reponse, modele): (Reponse, Modele) = try await demander(texte: contexte + "\n\n" + AnalysteLocal.invite(lignes, notes: notes, type: type))
+        let moi = type == .visio ? ValidationSources.prenomDeMoi : nil
         progression(0.9)
 
         var ecartes = 0
@@ -180,7 +182,7 @@ public struct AnalysteMistral: Analyste {
             }
             brut.responsable = propose.responsable
             brut.echeance = propose.echeance
-            guard let valide = ValidationSources.valider(brut, dans: segments, connus: connus, citationSiRefus: false) else {
+            guard let valide = ValidationSources.valider(brut, dans: segments, connus: connus, citationSiRefus: false, moi: moi) else {
                 ecartes += 1
                 return nil
             }
