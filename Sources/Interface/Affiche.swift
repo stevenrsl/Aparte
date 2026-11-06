@@ -148,7 +148,9 @@ struct CarteGarder: View {
     if let avancee = modele.relectures[reunion.id] { return ("Relecture de l’enregistrement", avancee) }
     if let avancee = modele.analyses[reunion.id] { return ("Compte rendu en préparation", avancee) }
     if let compteRendu = modele.resumeEnregistre(de: reunion) {
-        return ("\(accord(compteRendu.decisions.count, "décision")) · \(accord(compteRendu.actions.count, "action"))", nil)
+        let decisions = compteRendu.decisions.isEmpty ? "aucune décision" : accord(compteRendu.decisions.count, "décision")
+        let actions = compteRendu.actions.isEmpty ? "aucune action" : accord(compteRendu.actions.count, "action")
+        return ("\(decisions) · \(actions)", nil)
     }
     if modele.echecsAnalyseAuto[reunion.id] != nil { return ("Compte rendu non rédigé", nil) }
     return ("Pas encore de compte rendu", nil)

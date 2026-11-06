@@ -930,6 +930,9 @@ struct TranscriptionLue: View {
     let sources: Set<Double>
     let reunion: Reunion
     let modele: ModeleApp
+    /// Pendant la réunion : les phrases pas encore finies, et le défilement qui suit la dernière.
+    var provisoires: [Piste: String] = [:]
+    var suivre = false
     @State private var voixANommer: UUID?
 
     private func qui(_ segment: Segment) -> String {
@@ -939,10 +942,12 @@ struct TranscriptionLue: View {
     }
 
     var body: some View {
+        ScrollViewReader { defilement in
         ScrollView {
             LazyVStack(alignment: .leading, spacing: Espace.s3) {
-                if segments.isEmpty {
-                    Text("Aucune phrase n’a été transcrite.").font(Ecriture.citation).foregroundStyle(Couleur.texteDoux)
+                if segments.isEmpty && provisoires.values.allSatisfy(\.isEmpty) {
+                    Text(suivre ? "Les phrases arrivent ici dès qu’on parle." : "Aucune phrase n’a été transcrite.")
+                        .font(Ecriture.citation).foregroundStyle(Couleur.texteDoux)
                 }
                 ForEach(segments) { segment in
                     let source = sources.contains { $0 >= segment.debut - 2 && $0 <= segment.fin + 2 }
@@ -963,9 +968,21 @@ struct TranscriptionLue: View {
                     .background(RoundedRectangle(cornerRadius: Rayon.petit).fill(source ? Couleur.selection : .clear))
                     .overlay(alignment: .leading) { if source { Couleur.lien.frame(width: 2) } }
                 }
+                ForEach([Piste.micro, .systeme], id: \.self) { piste in
+                    if let texte = provisoires[piste], !texte.isEmpty {
+                        Text(texte).font(Ecriture.citation).foregroundStyle(Couleur.texteDoux)
+                            .padding(.horizontal, Espace.s3)
+                            .overlay(alignment: .leading) { Couleur.filet.frame(width: 2) }
+                    }
+                }
+                Color.clear.frame(height: 1).id("fin")
             }
             .padding(.horizontal, Espace.s3)
             .padding(.bottom, Espace.s6)
+        }
+        .onChange(of: segments.count) { _, _ in
+            if suivre { defilement.scrollTo("fin", anchor: .bottom) }
+        }
         }
     }
 
