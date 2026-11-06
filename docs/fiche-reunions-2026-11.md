@@ -24,9 +24,9 @@ projets du même jour et à une discussion avec Steven sur ce qu'il gardait de C
 - **Claude Code et Codex travaillent ensemble** selon le [plan des agents](plan-agents.md).
 - **Deux usages dès la v1** : les visios (micro et son du Mac) et les réunions en présentiel
   (micro seul).
-- **L'analyse se fait en local par défaut.** Private Cloud Compute (PCC) est autorisé, ainsi qu'un
-  fournisseur externe (Claude, ChatGPT ou Mistral). Le choix se fait réunion par réunion, par
-  Steven.
+- **Le compte rendu est rédigé par Mistral par défaut** (décidé par Steven le 6 novembre 2026, à la
+  place de « local par défaut »). Le modèle local prend le relais sans clé, sans réseau, si Mistral
+  échoue, ou pour une réunion ou un dossier marqués « Garder sur ce Mac ».
 - **On part du code de transcription de Cairn**, que Steven juge « plutôt » propre, et pas d'un
   projet tiers comme meetily (autre pile, pas Apple Intelligence).
 
@@ -43,10 +43,11 @@ Un commit par sujet, sur une branche par chantier.
 1. **Rien n'est inventé.** Chaque décision, action ou question de l'analyse pointe vers un ou
    plusieurs horodatages de la transcription. Un élément sans source vérifiable n'est pas affiché.
    Un responsable ou une échéance n'apparaît que s'il a été dit.
-2. **Rien ne quitte le Mac sans une action de Steven.** L'audio ne quitte jamais le Mac. La
-   transcription n'en sort que lorsque Steven lance une analyse avec PCC ou un fournisseur externe
-   pour cette réunion précise. Aucune télémétrie, aucun envoi automatique, aucun fournisseur
-   externe par défaut.
+2. **Rien ne quitte le Mac sans que Steven l'ait choisi.** L'audio ne quitte jamais le Mac. Par
+   défaut, la transcription et les notes partent chez Mistral pour rédiger le compte rendu (décidé
+   par Steven le 6 novembre 2026). Le modèle local rédige quand il n'y a pas de clé ou pas de réseau,
+   quand Mistral échoue, ou pour une réunion ou un dossier marqués « Garder sur ce Mac ». L'écran dit
+   toujours qui a rédigé. Aucune télémétrie, aucun autre envoi.
 3. **Les notes de Steven ne sont jamais réécrites.** L'analyse s'ajoute à côté, elle ne modifie
    pas ce qu'il a tapé.
 
@@ -141,8 +142,8 @@ de ce qu'elle contient n'est réécrit, sauf le titre dans `meta.json`.
   - **Externe** : l'API du fournisseur choisi, en une fois. La clé est rangée dans le trousseau,
     jamais dans le repo ni dans un fichier.
   - **Analyse automatique** (demandée par Steven le 2 novembre 2026) : après la relecture, une réunion sans
-    analyse est analysée toute seule, en local seulement. L'externe reste toujours lancé
-    par Steven, réunion par réunion, après confirmation.
+    analyse est analysée toute seule. Depuis le 6 novembre 2026, par Mistral, sauf « Garder sur ce Mac »,
+    sans clé ou sans réseau, où le modèle local la fait.
   - Vérifié le 2 novembre 2026 : le framework Foundation Models accepte d'autres modèles par le
     protocole `LanguageModel`, à partir de macOS 27. Chaque fournisseur peut livrer un package
     Swift. Apple cite Anthropic et Google ; rien de trouvé pour ChatGPT ou Mistral, où il faudrait
@@ -177,8 +178,7 @@ protocole `LanguageModel`, un client HTTP, d'après celui de Cairn. Le modèle y
 lignes, comme en local : le texte rendu reste celui de la transcription.
 
 **À Steven :**
-- Le fournisseur par défaut quand on clique « Analyser ». Recommandation : local, toujours, avec
-  un menu pour en choisir un autre.
+- Le fournisseur par défaut. **Tranché le 6 novembre 2026 : Mistral, le local en relais.**
 
 ### 6. Relire l'analyse
 
