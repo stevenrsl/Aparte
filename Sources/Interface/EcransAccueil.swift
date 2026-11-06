@@ -140,28 +140,75 @@ struct SectionActions: View {
 
 struct EcranAccueil: View {
     @Bindable var modele: ModeleApp
+    @State private var demarrage = false
+
+    /// Les réunions de cette semaine et leur durée, pour le surtitre.
+    private var semaine: String {
+        let calendrier = Calendar(identifier: .iso8601)
+        let cetteSemaine = modele.reunions.filter { calendrier.isDate($0.meta.date, equalTo: Date(), toGranularity: .weekOfYear) }
+        guard !cetteSemaine.isEmpty else { return "Aucune réunion cette semaine" }
+        let minutes = Int((cetteSemaine.map(\.meta.duree).reduce(0, +) / 60).rounded())
+        let duree = minutes >= 60 ? "\(minutes / 60) h \(String(format: "%02d", minutes % 60))" : "\(minutes) min"
+        return "Cette semaine : \(accord(cetteSemaine.count, "réunion")), \(duree)"
+    }
+
+    private func demarrer(_ type: TypeReunion) {
+        demarrage = true
+        Task {
+            await modele.demarrer(titre: "", type: type, dossier: nil, entree: nil)
+            demarrage = false
+        }
+    }
+
     var body: some View {
         let actions = modele.actionsOuvertes()
-        EcranLecture(phrase: phraseEtat(actions: actions, derniere: modele.reunions.first { $0.id != modele.session?.reunion.id },
-                                        enCours: modele.session?.reunion.meta.titre)) {
-            Libelle(Date().formatted(.dateTime.locale(Locale(identifier: "fr_FR")).weekday(.wide).day().month(.wide)))
-            TitreEcran(debut: "Bonjour, ", fin: "Steven")
-        } commandes: {
-            EmptyView()
-        } contenu: {
-            SectionActions(modele: modele, actions: actions)
-            VStack(alignment: .leading, spacing: 0) {
-                Libelle("réunions récentes").padding(.bottom, 8)
-                if modele.reunions.isEmpty {
-                    Text("Pas encore de réunion.").foregroundStyle(Color.encreDouce)
-                }
-                ForEach(modele.reunions.prefix(5)) { LigneReunion(modele: modele, reunion: $0) }
-                if modele.reunions.count > 5 {
-                    Button("Voir toutes les réunions") { modele.ecran = .toutes }
+        PageAffiche {
+            EnteteAffiche(surtitre: Date().formatted(.dateTime.locale(francaisAffiche).weekday(.wide).day().month(.wide)) + "  ·  " + semaine,
+                          titre: "Bonjour, Steven.", grand: 64) {
+                if let session = modele.session {
+                    VStack(alignment: .trailing, spacing: Espace.s2) {
+                        Button("Revenir à la réunion") { modele.ouvrirReunionEnCours() }
+                            .buttonStyle(BoutonSurAplat(plein: true))
+                        Etiquette("En cours : \(session.titre.isEmpty ? "réunion" : session.titre)", couleur: Couleur.surAplat)
+                    }
+                } else {
+                    VStack(alignment: .trailing, spacing: Espace.s2) {
+                        Button { demarrer(.visio) } label: {
+                            Label("Démarrer l’enregistrement", systemImage: "mic.fill")
+                                .font(Ecriture.lectureForte)
+                                .padding(.horizontal, Espace.s6).padding(.vertical, Espace.s3)
+                                .background(Capsule().fill(Couleur.surAplat))
+                                .foregroundStyle(Couleur.aplat)
+                        }
                         .buttonStyle(.plain)
-                        .foregroundStyle(Color.terracottaTexte)
-                        .padding(.top, 10)
+                        .disabled(demarrage)
+                        .accessibilityHint("En visio : le micro et le son du Mac")
+                        HStack(spacing: Espace.s4) {
+                            Text("Visio, ⌘N").font(Ecriture.detail)
+                            Button("En présentiel") { demarrer(.presentiel) }.buttonStyle(.plain).font(Ecriture.interfaceForte)
+                            Button("Préparer…") { modele.preparerReunion() }.buttonStyle(.plain).font(Ecriture.interfaceForte)
+                        }
+                        .disabled(demarrage)
+                    }
                 }
+            }
+        } contenu: {
+            HStack(alignment: .top, spacing: Espace.s10) {
+                VStack(alignment: .leading, spacing: 0) {
+                    TitreSection(numero: "\(actions.count)", titre: "À faire")
+                    ListeActions(modele: modele, actions: actions)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .leading, spacing: 0) {
+                    TitreSection(numero: "", titre: "Sommaire")
+                    if modele.reunions.isEmpty {
+                        Text("Pas encore de réunion. La première commence avec « Démarrer l’enregistrement ».")
+                            .font(Ecriture.citation).foregroundStyle(Couleur.texteDoux).padding(.vertical, Espace.s2)
+                    } else {
+                        Sommaire(modele: modele, reunions: modele.reunions, limite: 6) { modele.ecran = .toutes }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }
