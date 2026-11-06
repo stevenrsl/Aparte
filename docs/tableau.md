@@ -38,3 +38,5 @@ dans le [plan des agents](plan-agents.md).
 | Apaiser la transcription du compte rendu | Panko | `v05-compte-rendu-panko` | en relecture | `Sources/DA/DA.swift`, `Sources/Interface/`, `docs/tableau.md` |
 
 | Atténuer Accueil et renforcer la case dans le compte rendu | Panko | `v05-compte-rendu-panko` | en relecture | `Sources/Interface/Vues.swift`, `Sources/Interface/EcranCompteRendu.swift`, `docs/tableau.md` |
+
+| Responsable : seul le nom de la voix qui parle compte | Claude Code | `responsable-dit` | poussé dans `main` à la demande de Steven | `Sources/Analyse/Analyse.swift`, `Sources/Interface/Modele.swift`, `Tests/AnalyseTests/ResponsableDitTests.swift` |

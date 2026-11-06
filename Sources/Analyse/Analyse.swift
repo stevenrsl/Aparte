@@ -197,7 +197,8 @@ public struct CompteRendu: Codable, Sendable, Hashable {
     /// Une analyse relue depuis le disque repasse la validation : une reformulation qui ne tient plus laisse
     /// place à la transcription, et ce qui n'est plus prouvé est écarté. Son état face à la transcription
     /// actuelle décide ensuite du sort d'« En bref » et des sujets (règle 1 : rien n'est affiché sans preuve).
-    public func revalide(dans segments: [Segment], noms: [String] = []) -> CompteRendu {
+    /// `noms` : le nom donné à chaque voix (voix → nom), pour reconnaître un responsable nommé depuis.
+    public func revalide(dans segments: [Segment], noms: [String: String] = [:]) -> CompteRendu {
         var copie = self
         func garder(_ elements: [ElementSource]) -> [ElementSource] {
             let gardes = elements.compactMap { ValidationSources.valider($0, dans: segments, noms: noms) }
@@ -411,7 +412,8 @@ public enum ValidationSources {
     /// mais on peut toujours la comparer à sa preuve. Une reformulation avec un nom, un chiffre ou un moment
     /// absent de ce passage laisse place à la citation. Seules les sources où la citation se trouve restent,
     /// et un responsable ou une échéance doit être dans la phrase citée, ou être la voix qui la dit.
-    public static func valider(_ element: ElementSource, dans segments: [Segment], noms: [String] = []) -> ElementSource? {
+    /// `noms` (voix → nom) : seul le nom d'une voix présente compte, jamais celui d'un autre participant.
+    public static func valider(_ element: ElementSource, dans segments: [Segment], noms: [String: String] = [:]) -> ElementSource? {
         guard !element.sources.isEmpty else { return nil }
         let passages = element.sources.map { segmentsSources(de: $0, dans: segments) }
         guard !passages.contains(where: \.isEmpty) else { return nil }
@@ -428,10 +430,11 @@ public enum ValidationSources {
         let autour = segments.filter { segment in
             temps.contains { $0 >= segment.debut - voisinage && $0 <= segment.fin + voisinage }
         }
-        let voix = Set(autour.compactMap(\.voix)).union(noms)
+        let voix = Set(autour.compactMap(\.voix)).union(autour.compactMap { $0.voix.flatMap { noms[$0] } })
         let lu = normaliser(([phrases] + autour.map(\.texte) + Array(voix)).joined(separator: " "))
         // Un voisin nommé n'est pas pour autant responsable : il faut sa voix, ou son nom dans la phrase.
-        let porte = normaliser(([phrases] + cites.compactMap(\.voix) + noms).joined(separator: " "))
+        let voixCitees = cites.compactMap(\.voix)
+        let porte = normaliser(([phrases] + voixCitees + voixCitees.compactMap { noms[$0] }).joined(separator: " "))
 
         func dit(_ valeur: String?) -> String? {
             guard let valeur = valeur?.trimmingCharacters(in: .whitespacesAndNewlines), !valeur.isEmpty else { return nil }
@@ -721,7 +724,7 @@ public struct AnalysteLocal: Analyste {
         var ecartes = 0
     }
 
-    static func choisir(_ lu: Gabarit.PassageLu, dans lignes: [Ligne], segments: [Segment], noms: [String] = []) -> PassageChoisi {
+    static func choisir(_ lu: Gabarit.PassageLu, dans lignes: [Ligne], segments: [Segment], noms: [String: String] = [:]) -> PassageChoisi {
         var choisi = PassageChoisi()
         func garder(_ puce: Gabarit.Puce, responsable: String? = nil) -> ElementSource? {
             // Une reformulation refusée revient à la citation : du parlé brut, qui n'a rien à faire dans un résumé.
@@ -741,7 +744,7 @@ public struct AnalysteLocal: Analyste {
         }
         // Une question ouverte a été posée : sa citation le montre.
         choisi.questions = lu.questions.compactMap { garder($0) }.filter { $0.citation?.contains("?") == true }
-        let dits = Set(ValidationSources.normaliser((lignes.map(\.phrase) + lignes.compactMap(\.voix) + noms).joined(separator: " ")).split(separator: " ").map(String.init))
+        let dits = Set(ValidationSources.normaliser((lignes.map(\.phrase) + lignes.compactMap(\.voix) + lignes.compactMap { $0.voix.flatMap { noms[$0] } }).joined(separator: " ")).split(separator: " ").map(String.init))
         choisi.sujets = lu.sujets.compactMap { sujet in
             let points = sujet.points.compactMap { garder($0) }
             let temps = points.flatMap(\.sources)

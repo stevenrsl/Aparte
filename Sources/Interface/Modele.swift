@@ -223,7 +223,7 @@ public final class ModeleApp {
         let encodeur = JSONEncoder()
         encodeur.outputFormatting = [.prettyPrinted, .sortedKeys]
         encodeur.dateEncodingStrategy = .iso8601
-        let revalidee = compteRendu.revalide(dans: reunion.segments(), noms: Array((reunion.meta.nomsDesVoix ?? [:]).values))
+        let revalidee = compteRendu.revalide(dans: reunion.segments(), noms: reunion.meta.nomsDesVoix ?? [:])
         try reunion.enregistrer(analyseJSON: encodeur.encode(compteRendu), markdown: revalidee.markdown(incidents: reunion.meta.incidentsAudio ?? []))
         var meta = reunion
         if !meta.meta.fournisseurs.contains(compteRendu.fournisseur) {
