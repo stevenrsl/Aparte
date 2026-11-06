@@ -177,7 +177,7 @@ struct LigneSommaire: View {
                     HStack(spacing: Espace.s2) {
                         let morceaux = [montrerDossier ? reunion.dossier : nil, etat.avancee == nil ? etat.texte : nil].compactMap { $0 }
                         if !morceaux.isEmpty {
-                            Text(morceaux.joined(separator: " · ")).font(Ecriture.citation).foregroundStyle(Couleur.texteDoux).lineLimit(1)
+                            Text(morceaux.joined(separator: " · ")).font(Ecriture.citation).foregroundStyle(Couleur.texteDoux).lineLimit(2)
                         }
                         if gardee {
                             Image(systemName: "lock.fill").font(.system(size: 9)).foregroundStyle(Couleur.texteDiscret)

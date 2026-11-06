@@ -743,7 +743,7 @@ struct TitreSection: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: Espace.s3) {
-            Text(numero).font(Ecriture.numeroSection).foregroundStyle(Couleur.ocre)
+            if !numero.isEmpty { Text(numero).font(Ecriture.numeroSection).foregroundStyle(Couleur.ocre) }
             Text(titre).font(Ecriture.section).fixedSize().layoutPriority(1)
             Couleur.texte.frame(minWidth: Espace.s4).frame(height: 1).alignmentGuide(.firstTextBaseline) { $0[.bottom] + 8 }
         }

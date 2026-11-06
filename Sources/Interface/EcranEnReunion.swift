@@ -75,7 +75,7 @@ struct EcranEnReunion: View {
             if let alerte = session.alerte {
                 Label { Text(alerte).fixedSize(horizontal: false, vertical: true) } icon: { Image(systemName: "exclamationmark.triangle.fill") }
                     .font(Ecriture.interfaceForte)
-                    .foregroundStyle(Couleur.texte)
+                    .foregroundStyle(Couleur.aplatDirect)
                     .padding(Espace.s3)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(RoundedRectangle(cornerRadius: Rayon.moyen).fill(Couleur.surAplat))
