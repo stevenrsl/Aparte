@@ -88,6 +88,8 @@ public struct AnalysteMistral: Analyste {
         Modele(id: "ministral-8b-latest", nom: "Ministral 8B"),
     ]
     private static let cleRetenue = "modeleMistral"
+    /// Les numéros de ligne de Mistral sont fiables à quelques lignes près.
+    static let rayon = 8
 
     public let nom = "Mistral"
     let cle: String
@@ -121,9 +123,15 @@ public struct AnalysteMistral: Analyste {
     "questions": [{"ligne": numéro, "texte": ""}], \
     "sujets": [{"titre": "", "premiere": numéro, "derniere": numéro, "points": [{"ligne": numéro, "texte": ""}]}]}
     Chaque texte est court et rédigé avec tes mots, et « ligne » est le numéro de la ligne qui le prouve.
-    en_bref : deux ou trois phrases, pour savoir en dix secondes ce qui s'est dit, chacune avec les lignes qu'elle résume.
-    points_cles : trois à cinq points. decisions : au plus huit. actions : au plus dix, la tâche à l'infinitif ; \
-    responsable et échéance seulement s'ils ont été dits, sinon vides. questions : au plus six, restées sans réponse.
+    en_bref : deux ou trois phrases courtes, pour savoir en dix secondes ce qui s'est dit, chacune avec les lignes qu'elle résume.
+    points_cles : trois à cinq points, ce qu'il faut retenir.
+    decisions : seulement un choix clairement arrêté pendant la réunion, au plus cinq. Une piste, un souhait ou \
+    un point « à confirmer » n'est pas une décision. Souvent il n'y en a aucune : laisse la liste vide.
+    actions : seulement un engagement clair de quelqu'un, au plus huit, la tâche à l'infinitif ; \
+    responsable et échéance seulement s'ils ont été dits, sinon vides.
+    questions : seulement une question posée pendant la réunion et restée sans réponse, au plus quatre. Souvent aucune.
+    Si des notes sont données, ce sont les miennes : elles disent ce qui compte pour moi. Couvre-les en priorité, \
+    mais seulement avec ce que dit la transcription.
     sujets : un à huit sujets, dans l'ordre, chacun sur des lignes qui se suivent, avec un titre court et deux à quatre points.
     Les listes peuvent être vides. N'écris ni nom, ni date, ni chiffre qui ne soit dans la transcription.
     """ + AnalysteLocal.consigneEcho
@@ -163,35 +171,38 @@ public struct AnalysteMistral: Analyste {
         progression(0.9)
 
         var ecartes = 0
+        let connus = ValidationSources.connus(segments: ordonnes, notes: notes)
         func garder(_ propose: Reponse.Element) -> ElementSource? {
             let puce = Gabarit.Puce(ligne: propose.ligne, texte: propose.texte ?? "")
-            guard var brut = AnalysteLocal.element(puce, dans: lignes) else {
+            guard var brut = AnalysteLocal.element(puce, dans: lignes, rayon: Self.rayon) else {
                 ecartes += 1
                 return nil
             }
             brut.responsable = propose.responsable
             brut.echeance = propose.echeance
-            guard let valide = ValidationSources.valider(brut, dans: segments) else {
+            guard let valide = ValidationSources.valider(brut, dans: segments, connus: connus, citationSiRefus: false) else {
                 ecartes += 1
                 return nil
             }
             return valide
         }
-        var sujets = DecoupageSujets.valider(
-            (reponse.sujets ?? []).map { .init(titre: $0.titre, premiere: $0.premiere, derniere: $0.derniere) },
-            phrases: lignes.map(\.phrase), debuts: lignes.map(\.debut), fin: ordonnes.last?.fin ?? 0, redige: true)
-        for rang in sujets.indices {
-            let proposes = (reponse.sujets ?? []).filter { propose in
-                lignes.indices.contains(propose.premiere - 1) && lignes[propose.premiere - 1].debut == sujets[rang].debut
-            }
-            sujets[rang].points = Array(proposes.flatMap { $0.points ?? [] }.compactMap(garder).prefix(Gabarit.maxPointsParSujet))
+        // Un sujet tient par ses points prouvés : ses bornes sont celles de leurs sources, pas les numéros
+        // proposés, qui se chevauchent souvent d'un sujet à l'autre. Sans point prouvé, il n'a rien à montrer.
+        // Son titre est rédigé : il ne doit nommer ni personne, ni chiffre, ni moment jamais dit.
+        let connusTitres = Set(ValidationSources.normaliser(connus).split(separator: " ").map(String.init))
+        let sujets = (reponse.sujets ?? []).compactMap { propose -> Sujet? in
+            let points = Array((propose.points ?? []).compactMap(garder).prefix(Gabarit.maxPointsParSujet))
+            let temps = points.flatMap(\.sources)
+            guard let debut = temps.min(), let fin = temps.max() else { return nil }
+            let titre = DecoupageSujets.titreRedige(propose.titre, lu: connusTitres) ? propose.titre : points[0].texte
+            return Sujet(titre: titre, debut: debut, fin: fin, points: points)
         }
         let finales = AnalysteLocal.assembler(decisions: (reponse.decisions ?? []).compactMap(garder),
                                               actions: (reponse.actions ?? []).compactMap(garder),
                                               questions: (reponse.questions ?? []).compactMap(garder),
                                               sujets: sujets, fin: ordonnes.last?.fin ?? 0)
         let pointsCles = Array(Gabarit.distincts((reponse.points_cles ?? []).compactMap(garder)).prefix(Gabarit.maxPointsCles))
-        let lu = lignes.map(\.phrase).joined(separator: " ")
+        let lu = connus
         let enBref = EnBref.valider((reponse.en_bref ?? []).map { .init(texte: $0.texte, lignes: $0.lignes ?? []) },
                                     phrases: lignes.map(\.phrase), debuts: lignes.map(\.debut), lu: lu)
         progression(1)

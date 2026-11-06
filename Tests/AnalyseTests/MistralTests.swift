@@ -93,6 +93,13 @@ private func enveloppe(_ json: String) -> String {
     #expect(!String(decoding: corps, as: UTF8.self).contains("version longue"))
     UserDefaults.standard.removeObject(forKey: "modeleMistral")
 }
+@Test func lesSujetsQuiSeChevauchentGardentLeursPointsEtLesVidesPartent() async throws {
+    UserDefaults.standard.removeObject(forKey: "modeleMistral")
+    let json = #"{"decisions":[],"actions":[],"questions":[],"points_cles":[],"en_bref":[],"sujets":[{"titre":"La version","premiere":1,"derniere":3,"points":[{"ligne":2,"texte":"Garder la version longue"}]},{"titre":"La musique","premiere":2,"derniere":3,"points":[{"ligne":3,"texte":"Marie envoie la musique"}]},{"titre":"Vide","premiere":1,"derniere":2,"points":[{"ligne":1,"texte":"Rien de prouvé sur la pose du plan de travail"}]}]}"#
+    let c = try await analyste(Serveur([(200, nil, enveloppe(json))])).analyser(segments: reunion, notes: [], type: .presentiel, progression: { _ in })
+    #expect(c.sujets?.map(\.titre) == ["La version", "La musique"])
+    #expect(c.sujets?.first?.debut == 5)
+}
 }
 
 @Test func laCleSeRangeEtSeRetireDuTrousseau() {
