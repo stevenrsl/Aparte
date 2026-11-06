@@ -74,13 +74,19 @@ public struct EntreeAudio: Identifiable, Hashable, Sendable {
         return liste().first { $0.id == id }
     }
 
-    /// L'entrée à utiliser. Un choix de Steven passe toujours. Sinon, en présentiel, un micro Bluetooth
-    /// par défaut (des écouteurs) n'entend que celui qui le porte, voire rien s'il est rangé : le micro
-    /// intégré du Mac écoute la pièce. Le 6 novembre 2026, une réunion de 27 minutes a ainsi donné 98 mots.
-    public static func choisir(choisie: EntreeAudio?, parDefaut: EntreeAudio?, toutes: [EntreeAudio], presentiel: Bool) -> EntreeAudio? {
-        if let choisie { return choisie }
-        guard presentiel, parDefaut?.estBluetooth == true, let integree = toutes.first(where: \.estIntegree) else { return parDefaut }
-        return integree
+    /// L'entrée à utiliser, et s'il faut la fixer. Un choix de Steven passe toujours. Sinon, en présentiel,
+    /// des écouteurs Bluetooth n'entendent que celui qui les porte, voire rien s'ils sont rangés : le
+    /// micro intégré du Mac écoute la pièce. Le 6 novembre 2026, une réunion de 27 minutes a ainsi donné
+    /// 98 mots. Et macOS peut basculer l'entrée par défaut vers les écouteurs au moment même où le micro
+    /// s'ouvre (vu dans les journaux ce jour-là) : dès qu'une entrée Bluetooth est là, l'entrée est fixée,
+    /// au lieu de suivre l'entrée par défaut.
+    public static func choisir(choisie: EntreeAudio?, parDefaut: EntreeAudio?, toutes: [EntreeAudio],
+                               presentiel: Bool) -> (entree: EntreeAudio?, fixer: Bool) {
+        if let choisie { return (choisie, true) }
+        guard presentiel, parDefaut?.estBluetooth == true || toutes.contains(where: \.estBluetooth) else { return (parDefaut, false) }
+        if let parDefaut, !parDefaut.estBluetooth { return (parDefaut, true) }
+        guard let integree = toutes.first(where: \.estIntegree) else { return (parDefaut, false) }
+        return (integree, true)
     }
 
     /// Les périphériques qui ont au moins un canal d'entrée.
