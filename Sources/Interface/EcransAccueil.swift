@@ -217,20 +217,33 @@ struct EcranAccueil: View {
 struct EcranToutes: View {
     @Bindable var modele: ModeleApp
 
+    /// Les réunions par mois, du plus récent au plus ancien.
+    private var parMois: [(mois: String, reunions: [Reunion])] {
+        var groupes: [(String, [Reunion])] = []
+        for reunion in modele.reunions.sorted(by: { $0.meta.date > $1.meta.date }) {
+            let mois = reunion.meta.date.formatted(.dateTime.locale(francaisAffiche).month(.wide).year())
+            let titre = mois.prefix(1).uppercased() + mois.dropFirst()
+            if groupes.last?.0 == titre { groupes[groupes.count - 1].1.append(reunion) } else { groupes.append((titre, [reunion])) }
+        }
+        return groupes.map { (mois: $0.0, reunions: $0.1) }
+    }
+
     var body: some View {
-        EcranLecture {
-            Libelle(accord(modele.reunions.count, "réunion"))
-            TitreEcran(debut: "Toutes les ", fin: "réunions")
-        } commandes: {
-            EmptyView()
+        let minutes = Int((modele.reunions.map(\.meta.duree).reduce(0, +) / 60).rounded())
+        PageAffiche {
+            EnteteAffiche(surtitre: modele.reunions.isEmpty ? "Aucune réunion" : "\(accord(modele.reunions.count, "réunion")) · \(minutes / 60) h \(String(format: "%02d", minutes % 60)) enregistrées",
+                          titre: "Toutes les réunions") { EmptyView() }
         } contenu: {
-            VStack(alignment: .leading, spacing: 0) {
-                if modele.reunions.isEmpty {
-                    Text("Pas encore de réunion.").foregroundStyle(Color.encreDouce)
+            if modele.reunions.isEmpty {
+                Text("Pas encore de réunion. La première commence avec « Démarrer en visio », dans la barre de gauche.")
+                    .font(Ecriture.chapo).foregroundStyle(Couleur.texteDoux)
+            }
+            ForEach(parMois, id: \.mois) { groupe in
+                VStack(alignment: .leading, spacing: 0) {
+                    TitreSection(numero: "\(groupe.reunions.count)", titre: groupe.mois)
+                    Sommaire(modele: modele, reunions: groupe.reunions)
                 }
-                ForEach(modele.reunions) { LigneReunion(modele: modele, reunion: $0) }
             }
         }
     }
 }
-

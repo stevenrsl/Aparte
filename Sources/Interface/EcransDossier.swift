@@ -18,9 +18,9 @@ struct Repartition: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Répartir entre dossiers").font(Typo.titreSection)
-            Text("Chaque dossier choisi reçoit un extrait avec ses sujets, sans l'audio. La réunion reste telle quelle.")
-                .foregroundStyle(Color.encreDouce)
+            Text("Répartir entre dossiers").font(Ecriture.section)
+            Text("Chaque dossier choisi reçoit un extrait avec ses sujets, sans l’audio. La réunion reste telle quelle.")
+                .font(Ecriture.citation).foregroundStyle(Couleur.texteDoux)
             ForEach(sujets) { sujet in
                 Picker(selection: Binding(get: { choix[sujet.id] ?? "" }, set: { choix[sujet.id] = $0.isEmpty ? nil : $0 })) {
                     Text("Ne pas répartir").tag("")
@@ -31,20 +31,20 @@ struct Repartition: View {
             }
             HStack {
                 Spacer()
-                Button("Annuler") { fermer() }.buttonStyle(BoutonSecondaire())
+                Button("Annuler") { fermer() }.buttonStyle(BoutonCercle())
                 Button("Créer les extraits") {
                     modele.repartir(reunion, choix)
                     fermer()
                 }
-                .buttonStyle(BoutonPrincipal())
+                .buttonStyle(BoutonAplat())
                 .disabled(choix.isEmpty)
             }
         }
-        .padding(24)
+        .padding(Espace.s6)
         .frame(width: 560)
-        .background(Color.creme)
-        .foregroundStyle(Color.encre)
-        .font(Typo.texte)
+        .background(Couleur.papier)
+        .foregroundStyle(Couleur.texte)
+        .font(Ecriture.interface)
     }
 }
 
@@ -84,11 +84,6 @@ struct GestionReunion: View {
                 .disabled((modele.resumeEnregistre(de: reunion)?.sujets ?? []).isEmpty)
             Button("Réécouter l’enregistrement pour séparer les voix") { modele.relire(reunion) }
                 .disabled(!FileManager.default.fileExists(atPath: reunion.micro.path))
-            Divider()
-            Toggle("Garder sur ce Mac", isOn: Binding(
-                get: { reunion.meta.gardeSurCeMac == true },
-                set: { modele.garderSurCeMac(reunion, $0) }))
-                .help("Le compte rendu de cette réunion est rédigé sur ce Mac, jamais chez Mistral.")
             Divider()
             Button("Mettre à la corbeille…", role: .destructive) { corbeille = true }
         } label: {
@@ -141,44 +136,75 @@ struct EcranDossier: View {
     }
 
     var body: some View {
+        let _ = modele.dossiersVersion
         let actions = modele.actionsOuvertes(dossier: nom)
-        EcranLecture(phrase: "\(accord(actions.count, "action ouverte", "actions ouvertes")), \(accord(decisions.count, "décision")).") {
-            Libelle("dossier · \(accord(reunions.count, "réunion"))")
-            TitreEcran(debut: nom, fin: "")
-        } commandes: {
-            let _ = modele.dossiersVersion
-            Toggle("Garder sur ce Mac", isOn: Binding(
-                get: { modele.dossierGardeSurCeMac(nom) },
-                set: { modele.garderSurCeMac(dossier: nom, $0) }))
-                .toggleStyle(.checkbox)
-                .help("Les comptes rendus de ce dossier sont rédigés sur ce Mac, jamais chez Mistral.")
-        } contenu: {
-            SectionActions(modele: modele, actions: actions, montrerReunion: reunions.count > 1)
-            if !decisions.isEmpty {
-                VStack(alignment: .leading, spacing: 0) {
-                    Libelle("dernières décisions").padding(.bottom, 8)
-                    ListeRepliable(elements: decisions) { element in
-                        Button { modele.ouvrir(element.reunion, moment: element.decision.sources.first) } label: {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(element.decision.texte).multilineTextAlignment(.leading)
-                                Text(element.reunion.meta.titre + (element.decision.sources.first.map { " · \(horodatage($0))" } ?? ""))
-                                    .font(Typo.horodatage)
-                                    .foregroundStyle(Color.encreDouce)
-                            }
-                            .padding(.vertical, 9)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .overlay(alignment: .top) { Color.filet.frame(height: 1) }
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                    }
+        let garde = modele.dossierGardeSurCeMac(nom)
+        PageAffiche {
+            EnteteAffiche(surtitre: "Dossier · \(accord(reunions.count, "réunion")) · \(accord(actions.count, "action ouverte", "actions ouvertes"))",
+                          titre: nom) {
+                CarteGarder(actif: garde,
+                            detail: garde ? "Les comptes rendus de ce dossier sont rédigés ici. Rien ne part chez Mistral."
+                                          : "Mistral rédige les comptes rendus de ce dossier. L’audio reste ici.") {
+                    modele.garderSurCeMac(dossier: nom, $0)
                 }
             }
-            VStack(alignment: .leading, spacing: 0) {
-                Libelle("le fil").padding(.bottom, 8)
-                ForEach(reunions) { LigneReunion(modele: modele, reunion: $0, montrerDossier: false) }
+        } contenu: {
+            if reunions.isEmpty {
+                Text("Ce dossier est vide. Une réunion démarrée d’ici y sera rangée.")
+                    .font(Ecriture.chapo).foregroundStyle(Couleur.texteDoux)
+            } else {
+                HStack(alignment: .top, spacing: Espace.s10) {
+                    VStack(alignment: .leading, spacing: Espace.s8) {
+                        VStack(alignment: .leading, spacing: 0) {
+                            TitreSection(numero: "I", titre: "À faire")
+                            ListeActions(modele: modele, actions: actions, montrerReunion: reunions.count > 1)
+                        }
+                        if !decisions.isEmpty {
+                            VStack(alignment: .leading, spacing: 0) {
+                                TitreSection(numero: "II", titre: "Décisions")
+                                ListeDecisions(modele: modele, decisions: decisions.map { ($0.reunion, $0.decision) })
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    VStack(alignment: .leading, spacing: 0) {
+                        TitreSection(numero: decisions.isEmpty ? "II" : "III", titre: "Le fil")
+                        Sommaire(modele: modele, reunions: reunions, montrerDossier: false)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
         }
     }
 }
 
+/// Les décisions d'un dossier, chacune avec sa réunion et son heure, repliées au-delà de six.
+struct ListeDecisions: View {
+    let modele: ModeleApp
+    let decisions: [(reunion: Reunion, decision: ElementSource)]
+    @State private var depliee = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array((depliee ? decisions : Array(decisions.prefix(6))).enumerated()), id: \.offset) { _, element in
+                Button { modele.ouvrir(element.reunion, moment: element.decision.sources.first) } label: {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(element.decision.texte).font(Ecriture.lecture).multilineTextAlignment(.leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Etiquette(([element.reunion.meta.titre] + element.decision.sources.prefix(1).map { horodatage($0) }).joined(separator: " · "))
+                    }
+                    .padding(.vertical, Espace.s3)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .overlay(alignment: .top) { Couleur.filet.frame(height: 1) }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("Ouvre le compte rendu à ce moment")
+            }
+            Couleur.filet.frame(height: 1)
+            if !depliee, decisions.count > 6 {
+                Button("Voir les \(decisions.count - 6) autres") { depliee = true }.buttonStyle(BoutonLien()).padding(.top, Espace.s3)
+            }
+        }
+    }
+}
