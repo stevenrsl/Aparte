@@ -111,15 +111,18 @@ struct EcranCompteRendu: View {
             Libelle(selection == nil ? "transcription" : "passage · \(horodatage(selection?.sources.first ?? 0))")
             if selection != nil { Button("Voir toute la transcription") { selection = nil; lecteur.arreter() } }
             Spacer(minLength: 0)
-            HStack(alignment: .bottom) {
-                Text("Passage à \(horodatage(selection?.sources.first ?? 0))").font(Typo.horodatage)
-                Spacer()
-                if lecteur.enLecture {
-                    Button("Arrêter") { lecteur.arreter() }.buttonStyle(BoutonSignal())
-                } else {
-                    Button("Écouter ce passage") { lecteur.lire(a: selection?.sources.first ?? 0) }
-                        .buttonStyle(BoutonEcouteDiscret())
-                        .disabled(!lecteur.disponible)
+            // Sans passage choisi, « Écouter ce passage » jouerait depuis le début sans rien sélectionner : on ne le montre pas.
+            if let momentSelectionne = selection?.sources.first {
+                HStack(alignment: .bottom) {
+                    Text("Passage à \(horodatage(momentSelectionne))").font(Typo.horodatage)
+                    Spacer()
+                    if lecteur.enLecture {
+                        Button("Arrêter") { lecteur.arreter() }.buttonStyle(BoutonSignal())
+                    } else {
+                        Button("Écouter ce passage") { lecteur.lire(a: momentSelectionne) }
+                            .buttonStyle(BoutonEcouteDiscret())
+                            .disabled(!lecteur.disponible)
+                    }
                 }
             }
         } contenuEncre: {
