@@ -670,8 +670,14 @@ public final class SessionReunion {
         self.titre = reunion.meta.titre
     }
 
+    /// L'entrée qui enregistre, pour le dire à l'écran.
+    public private(set) var entreeUtilisee: String?
+    /// Le micro n'entend presque rien depuis un moment : pas un incident, mais Steven doit le savoir tout de suite.
+    public private(set) var alerteMicroFaible: String?
+    private var detecteurMicro = DetecteurMicroFaible()
+
     public var alerte: String? {
-        let alertes = alertesAudio.keys.sorted().compactMap { alertesAudio[$0] } + [alerteSauvegarde, alerteSysteme].compactMap { $0 }
+        let alertes = alertesAudio.keys.sorted().compactMap { alertesAudio[$0] } + [alerteMicroFaible, alerteSauvegarde, alerteSysteme].compactMap { $0 }
         return alertes.isEmpty ? nil : alertes.joined(separator: " ")
     }
 
@@ -701,7 +707,13 @@ public final class SessionReunion {
         debut = origine
         etat = ""
 
-        let pisteMicro = PisteAudio(source: MicrophoneSource(entree: entree?.id), fichier: reunion.microEnCours,
+        let parDefaut = EntreeAudio.parDefaut()
+        let utilisee = EntreeAudio.choisir(choisie: entree, parDefaut: parDefaut, toutes: EntreeAudio.liste(),
+                                           presentiel: reunion.meta.type == .presentiel)
+        entreeUtilisee = utilisee?.nom
+        // Sans choix ni remplacement, le micro suit l'entrée par défaut du système, comme avant.
+        let forcee = entree != nil || utilisee?.id != parDefaut?.id ? utilisee?.id : nil
+        let pisteMicro = PisteAudio(source: MicrophoneSource(entree: forcee), fichier: reunion.microEnCours,
                                     formatCible: micro.formatAttendu,
                                     surConverti: { micro.alimenter($0) },
                                     surNiveau: { [weak self] niveau in Task { @MainActor in self?.pousser(niveau, moi: true) } },
@@ -804,6 +816,10 @@ public final class SessionReunion {
 
     private func pousser(_ niveau: Float, moi: Bool) {
         if moi {
+            let faible = detecteurMicro.ajouter(niveau, a: Date())
+            alerteMicroFaible = faible
+                ? "Attention : le micro (\(entreeUtilisee ?? "par défaut")) n'entend presque rien. Rapproche-le, ou choisis une autre entrée dans Réglages Système."
+                : nil
             niveauxMoi.removeFirst()
             niveauxMoi.append(niveau)
         } else {
