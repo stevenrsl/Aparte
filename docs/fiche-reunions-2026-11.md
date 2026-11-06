@@ -21,7 +21,7 @@ projets du même jour et à une discussion avec Steven sur ce qu'il gardait de C
   seulement par une action Raccourcis.
 - **La DA est fixée** dans le [brief DA](brief-da-reunions.md), à lire avant tout travail
   d'interface.
-- **Claude Code et Codex travaillent ensemble** selon le [plan des agents](plan-agents.md).
+- **Steven et Claude Code travaillent seuls** depuis le 6 novembre 2026, avec un agent spécialisé pour l'interface (voir `AGENTS.md`).
 - **Deux usages dès la v1** : les visios (micro et son du Mac) et les réunions en présentiel
   (micro seul).
 - **Le compte rendu est rédigé par Mistral par défaut** (décidé par Steven le 6 novembre 2026, à la
